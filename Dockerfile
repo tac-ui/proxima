@@ -40,6 +40,9 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/server.ts ./server.ts
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
+# Copy source files needed by server.ts at runtime (tsx executes TypeScript directly)
+COPY --from=builder /app/src ./src
 # Copy full node_modules for native modules (node-pty, better-sqlite3) and tsx
 COPY --from=deps /app/node_modules ./node_modules
 
