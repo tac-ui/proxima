@@ -5,7 +5,7 @@ import { getDb, schema } from "@server/db/index";
 import { eq } from "drizzle-orm";
 import { logger } from "@server/lib/logger";
 
-function parseScripts(raw: string) {
+function parseJson(raw: string) {
   try {
     return JSON.parse(raw);
   } catch {
@@ -20,7 +20,8 @@ function toRepoInfo(row: typeof schema.repositories.$inferSelect) {
     repoUrl: row.repoUrl,
     path: row.path,
     branch: row.branch,
-    scripts: parseScripts(row.scripts),
+    scripts: parseJson(row.scripts),
+    envFiles: parseJson(row.envFiles),
   };
 }
 
@@ -43,7 +44,7 @@ export async function DELETE(
     const repo = db.select().from(schema.repositories).where(eq(schema.repositories.id, repoId)).get();
     if (!repo) throw new Error("Repository not found");
 
-    const scripts = parseScripts(repo.scripts);
+    const scripts = parseJson(repo.scripts);
     if (scriptIndex < 0 || scriptIndex >= scripts.length) {
       throw new Error("Invalid script index");
     }

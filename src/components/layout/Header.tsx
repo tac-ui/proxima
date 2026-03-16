@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useApiContext } from "@/contexts/ApiContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,12 +11,20 @@ import {
   DropdownItem,
   DropdownDivider,
   Button,
+  Drawer,
+  DrawerHeader,
+  DrawerBody,
 } from "@tac-ui/web";
 import {
   LogOut,
   TacLogo,
+  Menu,
+  X,
 } from "@tac-ui/icon";
 import { Badge } from "@tac-ui/web";
+import { SidebarNav } from "./Sidebar";
+import { useCommandPalette } from "@/components/shared/CommandPalette";
+import { Search } from "@tac-ui/icon";
 
 function getPageTitle(pathname: string): string {
   const segments = pathname.split("/").filter(Boolean);
@@ -49,14 +57,28 @@ export function Header() {
   const { connected } = useApiContext();
   const { user, logout } = useAuth();
   const { appName, logoUrl, showLogo, showAppName } = useBranding();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { open: openSearch } = useCommandPalette();
 
   const pageTitle = getPageTitle(pathname);
 
   return (
+    <>
     <TacHeader bordered>
       <div className="flex items-center justify-between w-full px-2 h-16">
-        {/* Left: branding + icon + title + breadcrumb */}
+        {/* Left: hamburger (mobile) + branding + title */}
         <div className="flex items-center gap-4 flex-1 min-w-0">
+          {/* Mobile hamburger */}
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            className="md:hidden shrink-0"
+            onClick={() => setMobileMenuOpen(true)}
+            aria-label="Open menu"
+          >
+            <Menu size={20} />
+          </Button>
           {/* Branding */}
           {(showLogo || showAppName) && (
             <div className="flex items-center gap-2 shrink-0 cursor-pointer" onClick={() => router.push("/")}>
@@ -73,17 +95,17 @@ export function Header() {
             </div>
           )}
           {(showLogo || showAppName) && (
-            <div className="w-px h-6 bg-border shrink-0" />
+            <div className="w-px h-6 bg-border shrink-0 hidden md:block" />
           )}
-          <h1 className="text-sm font-medium truncate min-w-0 text-muted-foreground">
+          <h1 className="text-sm font-medium truncate min-w-0 text-muted-foreground hidden md:block">
             {pageTitle}
           </h1>
         </div>
 
         {/* Right side */}
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           {/* Connection indicator */}
-          <div className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg bg-surface">
+          <div className="flex items-center gap-2 text-xs px-2 py-1.5 rounded-lg bg-surface">
             <span
               className={`w-2 h-2 rounded-full ${connected ? "bg-success animate-pulse" : "bg-error"}`}
             />
@@ -126,5 +148,48 @@ export function Header() {
         </div>
       </div>
     </TacHeader>
+
+    {/* Mobile sidebar drawer */}
+    <Drawer open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} side="left">
+      <DrawerHeader className="px-4 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {showLogo && (
+              logoUrl ? (
+                <img src={logoUrl} alt={appName} className="w-7 h-7 rounded-md object-cover" />
+              ) : (
+                <TacLogo size={24} />
+              )
+            )}
+            {showAppName && (
+              <span className="font-semibold text-sm">{appName}</span>
+            )}
+          </div>
+          <Button variant="ghost" size="sm" iconOnly onClick={() => setMobileMenuOpen(false)} aria-label="Close menu">
+            <X size={18} />
+          </Button>
+        </div>
+      </DrawerHeader>
+      <DrawerBody className="px-2 py-3">
+        <button
+          onClick={() => { setMobileMenuOpen(false); openSearch(); }}
+          className="flex items-center gap-2 w-full mx-2 px-2 py-2 mb-2 rounded-lg border border-border bg-surface hover:bg-point/5 transition-colors text-muted-foreground"
+          style={{ width: "calc(100% - 16px)" }}
+        >
+          <Search size={14} className="shrink-0" />
+          <span className="text-xs flex-1 text-left">Search...</span>
+          <kbd className="inline-flex h-[18px] items-center rounded border border-border bg-muted px-1 text-[10px] font-medium text-muted-foreground">
+            ⌘K
+          </kbd>
+        </button>
+        <nav onClick={(e) => {
+          const target = e.target as HTMLElement;
+          if (target.closest("a")) setMobileMenuOpen(false);
+        }}>
+          <SidebarNav />
+        </nav>
+      </DrawerBody>
+    </Drawer>
+    </>
   );
 }

@@ -2,7 +2,6 @@ import { type NextRequest, NextResponse } from "next/server";
 import { requireManager, errorResponse, ok } from "../../_lib/auth";
 import { ensureDb } from "../../_lib/db";
 import { InteractiveTerminal, Terminal } from "@server/services/terminal";
-import os from "os";
 import fs from "fs";
 import { logAudit, getClientIp } from "@server/services/audit";
 
@@ -30,7 +29,8 @@ export async function POST(req: NextRequest) {
 
     const shell = detectShell();
     const terminalId = `shell-${Date.now()}`;
-    const terminal = new InteractiveTerminal(terminalId, shell, [], process.env.HOME || os.homedir());
+    const cwd = process.env.PXM_STACKS_DIR || process.env.PXM_DATA_DIR || "/data";
+    const terminal = new InteractiveTerminal(terminalId, shell, [], cwd);
     terminal.start();
 
     // Verify the terminal actually started

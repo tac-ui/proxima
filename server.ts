@@ -3,7 +3,7 @@ import { parse } from "node:url";
 import next from "next";
 import { WebSocketServer } from "ws";
 import { ensureDb } from "./src/app/api/_lib/db";
-import { getConfig } from "./src/server/lib/config";
+import { getConfig, initHostDataDir } from "./src/server/lib/config";
 import { NetworkDiscovery } from "./src/server/services/network-discovery";
 import { broadcast } from "./src/app/api/_lib/event-bus";
 import { handleTerminalConnection } from "./src/app/api/_lib/terminal-ws";
@@ -15,6 +15,9 @@ import { syncAutoManaged } from "./src/server/services/managed-service";
 const dev = process.env.NODE_ENV !== "production";
 
 async function main() {
+  // Auto-detect host data directory for Docker bind mounts
+  await initHostDataDir();
+
   // Initialize database and required directories
   ensureDb();
 

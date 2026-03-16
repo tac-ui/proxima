@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { logger } from "@server/lib/logger";
 import { logAudit, getClientIp } from "@server/services/audit";
 
-function parseScripts(raw: string) {
+function parseJson(raw: string) {
   try {
     return JSON.parse(raw);
   } catch {
@@ -21,7 +21,8 @@ function toRepoInfo(row: typeof schema.repositories.$inferSelect) {
     repoUrl: row.repoUrl,
     path: row.path,
     branch: row.branch,
-    scripts: parseScripts(row.scripts),
+    scripts: parseJson(row.scripts),
+    envFiles: parseJson(row.envFiles),
   };
 }
 

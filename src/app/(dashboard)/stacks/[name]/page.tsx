@@ -162,6 +162,9 @@ export default function StackDetailPage() {
     );
   }
 
+  // Prevent stopping/deleting the Proxima stack itself
+  const isSelfStack = stack?.containers.some((c) => c.name === "proxima") ?? false;
+
   if (!stack && !loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
@@ -201,7 +204,7 @@ export default function StackDetailPage() {
             <Button
               variant="primary"
               size="sm"
-              disabled={actionLoading !== null || stack?.status === "running"}
+              disabled={actionLoading !== null || stack?.status === "running" || isSelfStack}
               onClick={() => handleAction("start")}
               leftIcon={<Play size={14} />}
             >
@@ -210,7 +213,7 @@ export default function StackDetailPage() {
             <Button
               variant="secondary"
               size="sm"
-              disabled={actionLoading !== null || stack?.status !== "running"}
+              disabled={actionLoading !== null || stack?.status !== "running" || isSelfStack}
               onClick={() => handleAction("stop")}
               leftIcon={<Square size={14} />}
             >
@@ -219,7 +222,7 @@ export default function StackDetailPage() {
             <Button
               variant="secondary"
               size="sm"
-              disabled={actionLoading !== null}
+              disabled={actionLoading !== null || isSelfStack}
               onClick={() => handleAction("restart")}
               leftIcon={<RotateCw size={14} />}
             >
@@ -228,7 +231,7 @@ export default function StackDetailPage() {
             <Button
               variant="destructive"
               size="sm"
-              disabled={actionLoading !== null}
+              disabled={actionLoading !== null || isSelfStack}
               onClick={() => handleAction("delete")}
               leftIcon={<Trash2 size={14} />}
             >

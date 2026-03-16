@@ -68,6 +68,7 @@ export const repositories = sqliteTable("repositories", {
     path: text("path").notNull(),
     branch: text("branch").notNull().default("main"),
     scripts: text("scripts").notNull().default("[]"),
+    envFiles: text("env_files").notNull().default("[]"),
     createdAt: text("created_at")
         .notNull()
         .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),

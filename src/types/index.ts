@@ -230,6 +230,11 @@ export interface RepoScript {
   command: string;
 }
 
+export interface RepoEnvFile {
+  name: string;  // Display name (e.g. "Backend Production")
+  path: string;  // Relative path (e.g. "backend/.env.production")
+}
+
 export interface RepositoryInfo {
   id: number;
   name: string;
@@ -237,6 +242,7 @@ export interface RepositoryInfo {
   path: string;
   branch: string;
   scripts: RepoScript[];
+  envFiles: RepoEnvFile[];
 }
 
 // === Analytics Types ===

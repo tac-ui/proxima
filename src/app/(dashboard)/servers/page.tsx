@@ -8,7 +8,6 @@ import { api } from "@/lib/api";
 import {
   Card,
   CardContent,
-  Badge,
   Input,
   EmptyState,
   Skeleton,
@@ -154,10 +153,17 @@ export default function ServersPage() {
     svc.internalIp.includes(search)
   );
 
-  const grouped = filteredServices.reduce<Record<string, DiscoveredServiceWithManaged[]>>((acc, svc) => {
-    (acc[svc.stackName] ??= []).push(svc);
-    return acc;
-  }, {});
+  // Sort: proxima stack first, then within stack proxima container first, proxima-cloudflared second
+  const sortedServices = [...filteredServices].sort((a, b) => {
+    // Stack-level: proxima first
+    if (a.stackName === "proxima" && b.stackName !== "proxima") return -1;
+    if (a.stackName !== "proxima" && b.stackName === "proxima") return 1;
+    if (a.stackName !== b.stackName) return a.stackName.localeCompare(b.stackName);
+    // Within same stack: proxima container first, proxima-cloudflared second
+    const order = (name: string) =>
+      name === "proxima" ? 0 : name === "proxima-cloudflared" ? 1 : 2;
+    return order(a.containerName) - order(b.containerName);
+  });
 
   // Processes filtering
   const filteredProcesses = processes.filter((p) =>
@@ -260,7 +266,7 @@ export default function ServersPage() {
                 <Skeleton key={i} height={120} />
               ))}
             </motion.div>
-          ) : filteredServices.length === 0 ? (
+          ) : sortedServices.length === 0 ? (
             <motion.div
               key="empty"
               initial={{ opacity: 0 }}
@@ -292,27 +298,14 @@ export default function ServersPage() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
-              className="space-y-4"
             >
-              {Object.entries(grouped).map(([stackName, svcs]) => (
-              <Card key={stackName}>
+              <Card>
                 <CardContent>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="success">{svcs.length}</Badge>
-                      <Link
-                        href={`/stacks/${stackName}`}
-                        className="text-sm font-semibold hover:text-point transition-colors"
-                      >
-                        {stackName}
-                      </Link>
-                    </div>
-                  </div>
-
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-10"></TableHead>
+                        <TableHead>Stack</TableHead>
                         <TableHead>Service</TableHead>
                         <TableHead>Container</TableHead>
                         <TableHead>IP</TableHead>
@@ -322,7 +315,7 @@ export default function ServersPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {svcs.map((svc) => (
+                      {sortedServices.map((svc) => (
                         <TableRow key={svc.containerName}>
                           <TableCell>
                             <Tooltip content={svc.managed ? "Managed" : "Add to managed"} placement="top">
@@ -336,6 +329,14 @@ export default function ServersPage() {
                                 />
                               </button>
                             </Tooltip>
+                          </TableCell>
+                          <TableCell>
+                            <Link
+                              href={`/stacks/${svc.stackName}`}
+                              className="text-sm font-semibold hover:text-point transition-colors"
+                            >
+                              {svc.stackName}
+                            </Link>
                           </TableCell>
                           <TableCell>
                             <span className="font-medium">{svc.serviceName}</span>
@@ -354,11 +355,11 @@ export default function ServersPage() {
                           </TableCell>
                           <TableCell>
                             {svc.ports.length > 0 ? (
-                              <div className="flex flex-wrap gap-1">
+                              <div className="font-mono text-xs space-y-0.5">
                                 {svc.ports.map((p) => (
-                                  <Chip key={`${p.hostPort}:${p.containerPort}`} variant="filter">
+                                  <div key={`${p.hostPort}:${p.containerPort}`}>
                                     {p.hostPort}:{p.containerPort}
-                                  </Chip>
+                                  </div>
                                 ))}
                               </div>
                             ) : (
@@ -367,11 +368,11 @@ export default function ServersPage() {
                           </TableCell>
                           <TableCell>
                             {svc.mounts && svc.mounts.length > 0 ? (
-                              <div className="flex flex-wrap gap-1">
+                              <div className="font-mono text-xs space-y-0.5">
                                 {svc.mounts.map((m: MountInfo, i: number) => (
-                                  <Chip key={i} variant="filter">
-                                    {m.source}:{m.destination}{!m.rw ? " (ro)" : ""}
-                                  </Chip>
+                                  <div key={i}>
+                                    {m.source} → {m.destination}{!m.rw ? " (ro)" : ""}
+                                  </div>
                                 ))}
                               </div>
                             ) : (
@@ -379,9 +380,9 @@ export default function ServersPage() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <div className="flex flex-wrap gap-1">
+                            <div className="font-mono text-xs space-y-0.5">
                               {svc.networks.map((n) => (
-                                <Chip key={n} variant="filter">{n}</Chip>
+                                <div key={n}>{n}</div>
                               ))}
                             </div>
                           </TableCell>
@@ -391,7 +392,6 @@ export default function ServersPage() {
                   </Table>
                 </CardContent>
               </Card>
-            ))}
             </motion.div>
           )}
         </AnimatePresence>

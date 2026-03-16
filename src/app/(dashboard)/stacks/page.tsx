@@ -79,9 +79,9 @@ export default function StacksPage() {
     checkDocker();
   }, [checkDocker]);
 
-  const filtered = stackList.filter((s) =>
-    s.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = stackList
+    .filter((s) => s.name.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => (a.name === "proxima" ? -1 : b.name === "proxima" ? 1 : 0));
 
   const handleDeploy = async () => {
     if (!newName.trim()) {

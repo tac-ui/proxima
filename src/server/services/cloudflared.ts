@@ -186,10 +186,10 @@ export async function startCloudflared(token: string): Promise<void> {
   await ensureImage();
   await removeExisting();
 
-  const config = getConfig();
   // Use host path for bind mount — Docker interprets bind paths relative to the host,
   // not the container, so when running inside Docker we need the actual host directory.
-  const hostCloudflaredDir = path.join(config.hostDataDir, "cloudflared");
+  const { getHostDataDir } = await import("../lib/config");
+  const hostCloudflaredDir = path.join(getHostDataDir(), "cloudflared");
 
   const container = await docker.createContainer({
     name: CONTAINER_NAME,

@@ -160,6 +160,16 @@ function migrateSchema(sqlite: Database.Database): void {
     logger.error("db", `Audit logs migration failed: ${err}`);
   }
 
+  // v5 → v6: add env_files column to repositories
+  try {
+    sqlite.exec(`ALTER TABLE repositories ADD COLUMN env_files TEXT NOT NULL DEFAULT '[]'`);
+    logger.info("db", "Migration: added env_files column to repositories table");
+  } catch (err) {
+    if (err instanceof Error && !err.message.includes("duplicate column")) {
+      throw err;
+    }
+  }
+
   // v3 → v4: rename roles (superadmin→admin, admin→manager)
   try {
     const hasOld = sqlite.prepare(`SELECT COUNT(*) as cnt FROM users WHERE role = 'superadmin'`).get() as { cnt: number };

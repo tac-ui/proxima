@@ -52,7 +52,7 @@ const TerminalPanel = dynamic(
   { ssr: false },
 );
 import { useConfirm } from "@/hooks/useConfirm";
-import type { RepositoryInfo, GitCloneProgress, SshKeyInfo } from "@/types";
+import type { RepositoryInfo, GitCloneProgress, SshKeyInfo, RepoEnvFile } from "@/types";
 
 export default function ProjectsPage() {
   const { toast } = useToast();
@@ -95,11 +95,15 @@ export default function ProjectsPage() {
   const [pullingRepos, setPullingRepos] = useState<Set<number>>(new Set());
   const [pullingAll, setPullingAll] = useState(false);
 
-  // Env editor
+  // Env editor (multi-file)
   const [envOpen, setEnvOpen] = useState<Set<number>>(new Set());
-  const [envContent, setEnvContent] = useState<Record<number, string>>({});
-  const [envLoaded, setEnvLoaded] = useState<Set<number>>(new Set());
-  const [envSaving, setEnvSaving] = useState<Set<number>>(new Set());
+  const [envSelectedFile, setEnvSelectedFile] = useState<Record<number, string>>({}); // repoId → selected file path
+  const [envContent, setEnvContent] = useState<Record<string, string>>({}); // "repoId:path" → content
+  const [envLoaded, setEnvLoaded] = useState<Set<string>>(new Set()); // "repoId:path"
+  const [envSaving, setEnvSaving] = useState<Set<string>>(new Set()); // "repoId:path"
+  const [showAddEnvFile, setShowAddEnvFile] = useState<number | null>(null);
+  const [newEnvFileName, setNewEnvFileName] = useState("");
+  const [newEnvFilePath, setNewEnvFilePath] = useState("");
 
   // Branch switching
   const [branchOpen, setBranchOpen] = useState<Set<number>>(new Set());
@@ -164,11 +168,13 @@ export default function ProjectsPage() {
   }, [repos]);
 
   // Clone progress via SSE
+  const cloneCompletedRef = useRef(false);
   useEffect(() => {
     const handleProgress = (data: { sessionId: string; progress: GitCloneProgress }) => {
       const p = data.progress;
       setCloneProgress(p);
-      if (p.progress >= p.total && p.total > 0) {
+      if (p.progress >= p.total && p.total > 0 && !cloneCompletedRef.current) {
+        cloneCompletedRef.current = true;
         setCloning(false);
         setShowCloneForm(false);
         setRepoUrl("");
@@ -214,6 +220,7 @@ export default function ProjectsPage() {
     setCloning(true);
     setCloneProgress(null);
     setCloneError("");
+    cloneCompletedRef.current = false;
 
     const selectedKey = sshKeys.find((k) => k.id === selectedSshKeyId);
     api.cloneRepo({
@@ -349,27 +356,88 @@ export default function ProjectsPage() {
     });
   };
 
+  const getEnvFiles = (repo: RepositoryInfo): RepoEnvFile[] => {
+    if (repo.envFiles && repo.envFiles.length > 0) return repo.envFiles;
+    return [{ name: ".env", path: ".env" }];
+  };
+
+  const envKey = (repoId: number, filePath: string) => `${repoId}:${filePath}`;
+
   const toggleEnv = async (repoId: number) => {
     if (envOpen.has(repoId)) {
       setEnvOpen((prev) => { const next = new Set(prev); next.delete(repoId); return next; });
       return;
     }
-    if (!envLoaded.has(repoId)) {
-      const res = await api.getRepoEnv(repoId);
+    const repo = repos.find((r) => r.id === repoId);
+    if (!repo) return;
+    const files = getEnvFiles(repo);
+    const selectedPath = envSelectedFile[repoId] || files[0]?.path || ".env";
+    setEnvSelectedFile((prev) => ({ ...prev, [repoId]: selectedPath }));
+    const key = envKey(repoId, selectedPath);
+    if (!envLoaded.has(key)) {
+      const res = await api.getRepoEnv(repoId, selectedPath);
       if (res.ok && res.data) {
-        setEnvContent((prev) => ({ ...prev, [repoId]: res.data!.content }));
-        setEnvLoaded((prev) => new Set(prev).add(repoId));
+        setEnvContent((prev) => ({ ...prev, [key]: res.data!.content }));
+        setEnvLoaded((prev) => new Set(prev).add(key));
       }
     }
     setEnvOpen((prev) => new Set(prev).add(repoId));
   };
 
+  const handleSelectEnvFile = async (repoId: number, filePath: string) => {
+    setEnvSelectedFile((prev) => ({ ...prev, [repoId]: filePath }));
+    const key = envKey(repoId, filePath);
+    if (!envLoaded.has(key)) {
+      const res = await api.getRepoEnv(repoId, filePath);
+      if (res.ok && res.data) {
+        setEnvContent((prev) => ({ ...prev, [key]: res.data!.content }));
+        setEnvLoaded((prev) => new Set(prev).add(key));
+      }
+    }
+  };
+
   const handleSaveEnv = async (repoId: number) => {
-    setEnvSaving((prev) => new Set(prev).add(repoId));
-    const res = await api.updateRepoEnv(repoId, envContent[repoId] ?? "");
-    setEnvSaving((prev) => { const next = new Set(prev); next.delete(repoId); return next; });
-    if (res.ok) toast(".env saved", { variant: "success" });
-    else toast(res.error ?? "Failed to save .env", { variant: "error" });
+    const filePath = envSelectedFile[repoId] || ".env";
+    const key = envKey(repoId, filePath);
+    setEnvSaving((prev) => new Set(prev).add(key));
+    const res = await api.updateRepoEnv(repoId, envContent[key] ?? "", filePath);
+    setEnvSaving((prev) => { const next = new Set(prev); next.delete(key); return next; });
+    if (res.ok) toast(`${filePath} saved`, { variant: "success" });
+    else toast(res.error ?? `Failed to save ${filePath}`, { variant: "error" });
+  };
+
+  const handleAddEnvFile = async (repoId: number) => {
+    if (!newEnvFileName.trim() || !newEnvFilePath.trim()) return;
+    const res = await api.addRepoEnvFile(repoId, newEnvFileName.trim(), newEnvFilePath.trim());
+    if (res.ok) {
+      fetchRepos();
+      setShowAddEnvFile(null);
+      setNewEnvFileName("");
+      setNewEnvFilePath("");
+      setEnvSelectedFile((prev) => ({ ...prev, [repoId]: newEnvFilePath.trim() }));
+      toast("Env file added", { variant: "success" });
+    } else {
+      toast(res.error ?? "Failed to add env file", { variant: "error" });
+    }
+  };
+
+  const handleRemoveEnvFile = async (repoId: number, filePath: string) => {
+    const ok2 = await confirm({
+      title: "Remove env file",
+      message: `Remove "${filePath}" from the list? The file on disk won't be deleted.`,
+      confirmLabel: "Remove",
+      variant: "destructive",
+    });
+    if (!ok2) return;
+    const res = await api.removeRepoEnvFile(repoId, filePath);
+    if (res.ok) {
+      fetchRepos();
+      // Switch to first remaining file
+      if (envSelectedFile[repoId] === filePath) {
+        setEnvSelectedFile((prev) => { const next = { ...prev }; delete next[repoId]; return next; });
+      }
+      toast("Env file removed", { variant: "success" });
+    }
   };
 
   // Branch handlers
@@ -877,38 +945,104 @@ export default function ProjectsPage() {
                 </div>
 
                 {/* Environment Variables */}
-                <div className="space-y-2 border-t border-border pt-3">
-                  <button
-                    onClick={() => toggleEnv(repo.id)}
-                    className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
-                  >
-                    {isEnvOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                    <FileCode2 size={12} />
-                    Environment Variables (.env)
-                    {envLoaded.has(repo.id) && envContent[repo.id] && (
-                      <span className="text-[10px] font-normal normal-case tracking-normal text-muted-foreground">
-                        {envContent[repo.id].split("\n").filter((l) => l.trim() && !l.trim().startsWith("#")).length} vars
-                      </span>
-                    )}
-                  </button>
-                  {isEnvOpen && (
-                    <div className="space-y-2">
-                      <textarea
-                        className="w-full min-h-[120px] p-3 rounded-lg border border-border bg-surface text-sm font-mono resize-y focus:outline-none focus:ring-1 focus:ring-point/50"
-                        placeholder={"# Add environment variables here\nPORT=3000\nDATABASE_URL=..."}
-                        value={envContent[repo.id] ?? ""}
-                        onChange={(e) => setEnvContent((prev) => ({ ...prev, [repo.id]: e.target.value }))}
-                      />
-                      {isManager && (
-                        <div className="flex justify-end">
-                          <Button size="sm" onClick={() => handleSaveEnv(repo.id)} disabled={envSaving.has(repo.id)} leftIcon={<Save size={12} />}>
-                            {envSaving.has(repo.id) ? "Saving..." : "Save .env"}
-                          </Button>
+                {(() => {
+                  const files = getEnvFiles(repo);
+                  const selectedPath = envSelectedFile[repo.id] || files[0]?.path || ".env";
+                  const key = envKey(repo.id, selectedPath);
+                  return (
+                    <div className="space-y-2 border-t border-border pt-3">
+                      <button
+                        onClick={() => toggleEnv(repo.id)}
+                        className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+                      >
+                        {isEnvOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                        <FileCode2 size={12} />
+                        Environment Variables
+                        {files.length > 1 && (
+                          <span className="text-[10px] font-normal normal-case tracking-normal text-muted-foreground">
+                            {files.length} files
+                          </span>
+                        )}
+                      </button>
+                      {isEnvOpen && (
+                        <div className="space-y-2">
+                          {/* File selector tabs */}
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {files.map((f) => (
+                              <button
+                                key={f.path}
+                                onClick={() => handleSelectEnvFile(repo.id, f.path)}
+                                className={`px-2.5 py-1 rounded-md text-xs font-mono transition-colors ${
+                                  selectedPath === f.path
+                                    ? "bg-point/15 text-point font-semibold"
+                                    : "hover:bg-surface-hover text-muted-foreground hover:text-foreground"
+                                }`}
+                              >
+                                {f.name}
+                              </button>
+                            ))}
+                            {isManager && (
+                              <button
+                                onClick={() => setShowAddEnvFile(showAddEnvFile === repo.id ? null : repo.id)}
+                                className="px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-point hover:bg-point/5 transition-colors"
+                              >
+                                <Plus size={12} />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Add env file form */}
+                          {showAddEnvFile === repo.id && (
+                            <div className="flex gap-2 items-end">
+                              <Input
+                                placeholder="Display name"
+                                value={newEnvFileName}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewEnvFileName(e.target.value)}
+                                className="flex-1"
+                              />
+                              <Input
+                                placeholder="Path (e.g. backend/.env)"
+                                value={newEnvFilePath}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewEnvFilePath(e.target.value)}
+                                className="flex-1"
+                              />
+                              <Button size="sm" onClick={() => handleAddEnvFile(repo.id)}>Add</Button>
+                              <Button size="sm" variant="ghost" onClick={() => { setShowAddEnvFile(null); setNewEnvFileName(""); setNewEnvFilePath(""); }}>
+                                <X size={12} />
+                              </Button>
+                            </div>
+                          )}
+
+                          {/* Editor */}
+                          <textarea
+                            className="w-full min-h-[120px] p-3 rounded-lg border border-border bg-surface text-sm font-mono resize-y focus:outline-none focus:ring-1 focus:ring-point/50"
+                            placeholder={"# Add environment variables here\nPORT=3000\nDATABASE_URL=..."}
+                            value={envContent[key] ?? ""}
+                            onChange={(e) => setEnvContent((prev) => ({ ...prev, [key]: e.target.value }))}
+                          />
+                          {isManager && (
+                            <div className="flex items-center justify-between">
+                              <div>
+                                {selectedPath !== ".env" && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleRemoveEnvFile(repo.id, selectedPath)}
+                                  >
+                                    <Trash2 size={12} />
+                                  </Button>
+                                )}
+                              </div>
+                              <Button size="sm" onClick={() => handleSaveEnv(repo.id)} disabled={envSaving.has(key)} leftIcon={<Save size={12} />}>
+                                {envSaving.has(key) ? "Saving..." : `Save ${selectedPath}`}
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
 
                 {/* Footer */}
                 <div className="flex items-center justify-between text-[11px] text-muted-foreground border-t border-border pt-2">

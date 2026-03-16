@@ -105,8 +105,8 @@ function CommandDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => vo
   );
 
   return (
-    <Dialog open={isOpen} onClose={onClose}>
-      <div className="w-[560px] max-w-[90vw]">
+    <Dialog open={isOpen} onClose={onClose} style={{ "--dialog-width": "560px" } as React.CSSProperties}>
+      <div className="w-full">
         <Command label="Search pages" className="overflow-hidden">
           <div className="flex items-center gap-2 px-4 border-b border-border">
             <Search size={16} className="shrink-0 text-muted-foreground" />
