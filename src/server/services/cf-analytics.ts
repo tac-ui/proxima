@@ -1,4 +1,4 @@
-import { getCloudflareSettings, cfFetch } from "./cloudflare";
+import { getCloudflareSettings, cfFetch, resolveZoneForDomain } from "./cloudflare";
 import { logger } from "../lib/logger";
 import type { AnalyticsData, AnalyticsBucket, HostAnalyticsSummary } from "@/types";
 
@@ -124,7 +124,12 @@ function classifyStatus(status: number): "2xx" | "3xx" | "4xx" | "5xx" | "other"
 
 export async function getAnalytics(domain: string, hours: number = 24): Promise<AnalyticsData> {
   const settings = getCloudflareSettings();
-  if (!settings.apiToken || !settings.zoneId) {
+  if (!settings.apiToken || settings.zones.length === 0) {
+    return emptyAnalytics();
+  }
+
+  const zone = resolveZoneForDomain(domain, settings.zones);
+  if (!zone) {
     return emptyAnalytics();
   }
 
@@ -189,7 +194,7 @@ export async function getAnalytics(domain: string, hours: number = 24): Promise<
   };
 
   const data = await graphqlQuery<AnalyticsQueryResult>(query, {
-    zoneTag: settings.zoneId,
+    zoneTag: zone.zoneId,
     filter,
   }, settings.apiToken);
 
@@ -197,11 +202,11 @@ export async function getAnalytics(domain: string, hours: number = 24): Promise<
     return emptyAnalytics();
   }
 
-  const zone = data.viewer.zones[0];
+  const zoneData = data.viewer.zones[0];
 
   // Aggregate traffic by hour into buckets
   const bucketMap = new Map<string, AnalyticsBucket>();
-  for (const group of zone.trafficByHour) {
+  for (const group of zoneData.trafficByHour) {
     const hour = group.dimensions.datetimeHour;
     const existing = bucketMap.get(hour);
     if (existing) {
@@ -223,7 +228,7 @@ export async function getAnalytics(domain: string, hours: number = 24): Promise<
 
   // Status breakdown
   let total2xx = 0, total3xx = 0, total4xx = 0, total5xx = 0;
-  for (const group of zone.statusBreakdown) {
+  for (const group of zoneData.statusBreakdown) {
     const cat = classifyStatus(group.dimensions.edgeResponseStatus);
     if (cat === "2xx") total2xx += group.count;
     else if (cat === "3xx") total3xx += group.count;
@@ -246,7 +251,7 @@ export async function getAnalytics(domain: string, hours: number = 24): Promise<
   }
 
   // Top paths
-  const topPaths = zone.topPaths
+  const topPaths = zoneData.topPaths
     .filter(g => g.dimensions.clientRequestPath)
     .map(g => ({
       path: g.dimensions.clientRequestPath,
@@ -254,7 +259,7 @@ export async function getAnalytics(domain: string, hours: number = 24): Promise<
     }));
 
   // Top referrers
-  const topReferrers = zone.topReferrers
+  const topReferrers = zoneData.topReferrers
     .filter(g => g.dimensions.clientRequestReferer && g.dimensions.clientRequestReferer !== "")
     .map(g => ({
       referrer: g.dimensions.clientRequestReferer,
@@ -280,9 +285,24 @@ export async function getAnalytics(domain: string, hours: number = 24): Promise<
 
 export async function getAnalyticsSummary(domainMap: Map<number, string[]>): Promise<HostAnalyticsSummary[]> {
   const settings = getCloudflareSettings();
-  if (!settings.apiToken || !settings.zoneId) {
+  if (!settings.apiToken || settings.zones.length === 0) {
     return [];
   }
+
+  const allDomains = [...domainMap.values()].flat();
+  if (allDomains.length === 0) return [];
+
+  // Group domains by zone
+  const domainsByZone = new Map<string, string[]>(); // zoneId → domains[]
+  for (const domain of allDomains) {
+    const zone = resolveZoneForDomain(domain, settings.zones);
+    if (!zone) continue;
+    const list = domainsByZone.get(zone.zoneId) ?? [];
+    list.push(domain);
+    domainsByZone.set(zone.zoneId, list);
+  }
+
+  if (domainsByZone.size === 0) return [];
 
   const { start, end } = toDateTimeRange(24);
 
@@ -315,41 +335,42 @@ export async function getAnalyticsSummary(domainMap: Map<number, string[]>): Pro
     }
   `;
 
-  const allDomains = [...domainMap.values()].flat();
-  if (allDomains.length === 0) return [];
+  // Query each zone in parallel
+  const zoneResults = await Promise.all(
+    [...domainsByZone.entries()].map(async ([zoneId, domains]) => {
+      const data = await graphqlQuery<SummaryQueryResult>(query, {
+        zoneTag: zoneId,
+        filter: {
+          datetime_geq: start,
+          datetime_leq: end,
+          clientRequestHTTPHost_in: domains,
+        },
+        errorFilter: {
+          datetime_geq: start,
+          datetime_leq: end,
+          clientRequestHTTPHost_in: domains,
+          edgeResponseStatus_geq: 400,
+        },
+      }, settings.apiToken);
+      return data;
+    })
+  );
 
-  const data = await graphqlQuery<SummaryQueryResult>(query, {
-    zoneTag: settings.zoneId,
-    filter: {
-      datetime_geq: start,
-      datetime_leq: end,
-      clientRequestHTTPHost_in: allDomains,
-    },
-    errorFilter: {
-      datetime_geq: start,
-      datetime_leq: end,
-      clientRequestHTTPHost_in: allDomains,
-      edgeResponseStatus_geq: 400,
-    },
-  }, settings.apiToken);
-
-  if (!data || !data.viewer.zones[0]) {
-    return [];
-  }
-
-  const zone = data.viewer.zones[0];
-
-  // Build domain→count maps
+  // Merge results into domain→count maps
   const totalByDomain = new Map<string, number>();
-  for (const g of zone.hostSummary) {
-    const d = g.dimensions.clientRequestHTTPHost;
-    totalByDomain.set(d, (totalByDomain.get(d) ?? 0) + g.count);
-  }
-
   const errorsByDomain = new Map<string, number>();
-  for (const g of zone.hostErrors) {
-    const d = g.dimensions.clientRequestHTTPHost;
-    errorsByDomain.set(d, (errorsByDomain.get(d) ?? 0) + g.count);
+
+  for (const data of zoneResults) {
+    if (!data || !data.viewer.zones[0]) continue;
+    const zone = data.viewer.zones[0];
+    for (const g of zone.hostSummary) {
+      const d = g.dimensions.clientRequestHTTPHost;
+      totalByDomain.set(d, (totalByDomain.get(d) ?? 0) + g.count);
+    }
+    for (const g of zone.hostErrors) {
+      const d = g.dimensions.clientRequestHTTPHost;
+      errorsByDomain.set(d, (errorsByDomain.get(d) ?? 0) + g.count);
+    }
   }
 
   // Map back to proxy host IDs

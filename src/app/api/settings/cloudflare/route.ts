@@ -6,6 +6,8 @@ import {
   saveCloudflareSettings,
   getCloudflareSettings,
   verifyConnection,
+  verifyZone,
+  listZones,
 } from "@server/services/cloudflare";
 import { logAudit, getClientIp } from "@server/services/audit";
 
@@ -34,7 +36,7 @@ export async function PUT(req: NextRequest) {
 
     saveCloudflareSettings({
       apiToken,
-      zoneId: typeof body.zoneId === "string" ? body.zoneId : existing.zoneId,
+      zones: Array.isArray(body.zones) ? body.zones : existing.zones,
       autoSync: typeof body.autoSync === "boolean" ? body.autoSync : existing.autoSync,
     });
 
@@ -49,6 +51,27 @@ export async function POST(req: NextRequest) {
   try {
     ensureDb();
     requireManager(req);
+    const body = await req.json();
+
+    const existing = getCloudflareSettings();
+    const apiToken =
+      typeof body.apiToken === "string" && !body.apiToken.includes("••")
+        ? body.apiToken
+        : existing.apiToken;
+
+    // List all available zones for the API token
+    if (body.action === "listZones") {
+      const zones = await listZones(apiToken);
+      return ok(zones);
+    }
+
+    // Individual zone verification
+    if (typeof body.zoneId === "string" && body.zoneId) {
+      const result = await verifyZone(body.zoneId, apiToken);
+      return ok(result);
+    }
+
+    // General connection test (first zone)
     const result = await verifyConnection();
     return ok(result);
   } catch (err) {

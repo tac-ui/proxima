@@ -55,6 +55,7 @@ export async function PUT(req: NextRequest) {
     });
 
     // Manage cloudflared container
+    let containerError: string | undefined;
     try {
       if (newEnabled && tunnelToken) {
         const status = await getCloudflaredStatus();
@@ -67,11 +68,12 @@ export async function PUT(req: NextRequest) {
         await stopCloudflared();
       }
     } catch (err) {
+      containerError = err instanceof Error ? err.message : String(err);
       logger.warn("cloudflared", `Container management failed: ${err}`);
     }
 
     logAudit({ userId: auth.userId, username: auth.username, action: "update", category: "settings", targetType: "setting", targetName: "cloudflare-tunnel", ipAddress: getClientIp(req) });
-    return ok(getMaskedTunnelSettings());
+    return ok({ ...getMaskedTunnelSettings(), containerError });
   } catch (err) {
     return errorResponse(err);
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
@@ -14,7 +14,8 @@ import {
   useToast,
   pageEntrance,
 } from "@tac-ui/web";
-import { Cloud, ShieldAlert } from "@tac-ui/icon";
+import { Cloud, ShieldAlert, Eye, EyeOff, Plus, Trash2, CheckCircle, Loader2, Download } from "@tac-ui/icon";
+import type { CloudflareTunnelSettingsResponse, CloudflareZone } from "@/types";
 import { LoadingIndicator } from "@/components/shared/LoadingIndicator";
 
 export default function CloudflarePage() {
@@ -25,23 +26,30 @@ export default function CloudflarePage() {
   const [tunEnabled, setTunEnabled] = useState(false);
   const [tunToken, setTunToken] = useState("");
   const [tunLoaded, setTunLoaded] = useState(false);
-  const [cfdState, setCfdState] = useState<"running" | "stopped" | "not_found" | null>(null);
+  const [cfdState, setCfdState] = useState<"running" | "stopped" | "not_found" | "restarting" | "error" | "starting" | null>(null);
+  const [cfdError, setCfdError] = useState<string | null>(null);
+  const [cfdLogs, setCfdLogs] = useState<string | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Analytics state
   const [cfAutoSync, setCfAutoSync] = useState(false);
   const [cfApiToken, setCfApiToken] = useState("");
-  const [cfZoneId, setCfZoneId] = useState("");
+  const [cfZones, setCfZones] = useState<CloudflareZone[]>([]);
+  const [newZoneId, setNewZoneId] = useState("");
+  const [verifyingZone, setVerifyingZone] = useState(false);
+  const [fetchingZones, setFetchingZones] = useState(false);
   const [cfLoaded, setCfLoaded] = useState(false);
+  const [tunSaving, setTunSaving] = useState(false);
   const [cfSaving, setCfSaving] = useState(false);
-  const [cfTesting, setCfTesting] = useState(false);
-  const [cfTestResult, setCfTestResult] = useState<{ valid: boolean; zoneName?: string; error?: string } | null>(null);
+  const [showTunToken, setShowTunToken] = useState(false);
+  const [showApiToken, setShowApiToken] = useState(false);
 
   useEffect(() => {
     api.getCloudflareSettings().then((res) => {
       if (res.ok && res.data) {
         setCfAutoSync(res.data.autoSync);
         setCfApiToken(res.data.apiToken);
-        setCfZoneId(res.data.zoneId);
+        setCfZones(res.data.zones ?? []);
         setCfLoaded(true);
       }
     }).catch(() => {});
@@ -53,12 +61,47 @@ export default function CloudflarePage() {
       }
     }).catch(() => {});
     api.getCloudflaredStatus().then((res) => {
-      if (res.ok && res.data) setCfdState(res.data.state);
+      if (res.ok && res.data) {
+        setCfdState(res.data.state);
+        setCfdError(res.data.error ?? null);
+        setCfdLogs(res.data.logs ?? null);
+      }
     }).catch(() => {});
+
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, []);
+
+  const startPolling = useCallback(() => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    let count = 0;
+    pollingRef.current = setInterval(async () => {
+      count++;
+      try {
+        const res = await api.getCloudflaredStatus();
+        if (res.ok && res.data) {
+          const { state, error, logs } = res.data;
+          setCfdState(state);
+          setCfdError(error ?? null);
+          setCfdLogs(logs ?? null);
+          if (state === "running" || state === "error" || state === "stopped") {
+            if (pollingRef.current) clearInterval(pollingRef.current);
+            pollingRef.current = null;
+          }
+        }
+      } catch { /* ignore */ }
+      if (count >= 15) {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    }, 2000);
   }, []);
 
   const handleSaveTunnel = async () => {
-    setCfSaving(true);
+    setTunSaving(true);
+    setCfdError(null);
+    setCfdLogs(null);
     try {
       const tunRes = await api.updateTunnelSettings({
         enabled: tunEnabled,
@@ -67,16 +110,24 @@ export default function CloudflarePage() {
       if (tunRes.ok && tunRes.data) {
         setTunToken(tunRes.data.tunnelToken);
         toast("Tunnel settings saved", { variant: "success" });
-        api.getCloudflaredStatus().then((res) => {
-          if (res.ok && res.data) setCfdState(res.data.state);
-        }).catch(() => {});
+        // Show containerError from PUT response if any
+        const data = tunRes.data as CloudflareTunnelSettingsResponse & { containerError?: string };
+        if (data.containerError) {
+          setCfdState("error");
+          setCfdError(data.containerError);
+        } else if (tunEnabled) {
+          setCfdState("starting");
+          startPolling();
+        } else {
+          setCfdState("not_found");
+        }
       } else {
         toast(tunRes.error ?? "Failed to save", { variant: "error" });
       }
     } catch {
       toast("Failed to save tunnel settings", { variant: "error" });
     } finally {
-      setCfSaving(false);
+      setTunSaving(false);
     }
   };
 
@@ -85,11 +136,12 @@ export default function CloudflarePage() {
     try {
       const cfRes = await api.updateCloudflareSettings({
         apiToken: cfApiToken,
-        zoneId: cfZoneId,
+        zones: cfZones,
         autoSync: cfAutoSync,
       });
       if (cfRes.ok && cfRes.data) {
         setCfApiToken(cfRes.data.apiToken);
+        setCfZones(cfRes.data.zones ?? []);
         toast("Analytics settings saved", { variant: "success" });
       } else {
         toast(cfRes.error ?? "Failed to save", { variant: "error" });
@@ -101,20 +153,56 @@ export default function CloudflarePage() {
     }
   };
 
-  const handleTestCloudflare = async () => {
-    setCfTesting(true);
-    setCfTestResult(null);
+  const handleAddZone = async () => {
+    if (!newZoneId.trim()) return;
+    setVerifyingZone(true);
     try {
-      const res = await api.testCloudflareConnection();
-      if (res.ok && res.data) {
-        setCfTestResult(res.data);
+      const res = await api.testCloudflareZone(newZoneId.trim(), cfApiToken);
+      if (res.ok && res.data && res.data.valid) {
+        const zone: CloudflareZone = { zoneId: newZoneId.trim(), zoneName: res.data.zoneName ?? "" };
+        // Avoid duplicates
+        if (cfZones.some(z => z.zoneId === zone.zoneId)) {
+          toast("Zone already added", { variant: "error" });
+        } else {
+          setCfZones(prev => [...prev, zone]);
+          setNewZoneId("");
+          toast(`Zone "${zone.zoneName}" added`, { variant: "success" });
+        }
       } else {
-        setCfTestResult({ valid: false, error: res.error ?? "Test failed" });
+        toast(res.data?.error ?? res.error ?? "Invalid Zone ID", { variant: "error" });
       }
     } catch {
-      setCfTestResult({ valid: false, error: "Connection failed" });
+      toast("Failed to verify zone", { variant: "error" });
     } finally {
-      setCfTesting(false);
+      setVerifyingZone(false);
+    }
+  };
+
+  const handleRemoveZone = (zoneId: string) => {
+    setCfZones(prev => prev.filter(z => z.zoneId !== zoneId));
+  };
+
+  const handleFetchZones = async () => {
+    setFetchingZones(true);
+    try {
+      const res = await api.fetchCloudflareZones(cfApiToken);
+      if (res.ok && res.data && Array.isArray(res.data)) {
+        const newZones = res.data.filter(
+          (z: CloudflareZone) => !cfZones.some(existing => existing.zoneId === z.zoneId)
+        );
+        if (newZones.length === 0) {
+          toast(cfZones.length > 0 ? "No new zones found" : "No zones found for this API token", { variant: "info" });
+        } else {
+          setCfZones(prev => [...prev, ...newZones]);
+          toast(`Added ${newZones.length} zone(s)`, { variant: "success" });
+        }
+      } else {
+        toast(res.error ?? "Failed to fetch zones", { variant: "error" });
+      }
+    } catch {
+      toast("Failed to fetch zones", { variant: "error" });
+    } finally {
+      setFetchingZones(false);
     }
   };
 
@@ -154,14 +242,26 @@ export default function CloudflarePage() {
                   <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium leading-none ${
                     cfdState === "running"
                       ? "bg-success/15 text-success"
-                      : cfdState === "stopped"
+                      : cfdState === "error"
                         ? "bg-error/15 text-error"
-                        : "bg-muted text-muted-foreground"
+                        : cfdState === "stopped"
+                          ? "bg-error/15 text-error"
+                          : cfdState === "starting" || cfdState === "restarting"
+                            ? "bg-warning/15 text-warning"
+                            : "bg-muted text-muted-foreground"
                   }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${
-                      cfdState === "running" ? "bg-success" : cfdState === "stopped" ? "bg-error" : "bg-muted-foreground"
-                    }`} />
-                    {cfdState === "running" ? "Running" : cfdState === "stopped" ? "Stopped" : "Not Found"}
+                    {cfdState === "starting" || cfdState === "restarting" ? (
+                      <span className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse" />
+                    ) : (
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        cfdState === "running" ? "bg-success" : cfdState === "error" || cfdState === "stopped" ? "bg-error" : "bg-muted-foreground"
+                      }`} />
+                    )}
+                    {cfdState === "running" ? "Running"
+                      : cfdState === "starting" || cfdState === "restarting" ? "Starting..."
+                      : cfdState === "error" ? "Error"
+                      : cfdState === "stopped" ? "Stopped"
+                      : "Not Found"}
                   </span>
                 )}
               </div>
@@ -171,6 +271,16 @@ export default function CloudflarePage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
+            {cfdState === "error" && (cfdError || cfdLogs) && (
+              <div className="rounded-lg border border-error/20 bg-error/5 p-3 space-y-1">
+                {cfdError && (
+                  <p className="text-xs font-medium text-error">{cfdError}</p>
+                )}
+                {cfdLogs && (
+                  <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-all max-h-32 overflow-y-auto font-mono leading-relaxed">{cfdLogs}</pre>
+                )}
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">Enable Tunnel</p>
@@ -181,24 +291,34 @@ export default function CloudflarePage() {
                 onChange={() => setTunEnabled(prev => !prev)}
               />
             </div>
-            <Input
-              label="Tunnel Token"
-              type="password"
-              value={tunToken}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTunToken(e.target.value)}
-              placeholder="Tunnel token from Cloudflare dashboard"
-            />
+            <div className="relative">
+              <Input
+                label="Tunnel Token"
+                type={showTunToken ? "text" : "password"}
+                value={tunToken}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTunToken(e.target.value)}
+                placeholder="Tunnel token from Cloudflare dashboard"
+              />
+              <button
+                type="button"
+                className="absolute right-2.5 top-[50%] text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setShowTunToken((v) => !v)}
+                tabIndex={-1}
+              >
+                {showTunToken ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
             <p className="text-xs text-muted-foreground">
-              Get the token from Cloudflare Zero Trust &gt; Networks &gt; Tunnels &gt; Configure &gt; Install connector.
+              Get the token from Cloudflare | Networks &gt; Tunnels
             </p>
             <div className="flex justify-end">
               <Button
                 variant="primary"
                 size="sm"
-                disabled={cfSaving || !tunLoaded}
+                disabled={tunSaving || !tunLoaded}
                 onClick={handleSaveTunnel}
               >
-                {cfSaving ? "Saving..." : "Save"}
+                {tunSaving ? "Saving..." : "Save"}
               </Button>
             </div>
           </div>
@@ -220,34 +340,88 @@ export default function CloudflarePage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <Input
-              label="API Token"
-              type="password"
-              value={cfApiToken}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCfApiToken(e.target.value)}
-              placeholder="Cloudflare API Token"
-            />
-            <Input
-              label="Zone ID"
-              value={cfZoneId}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCfZoneId(e.target.value)}
-              placeholder="Zone ID from Cloudflare dashboard"
-            />
-            <div className="flex items-center gap-3">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={cfTesting || !cfApiToken || !cfZoneId}
-                onClick={handleTestCloudflare}
+            <div className="relative">
+              <Input
+                label="API Token"
+                type={showApiToken ? "text" : "password"}
+                value={cfApiToken}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCfApiToken(e.target.value)}
+                placeholder="Cloudflare API Token"
+              />
+              <button
+                type="button"
+                className="absolute right-2.5 top-[50%] text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setShowApiToken((v) => !v)}
+                tabIndex={-1}
               >
-                {cfTesting ? "Testing..." : "Test Connection"}
-              </Button>
-              {cfTestResult && (
-                <span className={`text-xs font-medium ${cfTestResult.valid ? "text-success" : "text-error"}`}>
-                  {cfTestResult.valid ? `Connected to ${cfTestResult.zoneName}` : cfTestResult.error}
-                </span>
-              )}
+                {showApiToken ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
             </div>
+
+            {/* Zones list */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-medium text-foreground">Zones</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={fetchingZones || !cfApiToken}
+                  onClick={handleFetchZones}
+                >
+                  {fetchingZones ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                  <span className="ml-1 text-xs">Fetch Zones</span>
+                </Button>
+              </div>
+              {cfZones.length > 0 ? (
+                <div className="space-y-1.5 mb-3">
+                  {cfZones.map((zone) => (
+                    <div key={zone.zoneId} className="flex items-center justify-between px-3 py-2 rounded-lg border bg-muted/30">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CheckCircle size={14} className="text-success shrink-0" />
+                        <span className="text-sm truncate">
+                          {zone.zoneName ? (
+                            <>{zone.zoneName} <span className="text-muted-foreground text-xs">({zone.zoneId})</span></>
+                          ) : (
+                            <span className="text-muted-foreground">{zone.zoneId}</span>
+                          )}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveZone(zone.zoneId)}
+                        className="text-muted-foreground hover:text-error transition-colors shrink-0 ml-2"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground mb-3">No zones configured</p>
+              )}
+
+              {/* Add zone */}
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <Input
+                    value={newZoneId}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewZoneId(e.target.value)}
+                    placeholder="Zone ID from Cloudflare dashboard"
+                    onKeyDown={(e: React.KeyboardEvent) => e.key === "Enter" && handleAddZone()}
+                  />
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={verifyingZone || !newZoneId.trim() || !cfApiToken}
+                  onClick={handleAddZone}
+                >
+                  {verifyingZone ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                  <span className="ml-1">Add</span>
+                </Button>
+              </div>
+            </div>
+
             <div className="flex justify-end">
               <Button
                 variant="primary"

@@ -100,6 +100,26 @@ async function detectHostDataDir(containerDataDir: string): Promise<string> {
     }
   }
 
+  // Fallback: scan all containers for one with PXM_ env vars and matching mount
+  try {
+    const containers = await docker.listContainers({ all: true });
+    for (const c of containers) {
+      try {
+        const info = await docker.getContainer(c.Id).inspect();
+        const envVars: string[] = info.Config?.Env || [];
+        if (!envVars.some((e: string) => e.startsWith("PXM_"))) continue;
+        const hostDir = extractHostDataDir(info, containerDataDir);
+        if (hostDir) {
+          cachedHostDataDir = hostDir;
+          logger.info("config", `Auto-detected host data dir: ${cachedHostDataDir} (via container scan: ${c.Names?.[0] || c.Id.slice(0, 12)})`);
+          return cachedHostDataDir;
+        }
+      } catch { /* skip */ }
+    }
+  } catch {
+    logger.debug("config", "Could not list containers for data dir detection");
+  }
+
   logger.warn("config", `Could not auto-detect host data dir for ${containerDataDir}, using as-is`);
   return containerDataDir;
 }
@@ -115,6 +135,45 @@ export function getConfig(): Config {
     githubClientId: process.env.GITHUB_CLIENT_ID,
     githubClientSecret: process.env.GITHUB_CLIENT_SECRET,
   };
+}
+
+/**
+ * Get the Docker volume name for the data directory mount.
+ * Used by cloudflared to mount the same volume reliably.
+ */
+export async function getDataVolumeName(): Promise<string | null> {
+  const dataDir = process.env.PXM_DATA_DIR || "./data";
+  const docker = new Docker();
+
+  const candidates: string[] = [os.hostname()];
+  const procId = getOwnContainerId();
+  if (procId && !candidates.includes(procId)) candidates.push(procId);
+
+  for (const candidate of candidates) {
+    try {
+      const info = await docker.getContainer(candidate).inspect();
+      const mounts = info.Mounts || [];
+      const dataMount = mounts.find((m: any) => m.Destination === dataDir && m.Type === "volume");
+      if (dataMount?.Name) return dataMount.Name;
+    } catch { /* skip */ }
+  }
+
+  // Fallback: container scan
+  try {
+    const containers = await docker.listContainers({ all: true });
+    for (const c of containers) {
+      try {
+        const info = await docker.getContainer(c.Id).inspect();
+        const envVars: string[] = info.Config?.Env || [];
+        if (!envVars.some((e: string) => e.startsWith("PXM_"))) continue;
+        const mounts = info.Mounts || [];
+        const dataMount = mounts.find((m: any) => m.Destination === dataDir && m.Type === "volume");
+        if (dataMount?.Name) return dataMount.Name;
+      } catch { /* skip */ }
+    }
+  } catch { /* skip */ }
+
+  return null;
 }
 
 /** Initialize hostDataDir by auto-detecting from Docker mount info. */

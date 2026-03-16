@@ -66,13 +66,13 @@ function yamlEscape(value: string): string {
   return value;
 }
 
-function writeConfigFile(tunnelId: string, ingress: { hostname?: string; service: string; originRequest?: { noTLSVerify: boolean } }[]): string {
+function writeConfigFile(tunnelId: string, ingress: { hostname?: string; service: string; originRequest?: { noTLSVerify: boolean } }[], credentialsPath = "/etc/cloudflared/credentials.json"): string {
   const dir = getCloudflaredDir();
   const filePath = path.join(dir, "config.yml");
 
   const lines: string[] = [
     `tunnel: ${yamlEscape(tunnelId)}`,
-    `credentials-file: /etc/cloudflared/credentials.json`,
+    `credentials-file: ${credentialsPath}`,
     ``,
     `ingress:`,
   ];
@@ -95,7 +95,7 @@ function writeConfigFile(tunnelId: string, ingress: { hostname?: string; service
 }
 
 /** Build ingress rules from proxy hosts and write config files. */
-export async function generateCloudflaredConfig(token: string): Promise<{ tunnelId: string }> {
+export async function generateCloudflaredConfig(token: string, credentialsPath = "/etc/cloudflared/credentials.json"): Promise<{ tunnelId: string }> {
   const creds = parseTunnelToken(token);
   writeCredentialsFile(creds);
 
@@ -118,7 +118,7 @@ export async function generateCloudflaredConfig(token: string): Promise<{ tunnel
   // Catch-all rule (required by cloudflared)
   ingress.push({ service: "http_status:404" });
 
-  writeConfigFile(creds.tunnelId, ingress);
+  writeConfigFile(creds.tunnelId, ingress, credentialsPath);
   logger.info("cloudflared", `Generated config with ${enabledHosts.length} host(s)`);
 
   return { tunnelId: creds.tunnelId };
@@ -132,17 +132,51 @@ export async function getCloudflaredStatus(): Promise<CloudflaredStatus> {
   try {
     const container = docker.getContainer(CONTAINER_NAME);
     const info = await container.inspect();
-    const running = info.State?.Running === true;
-    return {
-      state: running ? "running" : "stopped",
-      containerId: info.Id,
-    };
+
+    if (info.State?.Running === true) {
+      return { state: "running", containerId: info.Id };
+    }
+
+    if (info.State?.Restarting === true) {
+      const logs = await getContainerLogs(container);
+      return { state: "restarting", containerId: info.Id, logs };
+    }
+
+    // Container exited with non-zero exit code → error
+    if (info.State?.ExitCode !== undefined && info.State.ExitCode !== 0) {
+      const logs = await getContainerLogs(container);
+      return {
+        state: "error",
+        containerId: info.Id,
+        error: `Exited with code ${info.State.ExitCode}`,
+        logs,
+      };
+    }
+
+    return { state: "stopped", containerId: info.Id };
   } catch (err: unknown) {
     if (err && typeof err === "object" && "statusCode" in err && (err as { statusCode: number }).statusCode === 404) {
       return { state: "not_found" };
     }
     logger.warn("cloudflared", `Failed to get container status: ${err}`);
     return { state: "not_found" };
+  }
+}
+
+async function getContainerLogs(container: Docker.Container): Promise<string> {
+  try {
+    const logBuffer = await container.logs({ stdout: true, stderr: true, tail: 10, follow: false });
+    // Docker logs may return a Buffer or string; strip 8-byte header frames
+    const raw = typeof logBuffer === "string" ? logBuffer : logBuffer.toString("utf-8");
+    // Each Docker log frame has an 8-byte header; strip non-printable prefix per line
+    return raw
+      .split("\n")
+      .map((line) => line.replace(/^[\x00-\x1f]{1,8}/, ""))
+      .filter(Boolean)
+      .slice(-10)
+      .join("\n");
+  } catch {
+    return "";
   }
 }
 
@@ -180,32 +214,60 @@ async function removeExisting(): Promise<void> {
 }
 
 export async function startCloudflared(token: string): Promise<void> {
-  // Generate config files first
-  await generateCloudflaredConfig(token);
+  const { getHostDataDir, getDataVolumeName } = await import("../lib/config");
+
+  // Try to find the Docker volume name for reliable volume-based mounting
+  const volumeName = await getDataVolumeName();
+  const useVolume = !!volumeName;
+
+  // Set paths based on mount strategy
+  const cfgDir = useVolume ? "/pxm-data/cloudflared" : "/etc/cloudflared";
+  const credentialsPath = `${cfgDir}/credentials.json`;
+  const configFilePath = `${cfgDir}/config.yml`;
+
+  // Generate config files with the correct credentials path
+  await generateCloudflaredConfig(token, credentialsPath);
+
+  // Verify config files were generated before starting container
+  const localDir = getCloudflaredDir();
+  const localConfigPath = path.join(localDir, "config.yml");
+  const localCredsPath = path.join(localDir, "credentials.json");
+  if (!fs.existsSync(localConfigPath) || !fs.existsSync(localCredsPath)) {
+    throw new Error(`Cloudflared config files missing in ${localDir}. Cannot start container.`);
+  }
 
   await ensureImage();
   await removeExisting();
 
-  // Use host path for bind mount — Docker interprets bind paths relative to the host,
-  // not the container, so when running inside Docker we need the actual host directory.
-  const { getHostDataDir } = await import("../lib/config");
-  const hostCloudflaredDir = path.resolve(path.join(getHostDataDir(), "cloudflared"));
+  let binds: string[];
 
-  logger.info("cloudflared", `Bind mount: ${hostCloudflaredDir} -> /etc/cloudflared`);
+  if (useVolume) {
+    // Volume mount — most reliable, works on all Docker setups
+    binds = [`${volumeName}:/pxm-data:ro`];
+    logger.info("cloudflared", `Volume mount: ${volumeName} -> /pxm-data (read-only)`);
+  } else {
+    // Fallback: host path bind mount
+    const hostCloudflaredDir = path.resolve(path.join(getHostDataDir(), "cloudflared"));
+    if (!path.isAbsolute(hostCloudflaredDir)) {
+      throw new Error(`Host cloudflared dir is not absolute: ${hostCloudflaredDir}. Set PXM_HOST_DATA_DIR to fix.`);
+    }
+    binds = [`${hostCloudflaredDir}:/etc/cloudflared:ro`];
+    logger.info("cloudflared", `Bind mount: ${hostCloudflaredDir} -> /etc/cloudflared`);
+  }
 
   const container = await docker.createContainer({
     name: CONTAINER_NAME,
     Image: IMAGE,
-    Cmd: ["tunnel", "--config", "/etc/cloudflared/config.yml", "--no-autoupdate", "run"],
+    Cmd: ["tunnel", "--config", configFilePath, "--no-autoupdate", "run"],
     HostConfig: {
       NetworkMode: "host",
-      RestartPolicy: { Name: "unless-stopped", MaximumRetryCount: 0 },
-      Binds: [`${hostCloudflaredDir}:/etc/cloudflared:ro`],
+      RestartPolicy: { Name: "on-failure", MaximumRetryCount: 3 },
+      Binds: binds,
     },
   });
 
   await container.start();
-  logger.info("cloudflared", "Container started with local config");
+  logger.info("cloudflared", `Container started (${useVolume ? "volume" : "bind"} mount)`);
 }
 
 export async function stopCloudflared(): Promise<void> {

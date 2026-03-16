@@ -1,4 +1,4 @@
-import type { ApiResponse, StackListItem, Stack, ProxyHost, GitCloneRequest, DiscoveredService, SshKeyInfo, RepositoryInfo, ListeningProcess, AnalyticsData, HostAnalyticsSummary, CloudflareSettingsResponse, CloudflareSettingsPayload, CloudflareTestResult, CloudflareTunnelSettingsResponse, CloudflareTunnelSettingsPayload, CloudflaredStatus, User, UserRole, ManagedService, ManagedServiceType, DiscoveredServiceWithManaged, ListeningProcessWithManaged, AuditLogResponse } from "@/types";
+import type { ApiResponse, StackListItem, Stack, ProxyHost, GitCloneRequest, DiscoveredService, SshKeyInfo, RepositoryInfo, ListeningProcess, AnalyticsData, HostAnalyticsSummary, CloudflareSettingsResponse, CloudflareSettingsPayload, CloudflareTestResult, CloudflareZone, CloudflareTunnelSettingsResponse, CloudflareTunnelSettingsPayload, CloudflaredStatus, User, UserRole, ManagedService, ManagedServiceType, DiscoveredServiceWithManaged, ListeningProcessWithManaged, AuditLogResponse } from "@/types";
 
 const TOKEN_KEY = "proxima_auth_token";
 
@@ -139,7 +139,11 @@ export const api = {
   // Cloudflare DNS
   getCloudflareSettings: () => request<CloudflareSettingsResponse>("GET", "/api/settings/cloudflare"),
   updateCloudflareSettings: (data: CloudflareSettingsPayload) => request<CloudflareSettingsResponse>("PUT", "/api/settings/cloudflare", data),
-  testCloudflareConnection: () => request<CloudflareTestResult>("POST", "/api/settings/cloudflare"),
+  testCloudflareConnection: () => request<CloudflareTestResult>("POST", "/api/settings/cloudflare", {}),
+  testCloudflareZone: (zoneId: string, apiToken?: string) =>
+    request<CloudflareTestResult>("POST", "/api/settings/cloudflare", { zoneId, ...(apiToken ? { apiToken } : {}) }),
+  fetchCloudflareZones: (apiToken?: string) =>
+    request<CloudflareZone[]>("POST", "/api/settings/cloudflare", { action: "listZones", ...(apiToken ? { apiToken } : {}) }),
 
   // Terminals
   getActiveTerminals: () => request<{ id: string; type: "shell" | "repo" }[]>("GET", "/api/terminals"),

@@ -280,15 +280,20 @@ export interface HostAnalyticsSummary {
 }
 
 // === Cloudflare DNS Types ===
+export interface CloudflareZone {
+  zoneId: string;
+  zoneName: string; // e.g. "example.com"
+}
+
 export interface CloudflareSettingsResponse {
   apiToken: string;
-  zoneId: string;
+  zones: CloudflareZone[];
   autoSync: boolean;
 }
 
 export interface CloudflareSettingsPayload {
   apiToken: string;
-  zoneId: string;
+  zones: CloudflareZone[];
   autoSync: boolean;
 }
 
@@ -333,6 +338,8 @@ export interface AuditLogResponse {
 
 // === Cloudflared Container Types ===
 export interface CloudflaredStatus {
-  state: "running" | "stopped" | "not_found";
+  state: "running" | "stopped" | "not_found" | "restarting" | "error";
   containerId?: string;
+  error?: string;
+  logs?: string;
 }
