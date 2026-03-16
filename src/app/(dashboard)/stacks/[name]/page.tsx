@@ -199,12 +199,12 @@ export default function StackDetailPage() {
           </div>
         </div>
 
-        {isManager && (
+        {isManager && !isSelfStack && (
           <div className="flex items-center gap-2 flex-wrap">
             <Button
               variant="primary"
               size="sm"
-              disabled={actionLoading !== null || stack?.status === "running" || isSelfStack}
+              disabled={actionLoading !== null || stack?.status === "running"}
               onClick={() => handleAction("start")}
               leftIcon={<Play size={14} />}
             >
@@ -213,7 +213,7 @@ export default function StackDetailPage() {
             <Button
               variant="secondary"
               size="sm"
-              disabled={actionLoading !== null || stack?.status !== "running" || isSelfStack}
+              disabled={actionLoading !== null || stack?.status !== "running"}
               onClick={() => handleAction("stop")}
               leftIcon={<Square size={14} />}
             >
@@ -222,7 +222,7 @@ export default function StackDetailPage() {
             <Button
               variant="secondary"
               size="sm"
-              disabled={actionLoading !== null || isSelfStack}
+              disabled={actionLoading !== null}
               onClick={() => handleAction("restart")}
               leftIcon={<RotateCw size={14} />}
             >
@@ -231,7 +231,7 @@ export default function StackDetailPage() {
             <Button
               variant="destructive"
               size="sm"
-              disabled={actionLoading !== null || isSelfStack}
+              disabled={actionLoading !== null}
               onClick={() => handleAction("delete")}
               leftIcon={<Trash2 size={14} />}
             >

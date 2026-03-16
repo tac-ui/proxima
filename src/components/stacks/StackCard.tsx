@@ -91,7 +91,7 @@ export function StackCard({ stack, onStart, onStop, isManager }: StackCardProps)
         </CardContent>
         <CardFooter>
           <div className="flex gap-2" onClick={(e) => e.preventDefault()}>
-            {isManager !== false && (
+            {isManager !== false && stack.name !== "proxima" && (
               isRunning ? (
                 <Button
                   variant="secondary"

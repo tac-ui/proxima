@@ -300,24 +300,24 @@ export default function ServersPage() {
               transition={{ duration: 0.3 }}
             >
               <Card>
-                <CardContent>
+                <CardContent className="p-0">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-10"></TableHead>
+                        <TableHead className="w-8 pl-4"></TableHead>
                         <TableHead>Stack</TableHead>
                         <TableHead>Service</TableHead>
-                        <TableHead>Container</TableHead>
+                        <TableHead className="hidden lg:table-cell">Container</TableHead>
                         <TableHead>IP</TableHead>
                         <TableHead>Ports</TableHead>
-                        <TableHead>Volumes</TableHead>
-                        <TableHead>Networks</TableHead>
+                        <TableHead className="hidden xl:table-cell">Volumes</TableHead>
+                        <TableHead className="hidden md:table-cell">Networks</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {sortedServices.map((svc) => (
-                        <TableRow key={svc.containerName}>
-                          <TableCell>
+                        <TableRow key={svc.containerName} className="group">
+                          <TableCell className="pl-4">
                             <Tooltip content={svc.managed ? "Managed" : "Add to managed"} placement="top">
                               <button
                                 onClick={() => toggleContainerManaged(svc)}
@@ -333,56 +333,67 @@ export default function ServersPage() {
                           <TableCell>
                             <Link
                               href={`/stacks/${svc.stackName}`}
-                              className="text-sm font-semibold hover:text-point transition-colors"
+                              className="font-semibold text-sm hover:text-point transition-colors"
                             >
                               {svc.stackName}
                             </Link>
                           </TableCell>
                           <TableCell>
-                            <span className="font-medium">{svc.serviceName}</span>
+                            <div>
+                              <span className="font-medium text-sm">{svc.serviceName}</span>
+                              <p className="text-[11px] text-muted-foreground font-mono lg:hidden">{svc.containerName}</p>
+                            </div>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden lg:table-cell">
                             <span className="inline-flex items-center gap-1 font-mono text-xs text-muted-foreground">
                               {svc.containerName}
                               <CopyButton value={svc.containerName} label="container" />
                             </span>
                           </TableCell>
                           <TableCell>
-                            <span className="inline-flex items-center gap-1 font-mono text-xs">
-                              {svc.internalIp}
-                              <CopyButton value={svc.internalIp} label="IP" />
-                            </span>
+                            {svc.internalIp ? (
+                              <span className="inline-flex items-center gap-1 font-mono text-xs">
+                                {svc.internalIp}
+                                <CopyButton value={svc.internalIp} label="IP" />
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             {svc.ports.length > 0 ? (
-                              <div className="font-mono text-xs space-y-0.5">
-                                {svc.ports.map((p) => (
-                                  <div key={`${p.hostPort}:${p.containerPort}`}>
+                              <div className="flex flex-wrap gap-1">
+                                {svc.ports
+                                  .filter((p, i, arr) => arr.findIndex((x) => x.hostPort === p.hostPort && x.containerPort === p.containerPort) === i)
+                                  .map((p) => (
+                                  <Chip key={`${p.hostPort}:${p.containerPort}`} variant="filter">
                                     {p.hostPort}:{p.containerPort}
-                                  </div>
+                                  </Chip>
                                 ))}
                               </div>
                             ) : (
                               <span className="text-xs text-muted-foreground">-</span>
                             )}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden xl:table-cell">
                             {svc.mounts && svc.mounts.length > 0 ? (
-                              <div className="font-mono text-xs space-y-0.5">
+                              <div className="space-y-0.5 max-w-[280px]">
                                 {svc.mounts.map((m: MountInfo, i: number) => (
-                                  <div key={i}>
-                                    {m.source} → {m.destination}{!m.rw ? " (ro)" : ""}
-                                  </div>
+                                  <Tooltip key={i} content={`${m.source} → ${m.destination}${!m.rw ? " (ro)" : ""}`} placement="top">
+                                    <div className="font-mono text-[11px] text-muted-foreground truncate">
+                                      {m.destination}{!m.rw ? " (ro)" : ""}
+                                    </div>
+                                  </Tooltip>
                                 ))}
                               </div>
                             ) : (
                               <span className="text-xs text-muted-foreground">-</span>
                             )}
                           </TableCell>
-                          <TableCell>
-                            <div className="font-mono text-xs space-y-0.5">
+                          <TableCell className="hidden md:table-cell">
+                            <div className="flex flex-wrap gap-1">
                               {svc.networks.map((n) => (
-                                <div key={n}>{n}</div>
+                                <Chip key={n} variant="filter">{n}</Chip>
                               ))}
                             </div>
                           </TableCell>
