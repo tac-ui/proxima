@@ -47,6 +47,7 @@ services:
     image: jeonhui/proxima:latest
     container_name: proxima
     restart: unless-stopped
+    pid: host  # optional: enables host process discovery
     ports:
       - "20222:20222"
     volumes:
@@ -139,6 +140,7 @@ Navigate to **Terminal** for standalone shell sessions.
 | `PXM_PORT` | `20222` | Server port |
 | `PXM_DATA_DIR` | `/data` | Data root directory |
 | `PXM_STACKS_DIR` | `/data/stacks` | Stack files storage path |
+| `PXM_HOST_DATA_DIR` | same as `PXM_DATA_DIR` | Host path for data dir (needed for Cloudflare Tunnel bind mounts) |
 
 ### Volumes
 

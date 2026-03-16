@@ -74,10 +74,6 @@ export default function ProjectsPage() {
   const [cloneErrors, setCloneErrors] = useState<Record<string, string>>({});
   const autoDir = useRef("");
 
-  // GitHub
-  const [githubConnected, setGithubConnected] = useState(false);
-  const [githubUsername, setGithubUsername] = useState<string | null>(null);
-
   // SSH Keys
   const [sshKeys, setSshKeys] = useState<SshKeyInfo[]>([]);
   const [selectedSshKeyId, setSelectedSshKeyId] = useState<number | null>(null);
@@ -124,26 +120,22 @@ export default function ProjectsPage() {
     });
   }, []);
 
-  const fetchGithubStatus = useCallback(() => {
-    api.getGithubStatus().then((res) => {
-      if (res.ok && res.data) {
-        setGithubConnected(res.data.connected);
-        setGithubUsername(res.data.username ?? null);
-      }
-    });
-  }, []);
-
   const fetchSshKeys = useCallback(() => {
     api.getSshKeys().then((res) => {
-      if (res.ok && res.data) setSshKeys(res.data);
+      if (res.ok && res.data) {
+        setSshKeys(res.data);
+        // Default to most recently added key
+        if (res.data.length > 0 && selectedSshKeyId === null) {
+          setSelectedSshKeyId(res.data[res.data.length - 1].id);
+        }
+      }
     });
   }, []);
 
   useEffect(() => {
     fetchRepos();
-    fetchGithubStatus();
     fetchSshKeys();
-  }, [fetchRepos, fetchGithubStatus, fetchSshKeys]);
+  }, [fetchRepos, fetchSshKeys]);
 
   // Restore active terminals
   useEffect(() => {
@@ -170,16 +162,6 @@ export default function ProjectsPage() {
       }
     });
   }, [repos]);
-
-  // GitHub OAuth popup message
-  useEffect(() => {
-    const handleMessage = (e: MessageEvent) => {
-      if (e.origin !== window.location.origin) return;
-      if (e.data === "github-connected") fetchGithubStatus();
-    };
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [fetchGithubStatus]);
 
   // Clone progress via SSE
   useEffect(() => {
@@ -562,38 +544,18 @@ export default function ProjectsPage() {
               />
             </div>
 
-            {/* Auth: GitHub + SSH Key */}
+            {/* SSH Key */}
             <div className="flex items-center gap-2 flex-wrap">
-              {githubConnected ? (
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-success/30 bg-success/5 text-xs">
-                  <Github size={14} />
-                  <span className="font-medium">{githubUsername}</span>
-                  <button
-                    className="text-muted-foreground hover:text-foreground ml-1"
-                    onClick={() => { api.disconnectGithub().then(() => { setGithubConnected(false); setGithubUsername(null); }); }}
-                  >
-                    &times;
-                  </button>
-                </div>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  leftIcon={<Github size={14} />}
-                  onClick={() => window.open("/api/github/authorize", "github-oauth", "width=600,height=700")}
-                >
-                  Connect GitHub
-                </Button>
-              )}
               {sshKeys.length > 0 ? (
                 <Select
+                  label="SSH Key"
                   options={[
                     { value: "", label: "No SSH Key" },
                     ...sshKeys.map((k) => ({ value: String(k.id), label: k.alias })),
                   ]}
                   value={selectedSshKeyId ? String(selectedSshKeyId) : ""}
                   onChange={(v: string) => setSelectedSshKeyId(v ? Number(v) : null)}
-                  className="w-40"
+                  className="w-full"
                 />
               ) : (
                 <Link href="/ssh-keys">

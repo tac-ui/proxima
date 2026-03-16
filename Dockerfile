@@ -6,6 +6,7 @@ RUN apk add --no-cache \
   docker-cli-compose \
   git \
   openssh-client \
+  bash \
   python3 \
   make \
   g++

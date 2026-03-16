@@ -3,6 +3,7 @@ services:
     image: jeonhui/proxima:latest
     container_name: proxima
     restart: unless-stopped
+    pid: host
     ports:
       - "20222:20222"
     volumes:

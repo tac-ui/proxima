@@ -47,6 +47,7 @@ services:
     image: jeonhui/proxima:latest
     container_name: proxima
     restart: unless-stopped
+    pid: host  # 선택: 호스트 프로세스 탐지 활성화
     ports:
       - "20222:20222"
     volumes:
@@ -139,6 +140,7 @@ docker compose up -d
 | `PXM_PORT` | `20222` | 서버 포트 |
 | `PXM_DATA_DIR` | `/data` | 데이터 루트 디렉토리 |
 | `PXM_STACKS_DIR` | `/data/stacks` | 스택 파일 저장 경로 |
+| `PXM_HOST_DATA_DIR` | `PXM_DATA_DIR`과 동일 | 호스트 데이터 경로 (Cloudflare Tunnel bind mount에 필요) |
 
 ### 볼륨
 

@@ -199,20 +199,21 @@ export default function SshKeysPage() {
                 <p className="text-sm text-success font-medium">Key generated successfully!</p>
                 <div>
                   <p className="text-xs font-medium mb-1.5">Public Key (add this to GitHub)</p>
-                  <div className="relative">
-                    <pre className="text-xs bg-muted p-3 rounded-lg overflow-x-auto break-all whitespace-pre-wrap border border-border font-mono">
-                      {generatedPublicKey}
-                    </pre>
+                  <pre className="text-xs bg-muted p-3 rounded-lg overflow-x-auto break-all whitespace-pre-wrap border border-border font-mono">
+                    {generatedPublicKey}
+                  </pre>
+                  <div className="flex justify-end mt-1.5">
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="absolute top-1.5 right-1.5"
                       onClick={() => {
                         navigator.clipboard.writeText(generatedPublicKey);
                         toast("Copied to clipboard", { variant: "success" });
                       }}
                       leftIcon={<Copy size={12} />}
-                    />
+                    >
+                      Copy
+                    </Button>
                   </div>
                 </div>
               </div>

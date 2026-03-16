@@ -15,12 +15,6 @@ import {
   TabsList,
   TabTrigger,
   TabContent,
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
   Textarea,
   Skeleton,
   EmptyState,
@@ -32,7 +26,7 @@ import { useConfirm } from "@/hooks/useConfirm";
 import { useAuth } from "@/contexts/AuthContext";
 import { CopyButton } from "@/components/shared/CopyButton";
 import dynamic from "next/dynamic";
-import type { Stack, ContainerInfo, MountInfo } from "@/types";
+import type { Stack, ContainerInfo, MountInfo, NetworkInfo } from "@/types";
 
 const TerminalPanel = dynamic(
   () => import("@/components/terminal/TerminalPanel").then((m) => m.TerminalPanel),
@@ -386,63 +380,66 @@ export default function StackDetailPage() {
                   description="No containers are running for this stack."
                 />
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Image</TableHead>
-                      <TableHead>State</TableHead>
-                      <TableHead>Ports</TableHead>
-                      <TableHead>Volumes</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {stack.containers.map((c: ContainerInfo) => (
-                      <TableRow key={c.name}>
-                        <TableCell>
-                          <span className="inline-flex items-center gap-1 font-mono">
-                            {c.name}
-                            <CopyButton value={c.name} label="container name" />
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="inline-flex items-center gap-1 text-muted-foreground font-mono truncate max-w-[200px]">
-                            {c.image}
-                            <CopyButton value={c.image} label="image" />
-                          </span>
-                        </TableCell>
-                        <TableCell>
+                <div className="space-y-3">
+                  {stack.containers.map((c: ContainerInfo) => (
+                    <div key={c.name} className="border border-border rounded-lg p-4 space-y-3">
+                      {/* Container header */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono text-sm font-medium truncate">{c.name}</span>
+                          <CopyButton value={c.name} label="container name" />
                           <Badge variant={
                             c.state === "running" ? "success" : c.state === "exited" ? "destructive" : "warning"
                           }>
                             {c.state}
                           </Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {c.ports.length > 0 ? (
-                            <span className="inline-flex items-center gap-1">
-                              {c.ports.map((p: any) => `${p.hostPort}:${p.containerPort}`).join(", ")}
-                              <CopyButton value={c.ports.map((p: any) => `${p.hostPort}:${p.containerPort}`).join(", ")} label="ports" />
-                            </span>
-                          ) : "—"}
-                        </TableCell>
-                        <TableCell>
-                          {c.mounts && c.mounts.length > 0 ? (
-                            <div className="flex flex-wrap gap-1">
-                              {c.mounts.map((m: MountInfo, i: number) => (
-                                <span key={i} className="inline-flex items-center gap-1 text-xs font-mono bg-muted px-1.5 py-0.5 rounded">
-                                  {m.source}:{m.destination}{!m.rw ? " (ro)" : ""}
+                        </div>
+                        <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">{c.image}</span>
+                      </div>
+
+                      {/* Details */}
+                      <div className="grid grid-cols-1 gap-2 text-xs">
+                        {c.ports.length > 0 && (
+                          <div className="flex gap-2">
+                            <span className="text-muted-foreground w-16 shrink-0">Ports</span>
+                            <div className="font-mono text-foreground">
+                              {c.ports.map((p: any, i: number) => (
+                                <span key={i}>
+                                  {i > 0 && <span className="text-muted-foreground">, </span>}
+                                  {p.hostPort}:{p.containerPort}
                                 </span>
                               ))}
                             </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">-</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                          </div>
+                        )}
+                        {c.mounts && c.mounts.length > 0 && (
+                          <div className="flex gap-2">
+                            <span className="text-muted-foreground w-16 shrink-0">Volumes</span>
+                            <div className="font-mono text-foreground space-y-0.5">
+                              {c.mounts.map((m: MountInfo, i: number) => (
+                                <div key={i}>
+                                  {m.source} → {m.destination}{!m.rw ? " (ro)" : ""}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {c.networks && c.networks.length > 0 && (
+                          <div className="flex gap-2">
+                            <span className="text-muted-foreground w-16 shrink-0">Networks</span>
+                            <div className="font-mono text-foreground space-y-0.5">
+                              {c.networks.map((n: NetworkInfo, i: number) => (
+                                <div key={i}>
+                                  {n.name}{n.ipAddress ? ` (${n.ipAddress})` : ""}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>

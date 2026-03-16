@@ -3,7 +3,14 @@ import { requireManager, errorResponse, ok } from "../../_lib/auth";
 import { ensureDb } from "../../_lib/db";
 import { InteractiveTerminal, Terminal } from "@server/services/terminal";
 import os from "os";
+import fs from "fs";
 import { logAudit, getClientIp } from "@server/services/audit";
+
+function detectShell(): string {
+  if (process.platform === "darwin") return "zsh";
+  if (fs.existsSync("/bin/bash")) return "bash";
+  return "sh";
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,7 +28,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const shell = process.platform === "darwin" ? "zsh" : "bash";
+    const shell = detectShell();
     const terminalId = `shell-${Date.now()}`;
     const terminal = new InteractiveTerminal(terminalId, shell, [], process.env.HOME || os.homedir());
     terminal.start();
