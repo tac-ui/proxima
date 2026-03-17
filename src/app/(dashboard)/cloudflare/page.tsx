@@ -11,12 +11,31 @@ import {
   Switch,
   Input,
   Button,
+  Badge,
   useToast,
   pageEntrance,
 } from "@tac-ui/web";
 import { Cloud, ShieldAlert, Eye, EyeOff, Plus, Trash2, CheckCircle, Loader2, Download, ChevronDown, ChevronRight, Play, Square, RotateCw } from "@tac-ui/icon";
 import type { CloudflareTunnelSettingsResponse, CloudflareZone } from "@/types";
 import { LoadingIndicator } from "@/components/shared/LoadingIndicator";
+
+const tunnelStatusVariantMap: Record<string, "success" | "destructive" | "warning" | "secondary"> = {
+  running: "success",
+  stopped: "destructive",
+  error: "destructive",
+  starting: "warning",
+  restarting: "warning",
+  not_found: "secondary",
+};
+
+const tunnelStatusLabelMap: Record<string, string> = {
+  running: "Running",
+  stopped: "Stopped",
+  error: "Error",
+  starting: "Starting...",
+  restarting: "Restarting...",
+  not_found: "Not Found",
+};
 
 export default function CloudflarePage() {
   const { isManager } = useAuth();
@@ -30,6 +49,8 @@ export default function CloudflarePage() {
   const [cfdError, setCfdError] = useState<string | null>(null);
   const [cfdLogs, setCfdLogs] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [actionLoading, setActionLoading] = useState<"start" | "stop" | "restart" | null>(null);
+  const [tunSaving, setTunSaving] = useState(false);
 
   // Analytics state
   const [cfAutoSync, setCfAutoSync] = useState(false);
@@ -39,8 +60,6 @@ export default function CloudflarePage() {
   const [verifyingZone, setVerifyingZone] = useState(false);
   const [fetchingZones, setFetchingZones] = useState(false);
   const [cfLoaded, setCfLoaded] = useState(false);
-  const [actionLoading, setActionLoading] = useState<"start" | "stop" | "restart" | null>(null);
-  const [tunSaving, setTunSaving] = useState(false);
   const [cfSaving, setCfSaving] = useState(false);
   const [showTunToken, setShowTunToken] = useState(false);
   const [showApiToken, setShowApiToken] = useState(false);
@@ -254,30 +273,9 @@ export default function CloudflarePage() {
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-semibold">Cloudflare Tunnel</h2>
                 {cfdState && (
-                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium leading-none ${
-                    cfdState === "running"
-                      ? "bg-success/15 text-success"
-                      : cfdState === "error"
-                        ? "bg-error/15 text-error"
-                        : cfdState === "stopped"
-                          ? "bg-error/15 text-error"
-                          : cfdState === "starting" || cfdState === "restarting"
-                            ? "bg-warning/15 text-warning"
-                            : "bg-muted text-muted-foreground"
-                  }`}>
-                    {cfdState === "starting" || cfdState === "restarting" ? (
-                      <span className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse" />
-                    ) : (
-                      <span className={`w-1.5 h-1.5 rounded-full ${
-                        cfdState === "running" ? "bg-success" : cfdState === "error" || cfdState === "stopped" ? "bg-error" : "bg-muted-foreground"
-                      }`} />
-                    )}
-                    {cfdState === "running" ? "Running"
-                      : cfdState === "starting" || cfdState === "restarting" ? "Starting..."
-                      : cfdState === "error" ? "Error"
-                      : cfdState === "stopped" ? "Stopped"
-                      : "Not Found"}
-                  </span>
+                  <Badge variant={tunnelStatusVariantMap[cfdState] ?? "secondary"}>
+                    {tunnelStatusLabelMap[cfdState] ?? cfdState}
+                  </Badge>
                 )}
               </div>
               <p className="text-xs text-muted-foreground">Route traffic through Cloudflare Tunnel</p>
@@ -346,27 +344,27 @@ export default function CloudflarePage() {
                 <Button
                   variant="primary"
                   size="sm"
-                  disabled={actionLoading !== null || cfdState === "running" || cfdState === "starting"}
+                  disabled={tunSaving || actionLoading !== null || cfdState === "running" || cfdState === "starting" || cfdState === "restarting"}
                   onClick={() => handleTunnelAction("start")}
-                  leftIcon={<Play size={14} />}
+                  leftIcon={actionLoading === "start" ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
                 >
                   {actionLoading === "start" ? "Starting..." : "Start"}
                 </Button>
                 <Button
                   variant="secondary"
                   size="sm"
-                  disabled={actionLoading !== null || cfdState !== "running"}
+                  disabled={tunSaving || actionLoading !== null || (cfdState !== "running" && cfdState !== "starting" && cfdState !== "restarting")}
                   onClick={() => handleTunnelAction("stop")}
-                  leftIcon={<Square size={14} />}
+                  leftIcon={actionLoading === "stop" ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
                 >
                   {actionLoading === "stop" ? "Stopping..." : "Stop"}
                 </Button>
                 <Button
                   variant="secondary"
                   size="sm"
-                  disabled={actionLoading !== null || cfdState !== "running"}
+                  disabled={tunSaving || actionLoading !== null || cfdState !== "running"}
                   onClick={() => handleTunnelAction("restart")}
-                  leftIcon={<RotateCw size={14} />}
+                  leftIcon={actionLoading === "restart" ? <Loader2 size={14} className="animate-spin" /> : <RotateCw size={14} />}
                 >
                   {actionLoading === "restart" ? "Restarting..." : "Restart"}
                 </Button>
@@ -374,7 +372,7 @@ export default function CloudflarePage() {
               <Button
                 variant="primary"
                 size="sm"
-                disabled={tunSaving || !tunLoaded}
+                disabled={tunSaving || actionLoading !== null || !tunLoaded}
                 onClick={handleSaveTunnel}
               >
                 {tunSaving ? "Saving..." : "Save"}

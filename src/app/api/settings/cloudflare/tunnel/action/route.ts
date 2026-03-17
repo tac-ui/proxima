@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
       return errorResponse(new Error("Tunnel token is not configured."));
     }
 
+    let success = true;
     try {
       if (action === "start") {
         await startCloudflared(settings.tunnelToken);
@@ -32,19 +33,23 @@ export async function POST(req: NextRequest) {
         await restartCloudflared(settings.tunnelToken);
       }
     } catch (err) {
+      success = false;
       logger.warn("cloudflared", `Tunnel ${action} failed: ${err}`);
-      return errorResponse(err instanceof Error ? err : new Error(String(err)));
     }
 
     logAudit({
       userId: auth.userId,
       username: auth.username,
-      action,
+      action: success ? action : `${action}_failed`,
       category: "settings",
       targetType: "setting",
       targetName: "cloudflare-tunnel",
       ipAddress: getClientIp(req),
     });
+
+    if (!success) {
+      return errorResponse(new Error(`Tunnel ${action} failed. Check server logs for details.`));
+    }
 
     return ok({ success: true });
   } catch (err) {
