@@ -1,8 +1,5 @@
-import fs from "node:fs";
-import path from "node:path";
 import Docker from "dockerode";
 import { logger } from "../lib/logger";
-import { getConfig } from "../lib/config";
 import { list as listProxyHosts } from "./proxy-host";
 import type { CloudflaredStatus } from "@/types";
 
@@ -36,73 +33,21 @@ export function parseTunnelToken(token: string): TunnelCredentials {
 }
 
 // ---------------------------------------------------------------------------
-// Config file generation
+// Tunnel ingress config via Cloudflare API (remotely-managed mode)
 // ---------------------------------------------------------------------------
 
-function getCloudflaredDir(): string {
-  const config = getConfig();
-  const dir = path.join(config.dataDir, "cloudflared");
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
-}
-
-function writeCredentialsFile(creds: TunnelCredentials): string {
-  const dir = getCloudflaredDir();
-  const filePath = path.join(dir, "credentials.json");
-  const content = JSON.stringify({
-    AccountTag: creds.accountTag,
-    TunnelSecret: creds.tunnelSecret,
-    TunnelID: creds.tunnelId,
-  });
-  fs.writeFileSync(filePath, content, "utf-8");
-  return filePath;
-}
-
-/** Escape a YAML string value — wrap in quotes if it contains special characters. */
-function yamlEscape(value: string): string {
-  if (/[:{}\[\],&*?|>!%#@`"'\n\\]/.test(value) || value.trim() !== value) {
-    return JSON.stringify(value);
-  }
-  return value;
-}
-
-function writeConfigFile(tunnelId: string, ingress: { hostname?: string; service: string; originRequest?: { noTLSVerify: boolean } }[], credentialsPath = "/etc/cloudflared/credentials.json"): string {
-  const dir = getCloudflaredDir();
-  const filePath = path.join(dir, "config.yml");
-
-  const lines: string[] = [
-    `tunnel: ${yamlEscape(tunnelId)}`,
-    `credentials-file: ${credentialsPath}`,
-    ``,
-    `ingress:`,
-  ];
-
-  for (const rule of ingress) {
-    if (rule.hostname) {
-      lines.push(`  - hostname: ${yamlEscape(rule.hostname)}`);
-      lines.push(`    service: ${yamlEscape(rule.service)}`);
-      if (rule.originRequest?.noTLSVerify) {
-        lines.push(`    originRequest:`);
-        lines.push(`      noTLSVerify: true`);
-      }
-    } else {
-      lines.push(`  - service: ${yamlEscape(rule.service)}`);
-    }
-  }
-
-  fs.writeFileSync(filePath, lines.join("\n") + "\n", "utf-8");
-  return filePath;
-}
-
-/** Build ingress rules from proxy hosts and write config files. */
-export async function generateCloudflaredConfig(token: string, credentialsPath = "/etc/cloudflared/credentials.json"): Promise<{ tunnelId: string }> {
+/** Push ingress rules to Cloudflare API so cloudflared picks them up automatically. */
+export async function pushTunnelIngress(token: string, apiToken: string): Promise<void> {
   const creds = parseTunnelToken(token);
-  writeCredentialsFile(creds);
 
   const hosts = await listProxyHosts();
   const enabledHosts = hosts.filter((h) => h.enabled);
 
-  const ingress: { hostname?: string; service: string; originRequest?: { noTLSVerify: boolean } }[] = [];
+  const ingress: Array<{
+    hostname?: string;
+    service: string;
+    originRequest?: { noTLSVerify: boolean };
+  }> = [];
 
   for (const host of enabledHosts) {
     const service = `${host.forwardScheme}://${host.forwardHost}:${host.forwardPort}`;
@@ -118,10 +63,23 @@ export async function generateCloudflaredConfig(token: string, credentialsPath =
   // Catch-all rule (required by cloudflared)
   ingress.push({ service: "http_status:404" });
 
-  writeConfigFile(creds.tunnelId, ingress, credentialsPath);
-  logger.info("cloudflared", `Generated config with ${enabledHosts.length} host(s)`);
+  // PUT /accounts/{account_id}/cfd_tunnel/{tunnel_id}/configurations
+  const { cfFetch } = await import("./cloudflare");
+  const res = await cfFetch(
+    `/accounts/${creds.accountTag}/cfd_tunnel/${creds.tunnelId}/configurations`,
+    apiToken,
+    {
+      method: "PUT",
+      body: JSON.stringify({ config: { ingress } }),
+    },
+  );
 
-  return { tunnelId: creds.tunnelId };
+  if (!res.success) {
+    const errMsg = res.errors?.[0]?.message ?? "Unknown error";
+    throw new Error(`Failed to push tunnel ingress: ${errMsg}`);
+  }
+
+  logger.info("cloudflared", `Pushed ingress config with ${enabledHosts.length} host(s) via API`);
 }
 
 // ---------------------------------------------------------------------------
@@ -213,61 +171,39 @@ async function removeExisting(): Promise<void> {
   }
 }
 
+/**
+ * Start cloudflared in remotely-managed mode using --token.
+ * No config files or volume mounts needed — ingress is managed via Cloudflare API.
+ */
 export async function startCloudflared(token: string): Promise<void> {
-  const { getHostDataDir, getDataVolumeName } = await import("../lib/config");
-
-  // Try to find the Docker volume name for reliable volume-based mounting
-  const volumeName = await getDataVolumeName();
-  const useVolume = !!volumeName;
-
-  // Set paths based on mount strategy
-  const cfgDir = useVolume ? "/pxm-data/cloudflared" : "/etc/cloudflared";
-  const credentialsPath = `${cfgDir}/credentials.json`;
-  const configFilePath = `${cfgDir}/config.yml`;
-
-  // Generate config files with the correct credentials path
-  await generateCloudflaredConfig(token, credentialsPath);
-
-  // Verify config files were generated before starting container
-  const localDir = getCloudflaredDir();
-  const localConfigPath = path.join(localDir, "config.yml");
-  const localCredsPath = path.join(localDir, "credentials.json");
-  if (!fs.existsSync(localConfigPath) || !fs.existsSync(localCredsPath)) {
-    throw new Error(`Cloudflared config files missing in ${localDir}. Cannot start container.`);
-  }
-
   await ensureImage();
   await removeExisting();
-
-  let binds: string[];
-
-  if (useVolume) {
-    // Volume mount — most reliable, works on all Docker setups
-    binds = [`${volumeName}:/pxm-data:ro`];
-    logger.info("cloudflared", `Volume mount: ${volumeName} -> /pxm-data (read-only)`);
-  } else {
-    // Fallback: host path bind mount
-    const hostCloudflaredDir = path.resolve(path.join(getHostDataDir(), "cloudflared"));
-    if (!path.isAbsolute(hostCloudflaredDir)) {
-      throw new Error(`Host cloudflared dir is not absolute: ${hostCloudflaredDir}. Set PXM_HOST_DATA_DIR to fix.`);
-    }
-    binds = [`${hostCloudflaredDir}:/etc/cloudflared:ro`];
-    logger.info("cloudflared", `Bind mount: ${hostCloudflaredDir} -> /etc/cloudflared`);
-  }
 
   const container = await docker.createContainer({
     name: CONTAINER_NAME,
     Image: IMAGE,
-    Cmd: ["tunnel", "--config", configFilePath, "--no-autoupdate", "run"],
+    Cmd: ["tunnel", "--no-autoupdate", "run", "--token", token],
     HostConfig: {
       NetworkMode: "host",
       RestartPolicy: { Name: "on-failure", MaximumRetryCount: 3 },
-      Binds: binds,
     },
   });
 
   await container.start();
-  logger.info("cloudflared", `Container started (${useVolume ? "volume" : "bind"} mount)`);
+  logger.info("cloudflared", "Container started (token mode, no file mounts)");
+
+  // Push ingress rules via API
+  try {
+    const { getCloudflareSettings } = await import("./cloudflare");
+    const cfSettings = getCloudflareSettings();
+    if (cfSettings.apiToken) {
+      await pushTunnelIngress(token, cfSettings.apiToken);
+    } else {
+      logger.warn("cloudflared", "No Cloudflare API token configured, skipping ingress push");
+    }
+  } catch (err) {
+    logger.warn("cloudflared", `Failed to push initial ingress config: ${err}`);
+  }
 }
 
 export async function stopCloudflared(): Promise<void> {
@@ -292,21 +228,24 @@ export async function restartCloudflared(token: string): Promise<void> {
   await startCloudflared(token);
 }
 
-/** Regenerate config and restart container if running. Called on proxy host CRUD. */
+/**
+ * Sync ingress rules via Cloudflare API. Called on proxy host CRUD.
+ * No container restart needed — cloudflared picks up remote config changes automatically.
+ */
 export async function syncCloudflaredConfig(): Promise<void> {
-  // Lazy import to avoid circular dependency
-  const { getTunnelSettings } = await import("./cloudflare");
+  const { getTunnelSettings, getCloudflareSettings } = await import("./cloudflare");
   const settings = getTunnelSettings();
   if (!settings.enabled || !settings.tunnelToken) return;
 
-  try {
-    await generateCloudflaredConfig(settings.tunnelToken);
+  const cfSettings = getCloudflareSettings();
+  if (!cfSettings.apiToken) {
+    logger.warn("cloudflared", "No Cloudflare API token, skipping ingress sync");
+    return;
+  }
 
-    const status = await getCloudflaredStatus();
-    if (status.state === "running") {
-      await restartCloudflared(settings.tunnelToken);
-    }
+  try {
+    await pushTunnelIngress(settings.tunnelToken, cfSettings.apiToken);
   } catch (err) {
-    logger.warn("cloudflared", `Config sync failed: ${err}`);
+    logger.warn("cloudflared", `Ingress sync failed: ${err}`);
   }
 }
