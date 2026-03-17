@@ -9,7 +9,8 @@ RUN apk add --no-cache \
   bash \
   python3 \
   make \
-  g++
+  g++ \
+  su-exec
 
 # ---- Dependencies ----
 FROM base AS deps
