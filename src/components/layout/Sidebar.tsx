@@ -22,6 +22,7 @@ import {
   Cloud,
   KeyRound,
   ScrollText,
+  Activity,
 } from "@tac-ui/icon";
 
 interface NavItem {
@@ -82,6 +83,7 @@ const navGroups: NavGroupDef[] = [
     label: "System",
     icon: <Cog size={16} />,
     items: [
+      { href: "/monitoring", label: "Monitoring", icon: <Activity size={20} /> },
       { href: "/users", label: "Users", icon: <Users size={20} /> },
       { href: "/account", label: "Account", icon: <UserCircle size={20} /> },
       { href: "/cloudflare", label: "Cloudflare", icon: <Cloud size={20} /> },

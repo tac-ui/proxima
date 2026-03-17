@@ -19,6 +19,7 @@ import {
   Users,
   UserCircle,
   ScrollText,
+  Activity,
 } from "@tac-ui/icon";
 
 interface CommandItem {
@@ -71,6 +72,7 @@ const commandGroups: CommandGroup[] = [
     key: "system",
     label: "System",
     items: [
+      { id: "monitoring", label: "Monitoring", href: "/monitoring", icon: <Activity size={16} />, keywords: ["cpu", "memory", "disk", "system", "metrics"] },
       { id: "users", label: "Users", href: "/users", icon: <Users size={16} />, keywords: ["admin", "role", "manage"] },
       { id: "account", label: "Account", href: "/account", icon: <UserCircle size={16} />, keywords: ["profile", "password"] },
       { id: "cloudflare", label: "Cloudflare", href: "/cloudflare", icon: <Cloud size={16} />, keywords: ["tunnel", "dns", "cdn"] },

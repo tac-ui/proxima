@@ -92,7 +92,8 @@ export async function getCloudflaredStatus(): Promise<CloudflaredStatus> {
     const info = await container.inspect();
 
     if (info.State?.Running === true) {
-      return { state: "running", containerId: info.Id };
+      const logs = await getContainerLogs(container);
+      return { state: "running", containerId: info.Id, logs };
     }
 
     if (info.State?.Restarting === true) {

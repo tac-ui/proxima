@@ -185,4 +185,4 @@ Proxima runs as a single Node.js process — a custom HTTP server wrapping Next.
 
 ## License
 
-This project is proprietary software. All rights reserved.
+This project is licensed under the [MIT License](LICENSE).

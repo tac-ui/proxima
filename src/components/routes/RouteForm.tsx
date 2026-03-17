@@ -12,7 +12,7 @@ import {
   Combobox,
 } from "@tac-ui/web";
 import { Cloud, ArrowRight, Lock, Server } from "@tac-ui/icon";
-import type { ProxyHost, DiscoveredServiceWithManaged, ListeningProcessWithManaged, CloudflaredStatus, ManagedService } from "@/types";
+import type { ProxyHost, DiscoveredServiceWithManaged, ListeningProcessWithManaged, CloudflaredStatus, ManagedService, CloudflareZone } from "@/types";
 
 interface RouteFormProps {
   initial?: Partial<ProxyHost>;
@@ -33,9 +33,9 @@ export function RouteForm({
   const [scheme, setScheme] = useState<"http" | "https">(initial?.forwardScheme ?? "http");
   const [forwardHost, setForwardHost] = useState(initial?.forwardHost ?? "");
   const [forwardPort, setForwardPort] = useState(String(initial?.forwardPort ?? "80"));
-  const [wsUpgrade, setWsUpgrade] = useState(initial?.allowWebsocketUpgrade ?? false);
+  const [wsUpgrade, setWsUpgrade] = useState(initial?.allowWebsocketUpgrade ?? true);
   const [caching, setCaching] = useState(initial?.cachingEnabled ?? false);
-  const [blockExploits, setBlockExploits] = useState(initial?.blockExploits ?? true);
+  const [blockExploits, setBlockExploits] = useState(initial?.blockExploits ?? false);
   const [discoveredServices, setDiscoveredServices] = useState<DiscoveredServiceWithManaged[]>([]);
   const [listeningPorts, setListeningPorts] = useState<ListeningProcessWithManaged[]>([]);
   const [managedServices, setManagedServices] = useState<ManagedService[]>([]);
@@ -43,6 +43,10 @@ export function RouteForm({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [tunnelActive, setTunnelActive] = useState(false);
   const [cfdState, setCfdState] = useState<CloudflaredStatus["state"] | null>(null);
+  const [cfZones, setCfZones] = useState<CloudflareZone[]>([]);
+  const [domainMode, setDomainMode] = useState<"manual" | "zone">("manual");
+  const [selectedZone, setSelectedZone] = useState("");
+  const [subdomainInput, setSubdomainInput] = useState("");
 
   useEffect(() => {
     if (!connected) return;
@@ -61,6 +65,12 @@ export function RouteForm({
     api.getCloudflaredStatus().then((res) => {
       if (res.ok && res.data) setCfdState(res.data.state);
     }).catch(() => {});
+    api.getCloudflareSettings().then((res) => {
+      if (res.ok && res.data && res.data.zones?.length) {
+        setCfZones(res.data.zones);
+        setSelectedZone(res.data.zones[0].zoneName);
+      }
+    }).catch(() => {});
   }, [connected]);
 
   const addDomain = () => {
@@ -72,6 +82,16 @@ export function RouteForm({
   };
 
   const removeDomain = (d: string) => setDomains((prev) => prev.filter((x) => x !== d));
+
+  const addZoneDomain = () => {
+    const sub = subdomainInput.trim();
+    if (!selectedZone) return;
+    const full = sub ? `${sub}.${selectedZone}` : selectedZone;
+    if (!domains.includes(full)) {
+      setDomains((prev) => [...prev.filter(Boolean), full]);
+      setSubdomainInput("");
+    }
+  };
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -174,19 +194,51 @@ export function RouteForm({
 
       {/* Domain Names */}
       <div className="space-y-2">
-        <p className="text-sm font-medium">Domain Names</p>
-        <div className="flex gap-2">
-          <Input
-            value={domainInput}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDomainInput(e.target.value)}
-            onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-              if (e.key === "Enter") { e.preventDefault(); addDomain(); }
-            }}
-            placeholder="example.com"
-            className="flex-1"
-          />
-          <Button type="button" variant="secondary" onClick={addDomain}>Add</Button>
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium">Domain Names</p>
+          {cfZones.length > 0 && (
+            <button
+              type="button"
+              className="text-xs text-point hover:underline"
+              onClick={() => setDomainMode((m) => m === "manual" ? "zone" : "manual")}
+            >
+              {domainMode === "manual" ? "Select from zones" : "Enter manually"}
+            </button>
+          )}
         </div>
+        {domainMode === "zone" && cfZones.length > 0 ? (
+          <div className="flex gap-2">
+            <Input
+              value={subdomainInput}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSubdomainInput(e.target.value)}
+              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                if (e.key === "Enter") { e.preventDefault(); addZoneDomain(); }
+              }}
+              placeholder="subdomain"
+              className="flex-1"
+            />
+            <span className="flex items-center text-sm text-muted-foreground">.</span>
+            <Select
+              options={cfZones.map((z) => ({ value: z.zoneName, label: z.zoneName }))}
+              value={selectedZone}
+              onChange={(v: string) => setSelectedZone(v)}
+            />
+            <Button type="button" variant="secondary" onClick={addZoneDomain}>Add</Button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <Input
+              value={domainInput}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDomainInput(e.target.value)}
+              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                if (e.key === "Enter") { e.preventDefault(); addDomain(); }
+              }}
+              placeholder="example.com"
+              className="flex-1"
+            />
+            <Button type="button" variant="secondary" onClick={addDomain}>Add</Button>
+          </div>
+        )}
         {domains.filter(Boolean).length > 0 && (
           <div className="flex flex-wrap gap-2 mt-2">
             {domains.filter(Boolean).map((d) => (

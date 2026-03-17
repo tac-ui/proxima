@@ -336,6 +336,16 @@ export interface AuditLogResponse {
   total: number;
 }
 
+// === System Metrics Types ===
+export interface SystemMetrics {
+  cpu: { model: string; cores: number; loadAvg: [number, number, number] };
+  memory: { totalBytes: number; freeBytes: number; usedBytes: number; usagePercent: number };
+  disk: { totalBytes: number; usedBytes: number; availableBytes: number; usagePercent: number; mountPoint: string };
+  os: { type: string; platform: string; release: string; arch: string; hostname: string };
+  uptime: { seconds: number; formatted: string };
+  timestamp: string;
+}
+
 // === Cloudflared Container Types ===
 export interface CloudflaredStatus {
   state: "running" | "stopped" | "not_found" | "restarting" | "error";

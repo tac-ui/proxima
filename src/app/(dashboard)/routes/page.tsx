@@ -58,44 +58,34 @@ export default function RoutesPage() {
     <motion.div className="space-y-6" {...pageEntrance}>
       {/* Tunnel status banner */}
       <AnimatePresence>
-        {cfdState !== null && (
+        {cfdState !== null && cfdState !== "running" && (
           <motion.div
             variants={fadeVariants}
             initial="hidden"
             animate="visible"
             exit="exit"
-            className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl border ${
-              cfdState === "running"
-                ? "bg-success/5 border-success/20"
-                : "bg-warning/5 border-warning/20"
-            }`}
+            className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border bg-warning/5 border-warning/20"
           >
             <div className="flex items-center gap-3">
-              <Cloud size={16} className={cfdState === "running" ? "text-success" : "text-warning"} />
+              <Cloud size={16} className="text-warning" />
               <div>
                 <p className="text-sm font-medium">
-                  {cfdState === "running"
-                    ? "Cloudflare Tunnel Active"
-                    : tunnelActive
-                      ? "Cloudflare Tunnel Enabled but Not Running"
-                      : "Cloudflare Tunnel Not Configured"}
+                  {tunnelActive
+                    ? "Cloudflare Tunnel Enabled but Not Running"
+                    : "Cloudflare Tunnel Not Configured"}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {cfdState === "running"
-                    ? "Traffic is routed through Cloudflare Edge with automatic SSL."
-                    : tunnelActive
-                      ? "The cloudflared connector is not running. Check Settings."
-                      : "Enable tunnel in Settings to route traffic through Cloudflare."}
+                  {tunnelActive
+                    ? "The cloudflared connector is not running. Check Settings."
+                    : "Enable tunnel in Settings to route traffic through Cloudflare."}
                 </p>
               </div>
             </div>
-            {cfdState !== "running" && (
-              <Link href="/cloudflare">
-                <Button variant="secondary" size="sm" leftIcon={<Settings size={14} />}>
-                  Cloudflare Settings
-                </Button>
-              </Link>
-            )}
+            <Link href="/cloudflare">
+              <Button variant="secondary" size="sm" leftIcon={<Settings size={14} />}>
+                Cloudflare Settings
+              </Button>
+            </Link>
           </motion.div>
         )}
       </AnimatePresence>

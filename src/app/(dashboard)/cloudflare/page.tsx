@@ -14,7 +14,7 @@ import {
   useToast,
   pageEntrance,
 } from "@tac-ui/web";
-import { Cloud, ShieldAlert, Eye, EyeOff, Plus, Trash2, CheckCircle, Loader2, Download } from "@tac-ui/icon";
+import { Cloud, ShieldAlert, Eye, EyeOff, Plus, Trash2, CheckCircle, Loader2, Download, ChevronDown, ChevronRight } from "@tac-ui/icon";
 import type { CloudflareTunnelSettingsResponse, CloudflareZone } from "@/types";
 import { LoadingIndicator } from "@/components/shared/LoadingIndicator";
 
@@ -43,6 +43,7 @@ export default function CloudflarePage() {
   const [cfSaving, setCfSaving] = useState(false);
   const [showTunToken, setShowTunToken] = useState(false);
   const [showApiToken, setShowApiToken] = useState(false);
+  const [showRunningLogs, setShowRunningLogs] = useState(false);
 
   useEffect(() => {
     api.getCloudflareSettings().then((res) => {
@@ -281,6 +282,21 @@ export default function CloudflarePage() {
                 )}
               </div>
             )}
+            {cfdState === "running" && cfdLogs && (
+              <div className="rounded-lg border border-border bg-muted/30">
+                <button
+                  type="button"
+                  className="flex items-center gap-2 w-full px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowRunningLogs((v) => !v)}
+                >
+                  {showRunningLogs ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  Container Logs
+                </button>
+                {showRunningLogs && (
+                  <pre className="px-3 pb-3 text-[11px] text-muted-foreground whitespace-pre-wrap break-all max-h-40 overflow-y-auto font-mono leading-relaxed">{cfdLogs}</pre>
+                )}
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">Enable Tunnel</p>
@@ -401,7 +417,7 @@ export default function CloudflarePage() {
               )}
 
               {/* Add zone */}
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <div className="flex-1">
                   <Input
                     value={newZoneId}
@@ -412,7 +428,6 @@ export default function CloudflarePage() {
                 </div>
                 <Button
                   variant="secondary"
-                  size="sm"
                   disabled={verifyingZone || !newZoneId.trim() || !cfApiToken}
                   onClick={handleAddZone}
                 >

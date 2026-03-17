@@ -1,4 +1,4 @@
-import type { ApiResponse, StackListItem, Stack, ProxyHost, GitCloneRequest, DiscoveredService, SshKeyInfo, RepositoryInfo, ListeningProcess, AnalyticsData, HostAnalyticsSummary, CloudflareSettingsResponse, CloudflareSettingsPayload, CloudflareTestResult, CloudflareZone, CloudflareTunnelSettingsResponse, CloudflareTunnelSettingsPayload, CloudflaredStatus, User, UserRole, ManagedService, ManagedServiceType, DiscoveredServiceWithManaged, ListeningProcessWithManaged, AuditLogResponse } from "@/types";
+import type { ApiResponse, StackListItem, Stack, ProxyHost, GitCloneRequest, DiscoveredService, SshKeyInfo, RepositoryInfo, ListeningProcess, AnalyticsData, HostAnalyticsSummary, CloudflareSettingsResponse, CloudflareSettingsPayload, CloudflareTestResult, CloudflareZone, CloudflareTunnelSettingsResponse, CloudflareTunnelSettingsPayload, CloudflaredStatus, User, UserRole, ManagedService, ManagedServiceType, DiscoveredServiceWithManaged, ListeningProcessWithManaged, AuditLogResponse, SystemMetrics } from "@/types";
 
 const TOKEN_KEY = "proxima_auth_token";
 
@@ -167,4 +167,7 @@ export const api = {
   getTunnelSettings: () => request<CloudflareTunnelSettingsResponse>("GET", "/api/settings/cloudflare/tunnel"),
   updateTunnelSettings: (data: CloudflareTunnelSettingsPayload) => request<CloudflareTunnelSettingsResponse>("PUT", "/api/settings/cloudflare/tunnel", data),
   getCloudflaredStatus: () => request<CloudflaredStatus>("GET", "/api/settings/cloudflare/tunnel/status"),
+
+  // Monitoring
+  getSystemMetrics: () => request<SystemMetrics>("GET", "/api/monitoring"),
 };
