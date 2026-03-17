@@ -1,13 +1,10 @@
 import Docker from "dockerode";
 import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
 import { logger } from "../lib/logger";
+import { getConfig, getHostDataDir } from "../lib/config";
 import { list as listProxyHosts } from "./proxy-host";
 import type { CloudflaredStatus } from "@/types";
-
-const CFD_CONFIG_DIR = path.join(os.tmpdir(), "proxima-cloudflared");
-const CFD_CONFIG_PATH = path.join(CFD_CONFIG_DIR, "config.yml");
 
 const CONTAINER_NAME = "proxima-cloudflared";
 const IMAGE = "cloudflare/cloudflared:latest";
@@ -186,9 +183,14 @@ export async function startCloudflared(token: string): Promise<void> {
   await ensureImage();
   await removeExisting();
 
-  // Create minimal config.yml to prevent "no such file" error in token mode
-  fs.mkdirSync(CFD_CONFIG_DIR, { recursive: true });
-  fs.writeFileSync(CFD_CONFIG_PATH, "# token mode - no local config needed\n");
+  // Create minimal config.yml on host to prevent "no such file" error in token mode
+  const dataDir = getConfig().dataDir;
+  const cfdDir = path.join(dataDir, "cloudflared");
+  fs.mkdirSync(cfdDir, { recursive: true });
+  fs.writeFileSync(path.join(cfdDir, "config.yml"), "# token mode\n");
+
+  const hostDataDir = getHostDataDir();
+  const hostCfdConfig = path.join(hostDataDir, "cloudflared", "config.yml");
 
   const container = await docker.createContainer({
     name: CONTAINER_NAME,
@@ -197,7 +199,7 @@ export async function startCloudflared(token: string): Promise<void> {
     HostConfig: {
       NetworkMode: "host",
       RestartPolicy: { Name: "on-failure", MaximumRetryCount: 3 },
-      Binds: [`${CFD_CONFIG_PATH}:/etc/cloudflared/config.yml:ro`],
+      Binds: [`${hostCfdConfig}:/etc/cloudflared/config.yml:ro`],
     },
   });
 
