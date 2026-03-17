@@ -14,7 +14,7 @@ import {
   useToast,
   pageEntrance,
 } from "@tac-ui/web";
-import { Cloud, ShieldAlert, Eye, EyeOff, Plus, Trash2, CheckCircle, Loader2, Download, ChevronDown, ChevronRight } from "@tac-ui/icon";
+import { Cloud, ShieldAlert, Eye, EyeOff, Plus, Trash2, CheckCircle, Loader2, Download, ChevronDown, ChevronRight, Play, Square, RotateCw } from "@tac-ui/icon";
 import type { CloudflareTunnelSettingsResponse, CloudflareZone } from "@/types";
 import { LoadingIndicator } from "@/components/shared/LoadingIndicator";
 
@@ -39,6 +39,7 @@ export default function CloudflarePage() {
   const [verifyingZone, setVerifyingZone] = useState(false);
   const [fetchingZones, setFetchingZones] = useState(false);
   const [cfLoaded, setCfLoaded] = useState(false);
+  const [actionLoading, setActionLoading] = useState<"start" | "stop" | "restart" | null>(null);
   const [tunSaving, setTunSaving] = useState(false);
   const [cfSaving, setCfSaving] = useState(false);
   const [showTunToken, setShowTunToken] = useState(false);
@@ -98,6 +99,19 @@ export default function CloudflarePage() {
       }
     }, 2000);
   }, []);
+
+  const handleTunnelAction = async (action: "start" | "stop" | "restart") => {
+    setActionLoading(action);
+    const res = await api.tunnelAction(action);
+    setActionLoading(null);
+    if (res.ok) {
+      toast(`Tunnel ${action}ed`, { variant: "success" });
+      setCfdState(action === "stop" ? "stopped" : "starting");
+      if (action !== "stop") startPolling();
+    } else {
+      toast(res.error ?? `${action} failed`, { variant: "error" });
+    }
+  };
 
   const handleSaveTunnel = async () => {
     setTunSaving(true);
@@ -327,7 +341,36 @@ export default function CloudflarePage() {
             <p className="text-xs text-muted-foreground">
               Get the token from Cloudflare | Networks &gt; Tunnels
             </p>
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={actionLoading !== null || cfdState === "running" || cfdState === "starting"}
+                  onClick={() => handleTunnelAction("start")}
+                  leftIcon={<Play size={14} />}
+                >
+                  {actionLoading === "start" ? "Starting..." : "Start"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={actionLoading !== null || cfdState !== "running"}
+                  onClick={() => handleTunnelAction("stop")}
+                  leftIcon={<Square size={14} />}
+                >
+                  {actionLoading === "stop" ? "Stopping..." : "Stop"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={actionLoading !== null || cfdState !== "running"}
+                  onClick={() => handleTunnelAction("restart")}
+                  leftIcon={<RotateCw size={14} />}
+                >
+                  {actionLoading === "restart" ? "Restarting..." : "Restart"}
+                </Button>
+              </div>
               <Button
                 variant="primary"
                 size="sm"

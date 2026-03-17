@@ -167,6 +167,8 @@ export const api = {
   getTunnelSettings: () => request<CloudflareTunnelSettingsResponse>("GET", "/api/settings/cloudflare/tunnel"),
   updateTunnelSettings: (data: CloudflareTunnelSettingsPayload) => request<CloudflareTunnelSettingsResponse>("PUT", "/api/settings/cloudflare/tunnel", data),
   getCloudflaredStatus: () => request<CloudflaredStatus>("GET", "/api/settings/cloudflare/tunnel/status"),
+  tunnelAction: (action: "start" | "stop" | "restart") =>
+    request<{ success: boolean }>("POST", "/api/settings/cloudflare/tunnel/action", { action }),
 
   // Monitoring
   getSystemMetrics: () => request<SystemMetrics>("GET", "/api/monitoring"),

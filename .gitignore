@@ -37,7 +37,11 @@ Thumbs.db
 next-env.d.ts
 
 # Claude Code / OMC
-.claude/
+.claude/settings.json
+.claude/todos.json
+.claude/projects/
+.claude/skills/
+.claude/worktrees/
 .omc/
 
 # references
