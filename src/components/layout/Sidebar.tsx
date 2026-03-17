@@ -45,6 +45,12 @@ const dashboardItem: NavItem = {
   icon: <LayoutDashboard size={20} />,
 };
 
+const monitoringItem: NavItem = {
+  href: "/monitoring",
+  label: "Monitoring",
+  icon: <Activity size={20} />,
+};
+
 const terminalItem: NavItem = {
   href: "/terminal",
   label: "Terminal",
@@ -83,7 +89,6 @@ const navGroups: NavGroupDef[] = [
     label: "System",
     icon: <Cog size={16} />,
     items: [
-      { href: "/monitoring", label: "Monitoring", icon: <Activity size={20} /> },
       { href: "/users", label: "Users", icon: <Users size={20} /> },
       { href: "/account", label: "Account", icon: <UserCircle size={20} /> },
       { href: "/cloudflare", label: "Cloudflare", icon: <Cloud size={20} /> },
@@ -124,6 +129,11 @@ export function SidebarNav() {
         <Link href={dashboardItem.href}>
           <SidebarItem icon={dashboardItem.icon} active={isActive(dashboardItem.href)} variant={'subtle'}>
             {dashboardItem.label}
+          </SidebarItem>
+        </Link>
+        <Link href={monitoringItem.href}>
+          <SidebarItem icon={monitoringItem.icon} active={isActive(monitoringItem.href)} variant={'subtle'}>
+            {monitoringItem.label}
           </SidebarItem>
         </Link>
         <Link href={terminalItem.href}>
