@@ -8,7 +8,6 @@ import {
   Card,
   CardHeader,
   CardContent,
-  Switch,
   Input,
   Button,
   Badge,
@@ -16,7 +15,7 @@ import {
   pageEntrance,
 } from "@tac-ui/web";
 import { Cloud, ShieldAlert, Eye, EyeOff, Plus, Trash2, CheckCircle, Loader2, Download, ChevronDown, ChevronRight, Play, Square, RotateCw } from "@tac-ui/icon";
-import type { CloudflareTunnelSettingsResponse, CloudflareZone } from "@/types";
+import type { CloudflareZone } from "@/types";
 import { LoadingIndicator } from "@/components/shared/LoadingIndicator";
 
 const tunnelStatusVariantMap: Record<string, "success" | "destructive" | "warning" | "secondary"> = {
@@ -42,15 +41,14 @@ export default function CloudflarePage() {
   const { toast } = useToast();
 
   // Tunnel state
-  const [tunEnabled, setTunEnabled] = useState(false);
   const [tunToken, setTunToken] = useState("");
   const [tunLoaded, setTunLoaded] = useState(false);
+  const [tokenSaving, setTokenSaving] = useState(false);
   const [cfdState, setCfdState] = useState<"running" | "stopped" | "not_found" | "restarting" | "error" | "starting" | null>(null);
   const [cfdError, setCfdError] = useState<string | null>(null);
   const [cfdLogs, setCfdLogs] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [actionLoading, setActionLoading] = useState<"start" | "stop" | "restart" | null>(null);
-  const [tunSaving, setTunSaving] = useState(false);
 
   // Analytics state
   const [cfAutoSync, setCfAutoSync] = useState(false);
@@ -76,7 +74,6 @@ export default function CloudflarePage() {
     }).catch(() => {});
     api.getTunnelSettings().then((res) => {
       if (res.ok && res.data) {
-        setTunEnabled(res.data.enabled);
         setTunToken(res.data.tunnelToken);
         setTunLoaded(true);
       }
@@ -132,36 +129,23 @@ export default function CloudflarePage() {
     }
   };
 
-  const handleSaveTunnel = async () => {
-    setTunSaving(true);
-    setCfdError(null);
-    setCfdLogs(null);
+  const handleSaveToken = async () => {
+    setTokenSaving(true);
     try {
-      const tunRes = await api.updateTunnelSettings({
-        enabled: tunEnabled,
+      const res = await api.updateTunnelSettings({
+        enabled: true,
         tunnelToken: tunToken,
       });
-      if (tunRes.ok && tunRes.data) {
-        setTunToken(tunRes.data.tunnelToken);
-        toast("Tunnel settings saved", { variant: "success" });
-        // Show containerError from PUT response if any
-        const data = tunRes.data as CloudflareTunnelSettingsResponse & { containerError?: string };
-        if (data.containerError) {
-          setCfdState("error");
-          setCfdError(data.containerError);
-        } else if (tunEnabled) {
-          setCfdState("starting");
-          startPolling();
-        } else {
-          setCfdState("not_found");
-        }
+      if (res.ok && res.data) {
+        setTunToken(res.data.tunnelToken);
+        toast("Token saved", { variant: "success" });
       } else {
-        toast(tunRes.error ?? "Failed to save", { variant: "error" });
+        toast(res.error ?? "Failed to save token", { variant: "error" });
       }
     } catch {
-      toast("Failed to save tunnel settings", { variant: "error" });
+      toast("Failed to save token", { variant: "error" });
     } finally {
-      setTunSaving(false);
+      setTokenSaving(false);
     }
   };
 
@@ -309,73 +293,63 @@ export default function CloudflarePage() {
                 )}
               </div>
             )}
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium">Enable Tunnel</p>
-                <p className="text-xs text-muted-foreground">Route all traffic through Cloudflare Tunnel</p>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Input
+                  label="Tunnel Token"
+                  type={showTunToken ? "text" : "password"}
+                  value={tunToken}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTunToken(e.target.value)}
+                  placeholder="Tunnel token from Cloudflare dashboard"
+                />
+                <button
+                  type="button"
+                  className="absolute right-2.5 top-[50%] text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowTunToken((v) => !v)}
+                  tabIndex={-1}
+                >
+                  {showTunToken ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
               </div>
-              <Switch
-                checked={tunEnabled}
-                onChange={() => setTunEnabled(prev => !prev)}
-              />
-            </div>
-            <div className="relative">
-              <Input
-                label="Tunnel Token"
-                type={showTunToken ? "text" : "password"}
-                value={tunToken}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTunToken(e.target.value)}
-                placeholder="Tunnel token from Cloudflare dashboard"
-              />
-              <button
-                type="button"
-                className="absolute right-2.5 top-[50%] text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => setShowTunToken((v) => !v)}
-                tabIndex={-1}
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={tokenSaving || actionLoading !== null || !tunLoaded}
+                onClick={handleSaveToken}
               >
-                {showTunToken ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
+                {tokenSaving ? "Saving..." : "Save"}
+              </Button>
             </div>
             <p className="text-xs text-muted-foreground">
               Get the token from Cloudflare | Networks &gt; Tunnels
             </p>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  disabled={tunSaving || actionLoading !== null || cfdState === "running" || cfdState === "starting" || cfdState === "restarting"}
-                  onClick={() => handleTunnelAction("start")}
-                  leftIcon={actionLoading === "start" ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-                >
-                  {actionLoading === "start" ? "Starting..." : "Start"}
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={tunSaving || actionLoading !== null || (cfdState !== "running" && cfdState !== "starting" && cfdState !== "restarting")}
-                  onClick={() => handleTunnelAction("stop")}
-                  leftIcon={actionLoading === "stop" ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
-                >
-                  {actionLoading === "stop" ? "Stopping..." : "Stop"}
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={tunSaving || actionLoading !== null || cfdState !== "running"}
-                  onClick={() => handleTunnelAction("restart")}
-                  leftIcon={actionLoading === "restart" ? <Loader2 size={14} className="animate-spin" /> : <RotateCw size={14} />}
-                >
-                  {actionLoading === "restart" ? "Restarting..." : "Restart"}
-                </Button>
-              </div>
+            <div className="flex items-center gap-2">
               <Button
                 variant="primary"
                 size="sm"
-                disabled={tunSaving || actionLoading !== null || !tunLoaded}
-                onClick={handleSaveTunnel}
+                disabled={tokenSaving || actionLoading !== null || cfdState === "running" || cfdState === "starting" || cfdState === "restarting"}
+                onClick={() => handleTunnelAction("start")}
+                leftIcon={actionLoading === "start" ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
               >
-                {tunSaving ? "Saving..." : "Save"}
+                {actionLoading === "start" ? "Starting..." : "Start"}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={tokenSaving || actionLoading !== null || (cfdState !== "running" && cfdState !== "starting" && cfdState !== "restarting")}
+                onClick={() => handleTunnelAction("stop")}
+                leftIcon={actionLoading === "stop" ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
+              >
+                {actionLoading === "stop" ? "Stopping..." : "Stop"}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={tokenSaving || actionLoading !== null || cfdState !== "running"}
+                onClick={() => handleTunnelAction("restart")}
+                leftIcon={actionLoading === "restart" ? <Loader2 size={14} className="animate-spin" /> : <RotateCw size={14} />}
+              >
+                {actionLoading === "restart" ? "Restarting..." : "Restart"}
               </Button>
             </div>
           </div>

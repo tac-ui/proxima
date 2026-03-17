@@ -86,6 +86,16 @@ export const managedServices = sqliteTable("managed_services", {
     uniqueIndex("managed_services_type_identifier_unique").on(table.type, table.identifier),
 ]);
 
+export const metricsHistory = sqliteTable("metrics_history", {
+    id: integer("id").primaryKey({autoIncrement: true}),
+    cpuLoad: text("cpu_load").notNull(),
+    memoryPercent: text("memory_percent").notNull(),
+    diskPercent: text("disk_percent").notNull(),
+    timestamp: text("timestamp")
+        .notNull()
+        .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
 export const auditLogs = sqliteTable("audit_logs", {
     id: integer("id").primaryKey({autoIncrement: true}),
     userId: integer("user_id"),
@@ -118,3 +128,5 @@ export type ManagedServiceRow = typeof managedServices.$inferSelect;
 export type NewManagedServiceRow = typeof managedServices.$inferInsert;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
+export type MetricsHistoryRow = typeof metricsHistory.$inferSelect;
+export type NewMetricsHistoryRow = typeof metricsHistory.$inferInsert;

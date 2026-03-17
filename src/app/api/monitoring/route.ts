@@ -3,6 +3,9 @@ import os from "os";
 import { execFileSync } from "child_process";
 import { requireAuth, errorResponse, ok } from "../_lib/auth";
 import { ensureDb } from "../_lib/db";
+import { getDb } from "@server/db/index";
+import { metricsHistory } from "@server/db/schema";
+import { lt } from "drizzle-orm";
 import type { SystemMetrics } from "@/types";
 
 function formatUptime(seconds: number): string {
@@ -85,6 +88,23 @@ export async function GET(req: NextRequest) {
       },
       timestamp: new Date().toISOString(),
     };
+
+    // Record to metrics_history
+    try {
+      const db = getDb();
+      db.insert(metricsHistory).values({
+        cpuLoad: String(metrics.cpu.loadAvg[0]),
+        memoryPercent: String(metrics.memory.usagePercent),
+        diskPercent: String(metrics.disk.usagePercent),
+        timestamp: metrics.timestamp,
+      }).run();
+
+      // Prune entries older than 24 hours
+      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      db.delete(metricsHistory).where(lt(metricsHistory.timestamp, cutoff)).run();
+    } catch {
+      // non-critical — don't fail the response
+    }
 
     return ok(metrics);
   } catch (err) {

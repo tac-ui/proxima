@@ -346,6 +346,18 @@ export interface SystemMetrics {
   timestamp: string;
 }
 
+// === Metrics History Types ===
+export interface MetricsHistoryPoint {
+  timestamp: string;
+  cpuLoad: number;
+  memoryPercent: number;
+  diskPercent: number;
+}
+
+export interface MetricsHistoryResponse {
+  points: MetricsHistoryPoint[];
+}
+
 // === Cloudflared Container Types ===
 export interface CloudflaredStatus {
   state: "running" | "stopped" | "not_found" | "restarting" | "error";

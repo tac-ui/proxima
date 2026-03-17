@@ -170,6 +170,22 @@ function migrateSchema(sqlite: Database.Database): void {
     }
   }
 
+  // v6 → v7: create metrics_history table
+  try {
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS metrics_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cpu_load TEXT NOT NULL,
+        memory_percent TEXT NOT NULL,
+        disk_percent TEXT NOT NULL,
+        timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      )
+    `);
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_metrics_history_timestamp ON metrics_history (timestamp)`);
+  } catch (err) {
+    logger.error("db", `Metrics history migration failed: ${err}`);
+  }
+
   // v3 → v4: rename roles (superadmin→admin, admin→manager)
   try {
     const hasOld = sqlite.prepare(`SELECT COUNT(*) as cnt FROM users WHERE role = 'superadmin'`).get() as { cnt: number };

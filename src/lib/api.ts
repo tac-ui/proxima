@@ -1,4 +1,4 @@
-import type { ApiResponse, StackListItem, Stack, ProxyHost, GitCloneRequest, DiscoveredService, SshKeyInfo, RepositoryInfo, ListeningProcess, AnalyticsData, HostAnalyticsSummary, CloudflareSettingsResponse, CloudflareSettingsPayload, CloudflareTestResult, CloudflareZone, CloudflareTunnelSettingsResponse, CloudflareTunnelSettingsPayload, CloudflaredStatus, User, UserRole, ManagedService, ManagedServiceType, DiscoveredServiceWithManaged, ListeningProcessWithManaged, AuditLogResponse, SystemMetrics } from "@/types";
+import type { ApiResponse, StackListItem, Stack, ProxyHost, GitCloneRequest, DiscoveredService, SshKeyInfo, RepositoryInfo, ListeningProcess, AnalyticsData, HostAnalyticsSummary, CloudflareSettingsResponse, CloudflareSettingsPayload, CloudflareTestResult, CloudflareZone, CloudflareTunnelSettingsResponse, CloudflareTunnelSettingsPayload, CloudflaredStatus, User, UserRole, ManagedService, ManagedServiceType, DiscoveredServiceWithManaged, ListeningProcessWithManaged, AuditLogResponse, SystemMetrics, MetricsHistoryResponse } from "@/types";
 
 const TOKEN_KEY = "proxima_auth_token";
 
@@ -18,6 +18,12 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
+    // Clear invalid token on 401 and reload to show login/setup
+    if (res.status === 401 && token) {
+      localStorage.removeItem(TOKEN_KEY);
+      window.location.reload();
+      return { ok: false, error: "Session expired" };
+    }
     const contentType = res.headers.get("content-type");
     if (!contentType?.includes("application/json")) {
       return { ok: false, error: `Unexpected response (${res.status})` };
@@ -172,4 +178,5 @@ export const api = {
 
   // Monitoring
   getSystemMetrics: () => request<SystemMetrics>("GET", "/api/monitoring"),
+  getMetricsHistory: (hours: number = 1) => request<MetricsHistoryResponse>("GET", `/api/monitoring/history?hours=${hours}`),
 };

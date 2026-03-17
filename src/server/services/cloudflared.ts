@@ -1,8 +1,5 @@
 import Docker from "dockerode";
-import * as fs from "fs";
-import * as path from "path";
 import { logger } from "../lib/logger";
-import { getConfig, getHostDataDir } from "../lib/config";
 import { list as listProxyHosts } from "./proxy-host";
 import type { CloudflaredStatus } from "@/types";
 
@@ -183,23 +180,13 @@ export async function startCloudflared(token: string): Promise<void> {
   await ensureImage();
   await removeExisting();
 
-  // Create minimal config.yml on host to prevent "no such file" error in token mode
-  const dataDir = getConfig().dataDir;
-  const cfdDir = path.join(dataDir, "cloudflared");
-  fs.mkdirSync(cfdDir, { recursive: true });
-  fs.writeFileSync(path.join(cfdDir, "config.yml"), "# token mode\n");
-
-  const hostDataDir = getHostDataDir();
-  const hostCfdConfig = path.join(hostDataDir, "cloudflared", "config.yml");
-
   const container = await docker.createContainer({
     name: CONTAINER_NAME,
     Image: IMAGE,
-    Cmd: ["tunnel", "--no-autoupdate", "run", "--token", token],
+    Cmd: ["tunnel", "--no-autoupdate", "--config", "/dev/null", "run", "--token", token],
     HostConfig: {
       NetworkMode: "host",
       RestartPolicy: { Name: "on-failure", MaximumRetryCount: 3 },
-      Binds: [`${hostCfdConfig}:/etc/cloudflared/config.yml:ro`],
     },
   });
 
