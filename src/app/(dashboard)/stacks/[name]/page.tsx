@@ -254,7 +254,7 @@ export default function StackDetailPage() {
       </div>
 
       {/* Two-column layout */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 xl:auto-rows-fr">
         {/* Left: Editor */}
         <div className="flex flex-col">
           <Card className="flex-1 flex flex-col">
@@ -300,10 +300,11 @@ export default function StackDetailPage() {
                         placeholder="Dockerfile"
                         value={newDockerfileName}
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewDockerfileName(e.target.value)}
-                        className="flex-1"
+                        className="flex-1 h-8"
                       />
                       <Button
                         variant="secondary"
+                        size="sm"
                         disabled={!newDockerfileName.trim() || newDockerfileName.trim() in dockerfiles}
                         onClick={() => {
                           const fname = newDockerfileName.trim();
@@ -368,8 +369,8 @@ export default function StackDetailPage() {
         </div>
 
         {/* Right: Terminal + Containers */}
-        <div className="space-y-4">
-          <Card>
+        <div className="flex flex-col gap-4">
+          <Card className="flex-1 flex flex-col min-h-0">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold">Logs</h3>
@@ -384,10 +385,10 @@ export default function StackDetailPage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 flex flex-col min-h-0">
               <pre
                 ref={logsEndRef}
-                className="text-xs font-mono leading-relaxed whitespace-pre-wrap break-all bg-muted/30 rounded-lg p-3 max-h-[280px] overflow-y-auto text-muted-foreground"
+                className="text-xs font-mono leading-relaxed whitespace-pre-wrap break-all bg-muted/30 rounded-lg p-3 flex-1 min-h-[200px] overflow-y-auto text-muted-foreground"
               >
                 {logs || (logsLoading ? "Loading..." : "No logs available.")}
               </pre>

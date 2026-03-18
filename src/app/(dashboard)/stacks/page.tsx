@@ -304,7 +304,7 @@ export default function StacksPage() {
                       placeholder="Dockerfile"
                       value={newDockerfileName}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewDockerfileName(e.target.value)}
-                      className="flex-1"
+                      className="flex-1 h-8"
                     />
                     <Button
                       variant="secondary"

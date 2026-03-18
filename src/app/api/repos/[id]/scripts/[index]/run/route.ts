@@ -39,18 +39,19 @@ export async function POST(
       throw new Error("Invalid script index");
     }
 
-    const script = scripts[scriptIndex] as { name: string; command: string };
+    const script = scripts[scriptIndex] as { name: string; command: string; preCommand?: string };
     const terminalId = `repo-${repo.name}-${Date.now()}`;
+    const shellCommand = script.preCommand ? `${script.preCommand} && ${script.command}` : script.command;
 
     const terminal = new InteractiveTerminal(
       terminalId,
       "/bin/sh",
-      ["-c", script.command],
+      ["-c", shellCommand],
       repo.path,
     );
     terminal.start();
 
-    logger.info("repo", `Running script "${script.name}" in ${repo.path}: ${script.command}`);
+    logger.info("repo", `Running script "${script.name}" in ${repo.path}: ${shellCommand}`);
     logAudit({ userId: auth.userId, username: auth.username, action: "execute", category: "repo", targetType: "repo", targetName: repo.name, details: { script: script.name }, ipAddress: getClientIp(req) });
     return ok({ terminalId });
   } catch (err) {

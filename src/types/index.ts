@@ -228,6 +228,7 @@ export interface SshKeyInfo {
 export interface RepoScript {
   name: string;
   command: string;
+  preCommand?: string;
 }
 
 export interface RepoEnvFile {

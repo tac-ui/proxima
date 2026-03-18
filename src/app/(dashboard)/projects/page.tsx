@@ -52,8 +52,28 @@ const TerminalPanel = dynamic(
   () => import("@/components/terminal/TerminalPanel").then((m) => m.TerminalPanel),
   { ssr: false },
 );
+const ScriptLogViewer = dynamic(
+  () => import("@/components/terminal/ScriptLogViewer").then((m) => m.ScriptLogViewer),
+  { ssr: false },
+);
 import { useConfirm } from "@/hooks/useConfirm";
 import type { RepositoryInfo, GitCloneProgress, SshKeyInfo, RepoEnvFile } from "@/types";
+
+function formatRelativeDate(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffSec = Math.floor((now - then) / 1000);
+  if (diffSec < 60) return "just now";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 30) return `${diffDay}d ago`;
+  const diffMonth = Math.floor(diffDay / 30);
+  if (diffMonth < 12) return `${diffMonth}mo ago`;
+  return `${Math.floor(diffMonth / 12)}y ago`;
+}
 
 export default function ProjectsPage() {
   const { toast } = useToast();
@@ -84,6 +104,7 @@ export default function ProjectsPage() {
   const [newScriptRepoId, setNewScriptRepoId] = useState<number | null>(null);
   const [newScriptName, setNewScriptName] = useState("");
   const [newScriptCommand, setNewScriptCommand] = useState("");
+  const [newScriptPreCommand, setNewScriptPreCommand] = useState("");
 
   // Running terminals
   const [runningTerminals, setRunningTerminals] = useState<Record<string, string>>({});
@@ -114,8 +135,16 @@ export default function ProjectsPage() {
   const [checkingOut, setCheckingOut] = useState<Set<number>>(new Set());
 
   // Script suggestions
-  const [suggestions, setSuggestions] = useState<Record<number, { name: string; command: string }[]>>({});
+  const [suggestions, setSuggestions] = useState<Record<number, { name: string; command: string; preCommand?: string }[]>>({});
   const [suggestionsLoaded, setSuggestionsLoaded] = useState<Set<number>>(new Set());
+
+  // Git commits
+  const [commits, setCommits] = useState<Record<number, { hash: string; shortHash: string; message: string; author: string; date: string }[]>>({});
+  const commitsLoadedRef = useRef<Set<number>>(new Set());
+
+  // Script exit codes and output (scriptKey → exitCode / output)
+  const [exitCodes, setExitCodes] = useState<Record<string, number>>({});
+  const [scriptOutputs, setScriptOutputs] = useState<Record<string, string>>({});
 
   // --- Data fetching ---
 
@@ -138,10 +167,26 @@ export default function ProjectsPage() {
     });
   }, []);
 
+  const fetchCommits = useCallback((repoId: number) => {
+    commitsLoadedRef.current.add(repoId);
+    api.getRepoCommits(repoId, 5).then((res) => {
+      if (res.ok && res.data) {
+        setCommits((prev) => ({ ...prev, [repoId]: res.data!.commits }));
+      }
+    });
+  }, []);
+
   useEffect(() => {
     fetchRepos();
     fetchSshKeys();
   }, [fetchRepos, fetchSshKeys]);
+
+  // Fetch commits for all repos once loaded
+  useEffect(() => {
+    for (const repo of repos) {
+      if (!commitsLoadedRef.current.has(repo.id)) fetchCommits(repo.id);
+    }
+  }, [repos, fetchCommits]);
 
   // Restore active terminals
   useEffect(() => {
@@ -263,6 +308,7 @@ export default function ProjectsPage() {
       if (!silent) toast(res.data.message, { variant: "success" });
 
       if (!isUpToDate) {
+        fetchCommits(repoId);
         const runningKeys = getRunningScriptKeysForRepo(repoId);
         if (runningKeys.length > 0) {
           const shouldRestart = await confirm({
@@ -313,13 +359,16 @@ export default function ProjectsPage() {
 
   const handleAddScript = (repoId: number) => {
     if (!newScriptName.trim() || !newScriptCommand.trim()) return;
-    api.addRepoScript(repoId, newScriptName.trim(), newScriptCommand.trim()).then((res) => {
-      if (res.ok) { fetchRepos(); setNewScriptRepoId(null); setNewScriptName(""); setNewScriptCommand(""); }
+    const pre = newScriptPreCommand.trim() || undefined;
+    api.addRepoScript(repoId, newScriptName.trim(), newScriptCommand.trim(), pre).then((res) => {
+      if (res.ok) { fetchRepos(); setNewScriptRepoId(null); setNewScriptName(""); setNewScriptCommand(""); setNewScriptPreCommand(""); }
     });
   };
 
   const handleRunScript = (repoId: number, scriptIndex: number) => {
     const scriptKey = `${repoId}-${scriptIndex}`;
+    setExitCodes((prev) => { const next = { ...prev }; delete next[scriptKey]; return next; });
+    setScriptOutputs((prev) => { const next = { ...prev }; delete next[scriptKey]; return next; });
     api.runRepoScript(repoId, scriptIndex).then((res) => {
       if (res.ok && res.data) {
         setRunningTerminals((prev) => ({ ...prev, [scriptKey]: res.data!.terminalId }));
@@ -341,8 +390,14 @@ export default function ProjectsPage() {
     api.killTerminal(terminalId);
   };
 
-  const handleTerminalExit = (scriptKey: string) => {
+  const handleTerminalExit = (scriptKey: string, exitCode?: number, output?: string) => {
     setRunningTerminals((prev) => { const next = { ...prev }; delete next[scriptKey]; return next; });
+    if (exitCode !== undefined) {
+      setExitCodes((prev) => ({ ...prev, [scriptKey]: exitCode }));
+    }
+    if (output !== undefined) {
+      setScriptOutputs((prev) => ({ ...prev, [scriptKey]: output }));
+    }
     const restart = pendingRestart[scriptKey];
     if (restart) {
       setPendingRestart((prev) => { const next = { ...prev }; delete next[scriptKey]; return next; });
@@ -505,8 +560,8 @@ export default function ProjectsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newScriptRepoId]);
 
-  const handleAddSuggestedScript = (repoId: number, name: string, command: string) => {
-    api.addRepoScript(repoId, name, command).then((res) => {
+  const handleAddSuggestedScript = (repoId: number, name: string, command: string, preCommand?: string) => {
+    api.addRepoScript(repoId, name, command, preCommand).then((res) => {
       if (res.ok) {
         fetchRepos();
         // Remove from suggestions
@@ -520,13 +575,15 @@ export default function ProjectsPage() {
 
   // Parse GitHub URL for branch
   const parseGithubUrl = (url: string) => {
+    // Strip query parameters and hash fragments (e.g. ?tab=repositories)
+    const cleanUrl = url.replace(/[?#].*$/, "").replace(/\/+$/, "");
     // https://github.com/org/repo/tree/branch-name → extract branch
-    const treeMatch = url.match(/github\.com\/[^/]+\/[^/]+\/tree\/([^/?#]+)/);
+    const treeMatch = cleanUrl.match(/github\.com\/[^/]+\/[^/]+\/tree\/([^/?#]+)/);
     if (treeMatch) {
-      const repoBase = url.replace(/\/tree\/[^/?#]+/, "");
+      const repoBase = cleanUrl.replace(/\/tree\/[^/?#]+/, "");
       return { repoUrl: repoBase.endsWith(".git") ? repoBase : repoBase + ".git", branch: treeMatch[1] };
     }
-    return { repoUrl: url, branch: "" };
+    return { repoUrl: cleanUrl, branch: "" };
   };
 
   // Convert between SSH and HTTPS URL formats
@@ -876,7 +933,7 @@ export default function ProjectsPage() {
                           title={restoredTerminalId}
                           mode="interactive"
                           rows={15}
-                          onExit={() => handleTerminalExit(restoredKey)}
+                          onExit={(code: number) => handleTerminalExit(restoredKey, code)}
                           showToolbar={true}
                         />
                       )}
@@ -889,16 +946,26 @@ export default function ProjectsPage() {
                     const isRunning = !!terminalId;
                     const isExpanded = expandedTerminals.has(scriptKey);
                     const isRestarting = !!pendingRestart[scriptKey];
+                    const lastExitCode = exitCodes[scriptKey];
+                    const hasFailed = lastExitCode !== undefined && lastExitCode !== 0;
 
                     return (
                       <div key={idx} className="space-y-2">
-                        <div className={`flex items-center justify-between gap-2 p-2 rounded-lg bg-surface border ${isRunning ? "border-success/30" : "border-border"}`}>
+                        <div className={`flex items-center justify-between gap-2 p-2 rounded-lg bg-surface border ${isRunning ? "border-success/30" : hasFailed ? "border-destructive/30" : "border-border"}`}>
                           <div className="min-w-0 flex items-center gap-2">
                             <div className="min-w-0">
                               <p className="text-sm font-medium">{script.name}</p>
+                              {script.preCommand && (
+                                <p className="text-[10px] text-muted-foreground/60 font-mono truncate">pre: {script.preCommand}</p>
+                              )}
                               <p className="text-xs text-muted-foreground font-mono truncate">{script.command}</p>
                             </div>
                             {isRunning && <Badge variant="success">{isRestarting ? "Restarting" : "Running"}</Badge>}
+                            {!isRunning && lastExitCode !== undefined && (
+                              <Badge variant={hasFailed ? "destructive" : "success"}>
+                                {hasFailed ? `Exit ${lastExitCode}` : "Done"}
+                              </Badge>
+                            )}
                           </div>
                           <div className="flex gap-1 shrink-0">
                             {isRunning ? (
@@ -926,13 +993,18 @@ export default function ProjectsPage() {
                           </div>
                         </div>
                         {isRunning && isExpanded && (
-                          <TerminalPanel
+                          <ScriptLogViewer
                             terminalId={terminalId}
                             title={script.name}
-                            mode="interactive"
-                            rows={15}
-                            onExit={() => handleTerminalExit(scriptKey)}
-                            showToolbar={true}
+                            onExit={(code: number, output: string) => handleTerminalExit(scriptKey, code, output)}
+                          />
+                        )}
+                        {!isRunning && scriptOutputs[scriptKey] && (
+                          <ScriptLogViewer
+                            terminalId=""
+                            title={script.name}
+                            staticOutput={scriptOutputs[scriptKey]}
+                            exitCode={exitCodes[scriptKey]}
                           />
                         )}
                       </div>
@@ -954,7 +1026,7 @@ export default function ProjectsPage() {
                               {repoSuggestions.map((s) => (
                                 <button
                                   key={`${s.name}-${s.command}`}
-                                  onClick={() => handleAddSuggestedScript(repo.id, s.name, s.command)}
+                                  onClick={() => handleAddSuggestedScript(repo.id, s.name, s.command, s.preCommand)}
                                   className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-border bg-surface hover:border-point/30 hover:bg-point/5 transition-colors text-xs"
                                   title={s.command}
                                 >
@@ -967,17 +1039,28 @@ export default function ProjectsPage() {
                           </div>
                         );
                       })()}
-                      <div className="flex gap-2">
-                        <Input placeholder="Script name" value={newScriptName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewScriptName(e.target.value)} className="flex-1" />
-                        <Input
-                          placeholder="Command (e.g. npm run dev)"
-                          value={newScriptCommand}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewScriptCommand(e.target.value)}
-                          className="flex-1"
-                          onKeyDown={(e: React.KeyboardEvent) => { if (e.key === "Enter") handleAddScript(repo.id); if (e.key === "Escape") setNewScriptRepoId(null); }}
-                        />
-                        <Button size="sm" onClick={() => handleAddScript(repo.id)}>Add</Button>
-                        <Button size="sm" variant="ghost" onClick={() => setNewScriptRepoId(null)}>Cancel</Button>
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <Input placeholder="Script name" value={newScriptName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewScriptName(e.target.value)} className="flex-1 h-8" />
+                          <Input
+                            placeholder="Command (e.g. npm run dev)"
+                            value={newScriptCommand}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewScriptCommand(e.target.value)}
+                            className="flex-1 h-8"
+                            onKeyDown={(e: React.KeyboardEvent) => { if (e.key === "Enter") handleAddScript(repo.id); if (e.key === "Escape") setNewScriptRepoId(null); }}
+                          />
+                        </div>
+                        <div className="flex gap-2 items-center">
+                          <Input
+                            placeholder="Pre-command (optional, e.g. npm install)"
+                            value={newScriptPreCommand}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewScriptPreCommand(e.target.value)}
+                            className="flex-1 h-8"
+                            onKeyDown={(e: React.KeyboardEvent) => { if (e.key === "Enter") handleAddScript(repo.id); if (e.key === "Escape") setNewScriptRepoId(null); }}
+                          />
+                          <Button size="sm" onClick={() => handleAddScript(repo.id)}>Add</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setNewScriptRepoId(null)}>Cancel</Button>
+                        </div>
                       </div>
                     </div>
                   ) : isManager ? (
@@ -1041,13 +1124,13 @@ export default function ProjectsPage() {
                                 placeholder="Display name"
                                 value={newEnvFileName}
                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewEnvFileName(e.target.value)}
-                                className="flex-1"
+                                className="flex-1 h-8"
                               />
                               <Input
                                 placeholder="Path (e.g. backend/.env)"
                                 value={newEnvFilePath}
                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewEnvFilePath(e.target.value)}
-                                className="flex-1"
+                                className="flex-1 h-8"
                               />
                               <Button size="sm" onClick={() => handleAddEnvFile(repo.id)}>Add</Button>
                               <Button size="sm" variant="ghost" onClick={() => { setShowAddEnvFile(null); setNewEnvFileName(""); setNewEnvFilePath(""); }}>
@@ -1086,6 +1169,22 @@ export default function ProjectsPage() {
                     </div>
                   );
                 })()}
+
+                {/* Git Commits */}
+                {commits[repo.id] && commits[repo.id].length > 0 && (
+                  <div className="space-y-1.5 border-t border-border pt-3">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Recent Commits</p>
+                    <div className="space-y-1">
+                      {commits[repo.id].slice(0, 5).map((c) => (
+                        <div key={c.hash} className="flex items-baseline gap-2 text-xs">
+                          <code className="text-[10px] text-point font-mono shrink-0">{c.shortHash}</code>
+                          <span className="truncate">{c.message}</span>
+                          <span className="text-[10px] text-muted-foreground shrink-0 ml-auto">{c.author} · {formatRelativeDate(c.date)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Footer */}
                 <div className="flex items-center justify-between text-[11px] text-muted-foreground border-t border-border pt-2">

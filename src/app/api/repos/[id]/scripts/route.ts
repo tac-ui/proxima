@@ -37,8 +37,8 @@ export async function POST(
     const repoId = parseInt(id, 10);
     if (isNaN(repoId)) throw new Error("Invalid repository id");
 
-    const body = await req.json() as { name?: string; command?: string };
-    const { name, command } = body;
+    const body = await req.json() as { name?: string; command?: string; preCommand?: string };
+    const { name, command, preCommand } = body;
 
     if (!name || !command) {
       throw new Error("name and command are required");
@@ -49,7 +49,9 @@ export async function POST(
     if (!repo) throw new Error("Repository not found");
 
     const scripts = parseJson(repo.scripts);
-    scripts.push({ name: name.trim(), command: command.trim() });
+    const newScript: { name: string; command: string; preCommand?: string } = { name: name.trim(), command: command.trim() };
+    if (preCommand?.trim()) newScript.preCommand = preCommand.trim();
+    scripts.push(newScript);
 
     db.update(schema.repositories)
       .set({ scripts: JSON.stringify(scripts) })

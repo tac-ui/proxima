@@ -82,10 +82,11 @@ export const api = {
   removeRepoEnvFile: (id: number, filePath: string) => request<{ envFiles: { name: string; path: string }[] }>("DELETE", `/api/repos/${id}/env-files`, { path: filePath }),
   checkoutBranch: (id: number, branch: string) => request<{ message: string; branch: string }>("POST", `/api/repos/${id}/checkout`, { branch }),
   getRepoBranches: (id: number) => request<{ branches: string[]; current: string }>("GET", `/api/repos/${id}/branches`),
-  getSuggestedScripts: (id: number) => request<{ suggestions: { name: string; command: string }[] }>("GET", `/api/repos/${id}/suggest-scripts`),
-  addRepoScript: (id: number, name: string, command: string) => request<RepositoryInfo>("POST", `/api/repos/${id}/scripts`, { name, command }),
+  getSuggestedScripts: (id: number) => request<{ suggestions: { name: string; command: string; preCommand?: string }[] }>("GET", `/api/repos/${id}/suggest-scripts`),
+  addRepoScript: (id: number, name: string, command: string, preCommand?: string) => request<RepositoryInfo>("POST", `/api/repos/${id}/scripts`, { name, command, ...(preCommand ? { preCommand } : {}) }),
   removeRepoScript: (id: number, index: number) => request("DELETE", `/api/repos/${id}/scripts/${index}`),
   runRepoScript: (id: number, index: number) => request<{ terminalId: string }>("POST", `/api/repos/${id}/scripts/${index}/run`),
+  getRepoCommits: (id: number, limit: number = 10) => request<{ commits: { hash: string; shortHash: string; message: string; author: string; date: string }[] }>("GET", `/api/repos/${id}/commits?limit=${limit}`),
 
   // SSH Keys
   getSshKeys: () => request<SshKeyInfo[]>("GET", "/api/ssh-keys"),
@@ -180,4 +181,8 @@ export const api = {
   getStackLogs: (name: string) => request<{ logs: string }>("GET", `/api/stacks/${encodeURIComponent(name)}/logs`),
   getSystemMetrics: () => request<SystemMetrics>("GET", "/api/monitoring"),
   getMetricsHistory: (hours: number = 1) => request<MetricsHistoryResponse>("GET", `/api/monitoring/history?hours=${hours}`),
+
+  // Hook API Key
+  getHookApiKey: () => request<{ key: string }>("GET", "/api/hook/key"),
+  regenerateHookApiKey: () => request<{ key: string }>("POST", "/api/hook/key"),
 };
