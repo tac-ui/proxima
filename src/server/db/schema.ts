@@ -69,6 +69,22 @@ export const repositories = sqliteTable("repositories", {
     branch: text("branch").notNull().default("main"),
     scripts: text("scripts").notNull().default("[]"),
     envFiles: text("env_files").notNull().default("[]"),
+    hookEnabled: integer("hook_enabled", {mode: "boolean"}).notNull().default(false),
+    hookApiKey: text("hook_api_key"),
+    createdAt: text("created_at")
+        .notNull()
+        .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
+export const webhookLogs = sqliteTable("webhook_logs", {
+    id: integer("id").primaryKey({autoIncrement: true}),
+    repoId: integer("repo_id").notNull(),
+    scriptName: text("script_name").notNull(),
+    status: text("status").notNull().default("running"),
+    exitCode: integer("exit_code"),
+    terminalId: text("terminal_id"),
+    ipAddress: text("ip_address"),
+    duration: integer("duration"),
     createdAt: text("created_at")
         .notNull()
         .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
@@ -130,3 +146,5 @@ export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 export type MetricsHistoryRow = typeof metricsHistory.$inferSelect;
 export type NewMetricsHistoryRow = typeof metricsHistory.$inferInsert;
+export type WebhookLogRow = typeof webhookLogs.$inferSelect;
+export type NewWebhookLogRow = typeof webhookLogs.$inferInsert;

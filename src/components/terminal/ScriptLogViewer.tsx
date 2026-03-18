@@ -84,6 +84,11 @@ export function ScriptLogViewer({
           setExited(true);
           setExitCode(msg.exitCode);
           onExitRef.current?.(msg.exitCode, outputRef.current);
+        } else if (msg.type === "error") {
+          // Terminal already exited before WS connected
+          setExited(true);
+          if (exitCode === undefined) setExitCode(undefined);
+          setOutput(outputRef.current || "(process already finished)");
         }
       } catch (e) {
         console.warn("[ScriptLogViewer] Failed to parse message:", e);

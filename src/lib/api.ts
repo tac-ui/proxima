@@ -1,4 +1,4 @@
-import type { ApiResponse, StackListItem, Stack, ProxyHost, GitCloneRequest, DiscoveredService, SshKeyInfo, RepositoryInfo, ListeningProcess, AnalyticsData, HostAnalyticsSummary, CloudflareSettingsResponse, CloudflareSettingsPayload, CloudflareTestResult, CloudflareZone, CloudflareTunnelSettingsResponse, CloudflareTunnelSettingsPayload, CloudflaredStatus, User, UserRole, ManagedService, ManagedServiceType, DiscoveredServiceWithManaged, ListeningProcessWithManaged, AuditLogResponse, SystemMetrics, MetricsHistoryResponse } from "@/types";
+import type { ApiResponse, StackListItem, Stack, ProxyHost, GitCloneRequest, DiscoveredService, SshKeyInfo, RepositoryInfo, ListeningProcess, AnalyticsData, HostAnalyticsSummary, CloudflareSettingsResponse, CloudflareSettingsPayload, CloudflareTestResult, CloudflareZone, CloudflareTunnelSettingsResponse, CloudflareTunnelSettingsPayload, CloudflaredStatus, User, UserRole, ManagedService, ManagedServiceType, DiscoveredServiceWithManaged, ListeningProcessWithManaged, AuditLogResponse, SystemMetrics, MetricsHistoryResponse, WebhookLog } from "@/types";
 
 const TOKEN_KEY = "proxima_auth_token";
 
@@ -182,7 +182,8 @@ export const api = {
   getSystemMetrics: () => request<SystemMetrics>("GET", "/api/monitoring"),
   getMetricsHistory: (hours: number = 1) => request<MetricsHistoryResponse>("GET", `/api/monitoring/history?hours=${hours}`),
 
-  // Hook API Key
-  getHookApiKey: () => request<{ key: string }>("GET", "/api/hook/key"),
-  regenerateHookApiKey: () => request<{ key: string }>("POST", "/api/hook/key"),
+  // Webhook (per-project)
+  getWebhookConfig: (id: number) => request<{ hookEnabled: boolean; hookApiKey: string | null }>("GET", `/api/repos/${id}/webhook`),
+  updateWebhookConfig: (id: number, body: { enabled: boolean; apiKey?: string }) => request<{ hookEnabled: boolean; hookApiKey: string }>("PUT", `/api/repos/${id}/webhook`, body),
+  getWebhookLogs: (id: number, page?: number, limit?: number) => request<{ logs: WebhookLog[]; total: number }>("GET", `/api/repos/${id}/webhook/logs?page=${page ?? 1}&limit=${limit ?? 20}`),
 };

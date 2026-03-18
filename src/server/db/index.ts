@@ -186,6 +186,42 @@ function migrateSchema(sqlite: Database.Database): void {
     logger.error("db", `Metrics history migration failed: ${err}`);
   }
 
+  // v7 → v8: add hookEnabled, hookApiKey columns to repositories + webhook_logs table
+  try {
+    sqlite.exec(`ALTER TABLE repositories ADD COLUMN hook_enabled INTEGER NOT NULL DEFAULT 0`);
+    logger.info("db", "Migration: added hook_enabled column to repositories table");
+  } catch (err) {
+    if (err instanceof Error && !err.message.includes("duplicate column")) {
+      throw err;
+    }
+  }
+  try {
+    sqlite.exec(`ALTER TABLE repositories ADD COLUMN hook_api_key TEXT`);
+    logger.info("db", "Migration: added hook_api_key column to repositories table");
+  } catch (err) {
+    if (err instanceof Error && !err.message.includes("duplicate column")) {
+      throw err;
+    }
+  }
+  try {
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS webhook_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        repo_id INTEGER NOT NULL,
+        script_name TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'running',
+        exit_code INTEGER,
+        terminal_id TEXT,
+        ip_address TEXT,
+        duration INTEGER,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      )
+    `);
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_webhook_logs_repo_id ON webhook_logs (repo_id)`);
+  } catch (err) {
+    logger.error("db", `Webhook logs migration failed: ${err}`);
+  }
+
   // v3 → v4: rename roles (superadmin→admin, admin→manager)
   try {
     const hasOld = sqlite.prepare(`SELECT COUNT(*) as cnt FROM users WHERE role = 'superadmin'`).get() as { cnt: number };

@@ -244,6 +244,20 @@ export interface RepositoryInfo {
   branch: string;
   scripts: RepoScript[];
   envFiles: RepoEnvFile[];
+  hookEnabled: boolean;
+  hookApiKey: string | null;
+}
+
+export interface WebhookLog {
+  id: number;
+  repoId: number;
+  scriptName: string;
+  status: string;
+  exitCode: number | null;
+  terminalId: string | null;
+  ipAddress: string | null;
+  duration: number | null;
+  createdAt: string;
 }
 
 // === Analytics Types ===

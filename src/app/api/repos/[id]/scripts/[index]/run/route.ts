@@ -40,7 +40,7 @@ export async function POST(
     }
 
     const script = scripts[scriptIndex] as { name: string; command: string; preCommand?: string };
-    const terminalId = `repo-${repo.name}-${Date.now()}`;
+    const terminalId = `repo-${repo.name}-s${scriptIndex}-${Date.now()}`;
     const shellCommand = script.preCommand ? `${script.preCommand} && ${script.command}` : script.command;
 
     const terminal = new InteractiveTerminal(

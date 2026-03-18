@@ -1,13 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { errorResponse, ok, AuthError } from "../_lib/auth";
-import { ensureDb } from "../_lib/db";
+import { errorResponse, ok, AuthError } from "../../../_lib/auth";
+import { ensureDb } from "../../../_lib/db";
 import { getDb, schema } from "@server/db/index";
 import { eq } from "drizzle-orm";
 import { InteractiveTerminal, Terminal } from "@server/services/terminal";
 import { logger } from "@server/lib/logger";
 import { logAudit, getClientIp } from "@server/services/audit";
-import { getOrCreateApiKey, verifyApiKey } from "../_lib/hookKey";
-import { checkRateLimit, recordFailedAttempt } from "../_lib/rate-limit";
+import { checkRateLimit, recordFailedAttempt } from "../../../_lib/rate-limit";
+import { timingSafeEqual, createHash } from "node:crypto";
 
 const MAX_CONCURRENT_HOOKS = 10;
 
@@ -19,7 +19,15 @@ function parseScripts(raw: string) {
   }
 }
 
-export async function POST(req: NextRequest) {
+function verifyApiKey(provided: string, stored: string): boolean {
+  const hash = (s: string) => createHash("sha256").update(s).digest();
+  return timingSafeEqual(hash(provided), hash(stored));
+}
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ project: string; script: string }> },
+) {
   try {
     ensureDb();
     const db = getDb();
@@ -35,8 +43,23 @@ export async function POST(req: NextRequest) {
     const key = req.headers.get("x-api-key");
     if (!key) throw new AuthError("Missing API key");
 
-    const storedKey = getOrCreateApiKey(db);
-    if (!verifyApiKey(key, storedKey)) {
+    const { project: projectName, script: scriptParam } = await params;
+
+    // Resolve project
+    const repo = db.select().from(schema.repositories).where(eq(schema.repositories.name, projectName)).get();
+    if (!repo) {
+      logger.warn("hook", `Project "${projectName}" not found for hook request from ${ip}`);
+      recordFailedAttempt(ip);
+      throw new AuthError("Invalid request");
+    }
+
+    // Check hookEnabled
+    if (!repo.hookEnabled) {
+      return NextResponse.json({ ok: false, error: "Webhook is disabled for this project" }, { status: 403 });
+    }
+
+    // Verify project-specific API key
+    if (!repo.hookApiKey || !verifyApiKey(key, repo.hookApiKey)) {
       recordFailedAttempt(ip);
       throw new AuthError("Invalid API key");
     }
@@ -47,21 +70,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Too many concurrent hook executions" }, { status: 429 });
     }
 
-    // Resolve project
-    const url = new URL(req.url);
-    const projectName = url.searchParams.get("project");
-    if (!projectName) throw new Error("Missing 'project' parameter");
-
-    const repo = db.select().from(schema.repositories).where(eq(schema.repositories.name, projectName)).get();
-    if (!repo) {
-      logger.warn("hook", `Project "${projectName}" not found for hook request from ${ip}`);
-      throw new AuthError("Invalid request");
-    }
-
     // Resolve script
-    const scriptParam = url.searchParams.get("script");
-    if (!scriptParam) throw new Error("Missing 'script' parameter");
-
     const scripts = parseScripts(repo.scripts) as { name: string; command: string; preCommand?: string }[];
     let script: { name: string; command: string; preCommand?: string } | undefined;
 
@@ -78,6 +87,15 @@ export async function POST(req: NextRequest) {
       throw new AuthError("Invalid request");
     }
 
+    // Insert webhook log (running)
+    const startTime = Date.now();
+    const logEntry = db.insert(schema.webhookLogs).values({
+      repoId: repo.id,
+      scriptName: script.name,
+      status: "running",
+      ipAddress: ip,
+    }).returning().get();
+
     // Execute
     const terminalId = `hook-${repo.name}-${Date.now()}`;
     const shellCommand = script.preCommand ? `${script.preCommand} && ${script.command}` : script.command;
@@ -88,6 +106,21 @@ export async function POST(req: NextRequest) {
       ["-c", shellCommand],
       repo.path,
     );
+
+    // Update webhook log on exit
+    terminal.onExit((exitCode: number) => {
+      const duration = Date.now() - startTime;
+      const status = exitCode === 0 ? "success" : "failed";
+      try {
+        db.update(schema.webhookLogs)
+          .set({ status, exitCode, duration, terminalId })
+          .where(eq(schema.webhookLogs.id, logEntry.id))
+          .run();
+      } catch (err) {
+        logger.error("hook", `Failed to update webhook log: ${err}`);
+      }
+    });
+
     terminal.start();
 
     logger.info("hook", `Hook triggered script "${script.name}" in ${repo.path}: ${shellCommand}`);

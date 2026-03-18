@@ -22,6 +22,8 @@ function toRepoInfo(row: typeof schema.repositories.$inferSelect) {
     branch: row.branch,
     scripts: parseJson(row.scripts),
     envFiles: parseJson(row.envFiles),
+    hookEnabled: row.hookEnabled,
+    hookApiKey: row.hookApiKey,
   };
 }
 
