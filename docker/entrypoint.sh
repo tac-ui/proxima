@@ -28,7 +28,7 @@ if [ -n "$TARGET_UID" ] && [ "$TARGET_UID" != "0" ]; then
 
   chown -R "$TARGET_UID:$TARGET_GID" /data /app 2>/dev/null || true
   echo "Starting Proxima server on port $PXM_PORT as UID $TARGET_UID..."
-  exec su-exec "$TARGET_UID:$TARGET_GID" npx tsx server.ts
+  exec su-exec proxima npx tsx server.ts
 fi
 
 echo "Starting Proxima server on port $PXM_PORT..."
