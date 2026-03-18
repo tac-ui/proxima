@@ -69,6 +69,7 @@ export function RouteForm({
       if (res.ok && res.data && res.data.zones?.length) {
         setCfZones(res.data.zones);
         setSelectedZone(res.data.zones[0].zoneName);
+        setDomainMode("zone");
       }
     }).catch(() => {});
   }, [connected]);
@@ -102,11 +103,34 @@ export function RouteForm({
     return Object.keys(e).length === 0;
   };
 
+  const collectDomains = (): string[] => {
+    const all = [...domains];
+    // Auto-include current input value
+    if (domainMode === "zone" && selectedZone) {
+      const sub = subdomainInput.trim();
+      const full = sub ? `${sub}.${selectedZone}` : selectedZone;
+      if (!all.includes(full)) all.push(full);
+    } else {
+      const d = domainInput.trim();
+      if (d && !all.includes(d)) all.push(d);
+    }
+    return all.filter(Boolean);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
+    const finalDomains = collectDomains();
+    setDomains(finalDomains);
+    setDomainInput("");
+    setSubdomainInput("");
+    const errs: Record<string, string> = {};
+    if (finalDomains.length === 0) errs.domains = "At least one domain is required";
+    if (!forwardHost.trim()) errs.forwardHost = "Forward host is required";
+    if (!forwardPort || isNaN(Number(forwardPort))) errs.forwardPort = "Valid port is required";
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) return;
     await onSubmit({
-      domainNames: domains.filter(Boolean),
+      domainNames: finalDomains,
       forwardScheme: scheme,
       forwardHost: forwardHost.trim(),
       forwardPort: Number(forwardPort),
@@ -207,7 +231,7 @@ export function RouteForm({
           )}
         </div>
         {domainMode === "zone" && cfZones.length > 0 ? (
-          <div className="flex gap-2">
+          <div className="flex items-end gap-2">
             <Input
               value={subdomainInput}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSubdomainInput(e.target.value)}
@@ -217,13 +241,13 @@ export function RouteForm({
               placeholder="subdomain"
               className="flex-1"
             />
-            <span className="flex items-center text-sm text-muted-foreground">.</span>
+            <span className="flex items-center h-[var(--input-md-height)] text-sm text-muted-foreground">.</span>
             <Select
               options={cfZones.map((z) => ({ value: z.zoneName, label: z.zoneName }))}
               value={selectedZone}
               onChange={(v: string) => setSelectedZone(v)}
+              className="[&_button]:h-[var(--input-md-height)]"
             />
-            <Button type="button" variant="secondary" onClick={addZoneDomain}>Add</Button>
           </div>
         ) : (
           <div className="flex gap-2">
@@ -236,7 +260,6 @@ export function RouteForm({
               placeholder="example.com"
               className="flex-1"
             />
-            <Button type="button" variant="secondary" onClick={addDomain}>Add</Button>
           </div>
         )}
         {domains.filter(Boolean).length > 0 && (

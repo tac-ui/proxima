@@ -48,6 +48,9 @@ services:
     container_name: proxima
     restart: unless-stopped
     pid: host  # 선택: 호스트 프로세스 탐지 활성화
+    environment:
+      - PUID=1000  # 호스트 사용자 ID (확인: id -u)
+      - PGID=1000  # 호스트 그룹 ID (확인: id -g)
     ports:
       - "20222:20222"
     volumes:
@@ -140,7 +143,8 @@ docker compose up -d
 | `PXM_PORT` | `20222` | 서버 포트 |
 | `PXM_DATA_DIR` | `/data` | 데이터 루트 디렉토리 |
 | `PXM_STACKS_DIR` | `/data/stacks` | 스택 파일 저장 경로 |
-| `PXM_HOST_DATA_DIR` | `PXM_DATA_DIR`과 동일 | 호스트 데이터 경로 (Cloudflare Tunnel bind mount에 필요) |
+| `PUID` | *(자동 감지)* | 이 사용자 ID로 실행. 미설정 시 `/data` 마운트 소유자에서 감지. |
+| `PGID` | *(자동 감지)* | 이 그룹 ID로 실행. 미설정 시 `/data` 마운트 소유자에서 감지. |
 
 ### 볼륨
 

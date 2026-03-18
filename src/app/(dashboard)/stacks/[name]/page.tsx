@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useApiContext } from "@/contexts/ApiContext";
 import { api } from "@/lib/api";
@@ -21,17 +21,11 @@ import {
   useToast,
 } from "@tac-ui/web";
 import { ComposeEditor } from "@/components/stacks/ComposeEditor";
-import { ChevronLeft, Play, Square, RotateCw, Trash2, Box, FileText, Plus } from "@tac-ui/icon";
+import { ChevronLeft, Play, Square, RotateCw, RefreshCw, Trash2, Box, FileText, Plus } from "@tac-ui/icon";
 import { useConfirm } from "@/hooks/useConfirm";
 import { useAuth } from "@/contexts/AuthContext";
 import { CopyButton } from "@/components/shared/CopyButton";
-import dynamic from "next/dynamic";
 import type { Stack, ContainerInfo, MountInfo, NetworkInfo } from "@/types";
-
-const TerminalPanel = dynamic(
-  () => import("@/components/terminal/TerminalPanel").then((m) => m.TerminalPanel),
-  { ssr: false, loading: () => <div className="h-64 bg-background rounded-lg animate-pulse" /> }
-);
 
 const statusVariantMap: Record<string, "success" | "destructive" | "warning" | "secondary"> = {
   running: "success",
@@ -148,7 +142,25 @@ export default function StackDetailPage() {
     });
   };
 
-  const terminalId = `stack-${name}`;
+  const [logs, setLogs] = useState("");
+  const [logsLoading, setLogsLoading] = useState(false);
+  const logsEndRef = useRef<HTMLPreElement>(null);
+
+  const fetchLogs = useCallback(async () => {
+    setLogsLoading(true);
+    const res = await api.getStackLogs(name);
+    if (res.ok && res.data) {
+      setLogs(res.data.logs);
+      requestAnimationFrame(() => {
+        logsEndRef.current?.scrollTo(0, logsEndRef.current.scrollHeight);
+      });
+    }
+    setLogsLoading(false);
+  }, [name]);
+
+  useEffect(() => {
+    if (connected && stack) fetchLogs();
+  }, [connected, stack, fetchLogs]);
 
   if (loading) {
     return (
@@ -244,10 +256,10 @@ export default function StackDetailPage() {
       {/* Two-column layout */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Left: Editor */}
-        <div className="space-y-4">
-          <Card>
-            <CardContent>
-              <Tabs value={activeTab} onValueChange={setActiveTab} variant="underline">
+        <div className="flex flex-col">
+          <Card className="flex-1 flex flex-col">
+            <CardContent className="flex-1 flex flex-col">
+              <Tabs value={activeTab} onValueChange={setActiveTab} variant="underline" className="flex-1 flex flex-col">
                 <TabsList>
                   <TabTrigger value="compose">docker-compose.yml</TabTrigger>
                   <TabTrigger value="env">.env</TabTrigger>
@@ -292,7 +304,6 @@ export default function StackDetailPage() {
                       />
                       <Button
                         variant="secondary"
-                        size="sm"
                         disabled={!newDockerfileName.trim() || newDockerfileName.trim() in dockerfiles}
                         onClick={() => {
                           const fname = newDockerfileName.trim();
@@ -358,13 +369,30 @@ export default function StackDetailPage() {
 
         {/* Right: Terminal + Containers */}
         <div className="space-y-4">
-          <TerminalPanel
-            terminalId={terminalId}
-            title="Logs"
-            mode="interactive"
-            showToolbar={true}
-            rows={14}
-          />
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">Logs</h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  iconOnly
+                  onClick={fetchLogs}
+                  disabled={logsLoading}
+                >
+                  <RefreshCw size={14} className={logsLoading ? "animate-spin" : ""} />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <pre
+                ref={logsEndRef}
+                className="text-xs font-mono leading-relaxed whitespace-pre-wrap break-all bg-muted/30 rounded-lg p-3 max-h-[280px] overflow-y-auto text-muted-foreground"
+              >
+                {logs || (logsLoading ? "Loading..." : "No logs available.")}
+              </pre>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader>

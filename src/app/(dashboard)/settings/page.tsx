@@ -13,11 +13,12 @@ import {
   Switch,
   Input,
   Button,
+  SegmentController,
   useTacTheme,
   useToast,
   pageEntrance,
 } from "@tac-ui/web";
-import { Sun, Moon, Monitor, Wifi, Info, Palette, Upload, Trash2 } from "@tac-ui/icon";
+import { Sun, Moon, Wifi, Info, Palette, Upload, Trash2 } from "@tac-ui/icon";
 import packageJson from "../../../../package.json";
 
 export default function SettingsPage() {
@@ -219,25 +220,17 @@ export default function SettingsPage() {
           <div className="space-y-2">
             <p className="text-sm font-medium">Theme</p>
             <p className="text-xs text-muted-foreground">Choose your preferred appearance</p>
-            <div className="flex gap-2 pt-1">
-              {([
-                { value: "light" as const, icon: <Sun size={16} />, label: "Light" },
-                { value: "dark" as const, icon: <Moon size={16} />, label: "Dark" },
-                { value: "system" as const, icon: <Monitor size={16} />, label: "System" },
-              ]).map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => setPreference(opt.value)}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
-                    preference === opt.value
-                      ? "border-point bg-point/10 text-point"
-                      : "border-border bg-surface text-muted-foreground hover:text-foreground hover:bg-surface-hover"
-                  }`}
-                >
-                  {opt.icon}
-                  {opt.label}
-                </button>
-              ))}
+            <div className="pt-1">
+              <SegmentController
+                options={[
+                  { value: "light", label: "Light" },
+                  { value: "dark", label: "Dark" },
+                  { value: "system", label: "System" },
+                ]}
+                value={preference}
+                onChange={(v) => setPreference(v as "light" | "dark" | "system")}
+                size="sm"
+              />
             </div>
           </div>
         </CardContent>

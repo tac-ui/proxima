@@ -60,6 +60,13 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
     refresh();
   }, [refresh]);
 
+  // Sync document title when appName changes
+  useEffect(() => {
+    if (!loading) {
+      document.title = appName;
+    }
+  }, [appName, loading]);
+
   return (
     <BrandingContext.Provider value={{ appName, logoUrl, faviconUrl, showLogo, showAppName, ogTitle, ogDescription, loading, refresh }}>
       {children}

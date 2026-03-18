@@ -293,35 +293,36 @@ export default function CloudflarePage() {
                 )}
               </div>
             )}
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Input
-                  label="Tunnel Token"
-                  type={showTunToken ? "text" : "password"}
-                  value={tunToken}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTunToken(e.target.value)}
-                  placeholder="Tunnel token from Cloudflare dashboard"
-                />
-                <button
-                  type="button"
-                  className="absolute right-2.5 top-[50%] text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={() => setShowTunToken((v) => !v)}
-                  tabIndex={-1}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Tunnel Token</label>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    type={showTunToken ? "text" : "password"}
+                    value={tunToken}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTunToken(e.target.value)}
+                    placeholder="Tunnel token from Cloudflare dashboard"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setShowTunToken((v) => !v)}
+                    tabIndex={-1}
+                  >
+                    {showTunToken ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                <Button
+                  variant="secondary"
+                  disabled={tokenSaving || actionLoading !== null || !tunLoaded}
+                  onClick={handleSaveToken}
                 >
-                  {showTunToken ? <EyeOff size={15} /> : <Eye size={15} />}
-                </button>
+                  {tokenSaving ? "Saving..." : "Save"}
+                </Button>
               </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={tokenSaving || actionLoading !== null || !tunLoaded}
-                onClick={handleSaveToken}
-              >
-                {tokenSaving ? "Saving..." : "Save"}
-              </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Get the token from Cloudflare | Networks &gt; Tunnels
+              <span className="font-medium">Networks &gt; Tunnels</span> &gt; Select tunnel &gt; Configure &gt; Copy token. Routes created in Proxima automatically sync as Tunnel Public Hostnames and DNS CNAME records.
             </p>
             <div className="flex items-center gap-2">
               <Button
@@ -371,22 +372,27 @@ export default function CloudflarePage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <div className="relative">
-              <Input
-                label="API Token"
-                type={showApiToken ? "text" : "password"}
-                value={cfApiToken}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCfApiToken(e.target.value)}
-                placeholder="Cloudflare API Token"
-              />
-              <button
-                type="button"
-                className="absolute right-2.5 top-[50%] text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => setShowApiToken((v) => !v)}
-                tabIndex={-1}
-              >
-                {showApiToken ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">API Token</label>
+              <p className="text-xs text-muted-foreground">
+                Required permissions: <span className="font-medium">Cloudflare Tunnel:Edit</span>, <span className="font-medium">DNS:Edit</span>, <span className="font-medium">Analytics:Read</span>
+              </p>
+              <div className="relative">
+                <Input
+                  type={showApiToken ? "text" : "password"}
+                  value={cfApiToken}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCfApiToken(e.target.value)}
+                  placeholder="Cloudflare API Token"
+                />
+                <button
+                  type="button"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowApiToken((v) => !v)}
+                  tabIndex={-1}
+                >
+                  {showApiToken ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
             </div>
 
             {/* Zones list */}

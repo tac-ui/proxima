@@ -177,6 +177,7 @@ export const api = {
     request<{ success: boolean }>("POST", "/api/settings/cloudflare/tunnel/action", { action }),
 
   // Monitoring
+  getStackLogs: (name: string) => request<{ logs: string }>("GET", `/api/stacks/${encodeURIComponent(name)}/logs`),
   getSystemMetrics: () => request<SystemMetrics>("GET", "/api/monitoring"),
   getMetricsHistory: (hours: number = 1) => request<MetricsHistoryResponse>("GET", `/api/monitoring/history?hours=${hours}`),
 };

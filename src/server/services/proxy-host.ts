@@ -3,6 +3,7 @@ import { getDb } from "../db/index";
 import { proxyHosts, type ProxyHost, type NewProxyHost } from "../db/schema";
 import { logger } from "../lib/logger";
 import { syncCloudflaredConfig } from "./cloudflared";
+import { syncDomainsCreate, syncDomainsDelete } from "./cloudflare";
 import type { ProxyLocation } from "@/types";
 
 // Shape of data coming from the socket (camelCase, JSON-stringified arrays)
@@ -103,11 +104,16 @@ export async function create(data: CreateProxyHostData): Promise<ReturnType<type
 
   const host = serializeRow(result);
 
-  // Regenerate cloudflared local config
+  // Sync cloudflared tunnel ingress + DNS records
   try {
     await syncCloudflaredConfig();
   } catch (err) {
     logger.warn("proxy-host", `Cloudflared config sync failed: ${err}`);
+  }
+  try {
+    await syncDomainsCreate(data.domainNames);
+  } catch (err) {
+    logger.warn("proxy-host", `DNS sync failed: ${err}`);
   }
 
   logger.info("proxy-host", `Created proxy host ${host.id}: ${data.domainNames.join(", ")}`);
@@ -149,11 +155,22 @@ export async function update(id: number, data: UpdateProxyHostData): Promise<Ret
 
   const updated = await get(id);
 
-  // Regenerate cloudflared local config
+  // Sync cloudflared tunnel ingress + DNS records
   try {
     await syncCloudflaredConfig();
   } catch (err) {
     logger.warn("proxy-host", `Cloudflared config sync failed: ${err}`);
+  }
+  if (data.domainNames) {
+    const oldDomains: string[] = existing.domainNames;
+    const removed = oldDomains.filter((d) => !data.domainNames!.includes(d));
+    const added = data.domainNames.filter((d) => !oldDomains.includes(d));
+    try {
+      if (removed.length > 0) await syncDomainsDelete(removed);
+      if (added.length > 0) await syncDomainsCreate(added);
+    } catch (err) {
+      logger.warn("proxy-host", `DNS sync failed: ${err}`);
+    }
   }
 
   logger.info("proxy-host", `Updated proxy host ${id}`);
@@ -168,11 +185,16 @@ export async function remove(id: number): Promise<void> {
   const db = getDb();
   await db.delete(proxyHosts).where(eq(proxyHosts.id, id));
 
-  // Regenerate cloudflared local config
+  // Sync cloudflared tunnel ingress + DNS records
   try {
     await syncCloudflaredConfig();
   } catch (err) {
     logger.warn("proxy-host", `Cloudflared config sync failed: ${err}`);
+  }
+  try {
+    await syncDomainsDelete(domains);
+  } catch (err) {
+    logger.warn("proxy-host", `DNS cleanup failed: ${err}`);
   }
 
   logger.info("proxy-host", `Deleted proxy host ${id}`);

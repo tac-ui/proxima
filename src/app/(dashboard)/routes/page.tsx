@@ -38,15 +38,19 @@ export default function RoutesPage() {
   const [cfdState, setCfdState] = useState<CloudflaredStatus["state"] | null>(null);
 
   useEffect(() => {
-    api.getTunnelSettings().then((res) => {
-      if (res.ok && res.data) {
-        setTunnelActive(res.data.enabled && !!res.data.tunnelId);
+    Promise.all([
+      api.getTunnelSettings(),
+      api.getCloudflaredStatus(),
+    ]).then(([tunRes, cfdRes]) => {
+      const cfdRunning = cfdRes.ok && cfdRes.data?.state === "running";
+      if (tunRes.ok && tunRes.data) {
+        setTunnelActive((tunRes.data.enabled && !!tunRes.data.tunnelId) || cfdRunning);
+      } else if (cfdRunning) {
+        setTunnelActive(true);
       }
+      if (cfdRes.ok && cfdRes.data) setCfdState(cfdRes.data.state);
       setTunnelChecked(true);
     }).catch(() => { setTunnelChecked(true); });
-    api.getCloudflaredStatus().then((res) => {
-      if (res.ok && res.data) setCfdState(res.data.state);
-    }).catch(() => {});
   }, []);
 
   const filtered = routeList.filter((h) =>

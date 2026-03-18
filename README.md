@@ -48,6 +48,9 @@ services:
     container_name: proxima
     restart: unless-stopped
     pid: host  # optional: enables host process discovery
+    environment:
+      - PUID=1000  # host user ID (run: id -u)
+      - PGID=1000  # host group ID (run: id -g)
     ports:
       - "20222:20222"
     volumes:
@@ -140,7 +143,8 @@ Navigate to **Terminal** for standalone shell sessions.
 | `PXM_PORT` | `20222` | Server port |
 | `PXM_DATA_DIR` | `/data` | Data root directory |
 | `PXM_STACKS_DIR` | `/data/stacks` | Stack files storage path |
-| `PXM_HOST_DATA_DIR` | same as `PXM_DATA_DIR` | Host path for data dir (needed for Cloudflare Tunnel bind mounts) |
+| `PUID` | *(auto-detect)* | Run as this user ID. If unset, detects from `/data` mount owner. |
+| `PGID` | *(auto-detect)* | Run as this group ID. If unset, detects from `/data` mount owner. |
 
 ### Volumes
 

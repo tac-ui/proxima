@@ -25,6 +25,7 @@ import {
   ModalDescription,
   ModalFooter,
   Skeleton,
+  SegmentController,
   useToast,
 } from "@tac-ui/web";
 import {
@@ -65,6 +66,7 @@ export default function ProjectsPage() {
 
   // Clone form
   const [showCloneForm, setShowCloneForm] = useState(false);
+  const [cloneMethod, setCloneMethod] = useState<"ssh" | "https">("ssh");
   const [repoUrl, setRepoUrl] = useState("");
   const [branch, setBranch] = useState("main");
   const [targetDir, setTargetDir] = useState("");
@@ -222,7 +224,7 @@ export default function ProjectsPage() {
     setCloneError("");
     cloneCompletedRef.current = false;
 
-    const selectedKey = sshKeys.find((k) => k.id === selectedSshKeyId);
+    const selectedKey = cloneMethod === "ssh" ? sshKeys.find((k) => k.id === selectedSshKeyId) : undefined;
     api.cloneRepo({
       repoUrl: repoUrl.trim(),
       branch: branch.trim() || "main",
@@ -527,6 +529,20 @@ export default function ProjectsPage() {
     return { repoUrl: url, branch: "" };
   };
 
+  // Convert between SSH and HTTPS URL formats
+  const toSshUrl = (url: string): string => {
+    const m = url.match(/https?:\/\/([^/]+)\/([^/]+)\/([^/]+?)(?:\.git)?$/);
+    if (m) return `git@${m[1]}:${m[2]}/${m[3]}.git`;
+    return url;
+  };
+  const toHttpsUrl = (url: string): string => {
+    const m = url.match(/^git@([^:]+):([^/]+)\/(.+?)(?:\.git)?$/);
+    if (m) return `https://${m[1]}/${m[2]}/${m[3]}.git`;
+    return url;
+  };
+  const isSshUrl = (url: string) => /^git@/.test(url);
+  const isHttpsUrl = (url: string) => /^https?:\/\//.test(url);
+
   // --- Render ---
 
   return (
@@ -575,22 +591,47 @@ export default function ProjectsPage() {
             <ModalDescription>Clone a Git repository into your projects</ModalDescription>
           </ModalHeader>
           <div className="px-6 pb-2 space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Protocol</label>
+              <SegmentController
+                options={[
+                  { value: "ssh", label: "SSH" },
+                  { value: "https", label: "HTTPS" },
+                ]}
+                value={cloneMethod}
+                onChange={(v) => {
+                  const method = v as "ssh" | "https";
+                  setCloneMethod(method);
+                  if (repoUrl) {
+                    setRepoUrl(method === "ssh" ? toSshUrl(repoUrl) : toHttpsUrl(repoUrl));
+                  }
+                }}
+              />
+            </div>
+
             <Input
               label="Repository URL"
               value={repoUrl}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                 const url = e.target.value;
                 const parsed = parseGithubUrl(url);
-                setRepoUrl(parsed.repoUrl !== url ? parsed.repoUrl : url);
+                let finalUrl = parsed.repoUrl !== url ? parsed.repoUrl : url;
                 if (parsed.branch) setBranch(parsed.branch);
-                const cleanUrl = parsed.repoUrl || url;
+                // Auto-detect and switch method based on pasted URL
+                if (isSshUrl(finalUrl) && cloneMethod !== "ssh") setCloneMethod("ssh");
+                else if (isHttpsUrl(finalUrl) && cloneMethod !== "https") setCloneMethod("https");
+                // Convert URL to match selected method
+                if (cloneMethod === "ssh" && isHttpsUrl(finalUrl)) finalUrl = toSshUrl(finalUrl);
+                else if (cloneMethod === "https" && isSshUrl(finalUrl)) finalUrl = toHttpsUrl(finalUrl);
+                setRepoUrl(finalUrl);
+                const cleanUrl = finalUrl;
                 if (!targetDir || targetDir === autoDir.current) {
                   const name = cleanUrl.split("/").pop()?.replace(/\.git$/, "") ?? "";
                   setTargetDir(name);
                   autoDir.current = name;
                 }
               }}
-              placeholder="https://github.com/org/repo.git"
+              placeholder={cloneMethod === "ssh" ? "git@github.com:org/repo.git" : "https://github.com/org/repo.git"}
               error={!!cloneErrors.repoUrl}
               errorMessage={cloneErrors.repoUrl}
             />
@@ -612,27 +653,29 @@ export default function ProjectsPage() {
               />
             </div>
 
-            {/* SSH Key */}
-            <div className="flex items-center gap-2 flex-wrap">
-              {sshKeys.length > 0 ? (
-                <Select
-                  label="SSH Key"
-                  options={[
-                    { value: "", label: "No SSH Key" },
-                    ...sshKeys.map((k) => ({ value: String(k.id), label: k.alias })),
-                  ]}
-                  value={selectedSshKeyId ? String(selectedSshKeyId) : ""}
-                  onChange={(v: string) => setSelectedSshKeyId(v ? Number(v) : null)}
-                  className="w-full"
-                />
-              ) : (
-                <Link href="/ssh-keys">
-                  <Button size="sm" variant="secondary" leftIcon={<Key size={12} />}>
-                    Configure SSH Keys
-                  </Button>
-                </Link>
-              )}
-            </div>
+            {/* SSH Key — only for SSH method */}
+            {cloneMethod === "ssh" && (
+              <div className="flex items-center gap-2 flex-wrap">
+                {sshKeys.length > 0 ? (
+                  <Select
+                    label="SSH Key"
+                    options={[
+                      { value: "", label: "No SSH Key" },
+                      ...sshKeys.map((k) => ({ value: String(k.id), label: k.alias })),
+                    ]}
+                    value={selectedSshKeyId ? String(selectedSshKeyId) : ""}
+                    onChange={(v: string) => setSelectedSshKeyId(v ? Number(v) : null)}
+                    className="w-full"
+                  />
+                ) : (
+                  <Link href="/ssh-keys">
+                    <Button size="sm" variant="secondary" leftIcon={<Key size={12} />}>
+                      Configure SSH Keys
+                    </Button>
+                  </Link>
+                )}
+              </div>
+            )}
 
             {cloneError && (
               <Alert variant="error" dismissible onDismiss={() => setCloneError("")}>
