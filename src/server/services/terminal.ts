@@ -6,7 +6,7 @@ import { sanitizeEnvForPty } from "../lib/validators";
 // Constants
 // ---------------------------------------------------------------------------
 const TERMINAL_ROWS = 30;
-const TERMINAL_COLS = 200;
+const TERMINAL_COLS = 80;
 const PROGRESS_TERMINAL_ROWS = 10;
 const COMBINED_TERMINAL_ROWS = 50;
 const COMBINED_TERMINAL_COLS = 200;

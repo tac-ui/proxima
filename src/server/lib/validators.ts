@@ -164,6 +164,18 @@ const PTY_SAFE_ENV_KEYS = new Set([
   "USER",
   "NODE_ENV",
   "DOCKER_HOST",
+  // Claude Code / general CLI tools
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_HOME",
+  "XDG_CACHE_HOME",
+  "ANTHROPIC_API_KEY",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "COLORTERM",
+  "FORCE_COLOR",
+  "HOSTNAME",
+  "TZ",
 ]);
 
 export function sanitizeEnvForPty(): Record<string, string> {

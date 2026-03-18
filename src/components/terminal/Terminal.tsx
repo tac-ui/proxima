@@ -151,6 +151,10 @@ export function Terminal({ terminalId, mode = "interactive", rows, cols, onExit,
       ws.onopen = () => {
         setConnected(true);
         ws!.send(JSON.stringify({ type: "join", terminalId }));
+        // Immediately send actual terminal dimensions so PTY resizes from default
+        try {
+          ws!.send(JSON.stringify({ type: "resize", terminalId, rows: term.rows, cols: term.cols }));
+        } catch {}
       };
 
       ws.onmessage = (event) => {
