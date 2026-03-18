@@ -17,8 +17,13 @@ export default function NewRoutePage() {
   const handleSubmit = async (data: Parameters<typeof create>[0]) => {
     setSubmitting(true);
     try {
-      await create(data);
-      toast("Route created", { variant: "success" });
+      const result = await create(data);
+      if (result.warnings?.length) {
+        for (const w of result.warnings) toast(w, { variant: "warning" });
+        toast("Route created, but Cloudflare sync had issues", { variant: "warning" });
+      } else {
+        toast("Route created", { variant: "success" });
+      }
       router.push("/routes");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to create route", { variant: "error" });

@@ -103,21 +103,26 @@ export async function create(data: CreateProxyHostData): Promise<ReturnType<type
   }
 
   const host = serializeRow(result);
+  const warnings: string[] = [];
 
   // Sync cloudflared tunnel ingress + DNS records
   try {
     await syncCloudflaredConfig();
   } catch (err) {
-    logger.warn("proxy-host", `Cloudflared config sync failed: ${err}`);
+    const msg = `Tunnel ingress sync failed: ${err instanceof Error ? err.message : err}`;
+    logger.warn("proxy-host", msg);
+    warnings.push(msg);
   }
   try {
     await syncDomainsCreate(data.domainNames);
   } catch (err) {
-    logger.warn("proxy-host", `DNS sync failed: ${err}`);
+    const msg = `DNS sync failed: ${err instanceof Error ? err.message : err}`;
+    logger.warn("proxy-host", msg);
+    warnings.push(msg);
   }
 
   logger.info("proxy-host", `Created proxy host ${host.id}: ${data.domainNames.join(", ")}`);
-  return host;
+  return Object.assign(host, { _warnings: warnings });
 }
 
 export async function update(id: number, data: UpdateProxyHostData): Promise<ReturnType<typeof serializeRow>> {
@@ -154,12 +159,15 @@ export async function update(id: number, data: UpdateProxyHostData): Promise<Ret
   await db.update(proxyHosts).set(updateData).where(eq(proxyHosts.id, id));
 
   const updated = await get(id);
+  const warnings: string[] = [];
 
   // Sync cloudflared tunnel ingress + DNS records
   try {
     await syncCloudflaredConfig();
   } catch (err) {
-    logger.warn("proxy-host", `Cloudflared config sync failed: ${err}`);
+    const msg = `Tunnel ingress sync failed: ${err instanceof Error ? err.message : err}`;
+    logger.warn("proxy-host", msg);
+    warnings.push(msg);
   }
   if (data.domainNames) {
     const oldDomains: string[] = existing.domainNames;
@@ -169,12 +177,14 @@ export async function update(id: number, data: UpdateProxyHostData): Promise<Ret
       if (removed.length > 0) await syncDomainsDelete(removed);
       if (added.length > 0) await syncDomainsCreate(added);
     } catch (err) {
-      logger.warn("proxy-host", `DNS sync failed: ${err}`);
+      const msg = `DNS sync failed: ${err instanceof Error ? err.message : err}`;
+      logger.warn("proxy-host", msg);
+      warnings.push(msg);
     }
   }
 
   logger.info("proxy-host", `Updated proxy host ${id}`);
-  return updated;
+  return Object.assign(updated, { _warnings: warnings });
 }
 
 export async function remove(id: number): Promise<void> {

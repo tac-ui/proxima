@@ -46,7 +46,8 @@ export async function PUT(
     broadcast({ type: "proxyHostList", data: hosts as ProxyHost[] });
 
     logAudit({ userId: auth.userId, username: auth.username, action: "update", category: "proxy", targetType: "proxyHost", targetName: `id:${hostId}`, ipAddress: getClientIp(req) });
-    return ok(updated);
+    const warnings = (updated as any)._warnings as string[] | undefined;
+    return ok({ ...updated, warnings: warnings?.length ? warnings : undefined });
   } catch (err) {
     return errorResponse(err);
   }

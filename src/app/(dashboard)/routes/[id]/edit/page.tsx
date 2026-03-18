@@ -22,8 +22,13 @@ export default function EditRoutePage() {
   const handleSubmit = async (data: Partial<ProxyHost>) => {
     setSubmitting(true);
     try {
-      await update(routeId, data);
-      toast("Route updated", { variant: "success" });
+      const result = await update(routeId, data);
+      if (result.warnings?.length) {
+        for (const w of result.warnings) toast(w, { variant: "warning" });
+        toast("Route updated, but Cloudflare sync had issues", { variant: "warning" });
+      } else {
+        toast("Route updated", { variant: "success" });
+      }
       router.push("/routes");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to update route", { variant: "error" });

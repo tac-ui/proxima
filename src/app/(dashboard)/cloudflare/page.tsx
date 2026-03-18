@@ -14,7 +14,7 @@ import {
   useToast,
   pageEntrance,
 } from "@tac-ui/web";
-import { Cloud, ShieldAlert, Eye, EyeOff, Plus, Trash2, CheckCircle, Loader2, Download, ChevronDown, ChevronRight, Play, Square, RotateCw } from "@tac-ui/icon";
+import { Cloud, ShieldAlert, Eye, EyeOff, Plus, Trash2, CheckCircle, Loader2, Download, ChevronDown, ChevronRight, Play, Square, RotateCw, Circle, AlertCircle } from "@tac-ui/icon";
 import type { CloudflareZone } from "@/types";
 import { LoadingIndicator } from "@/components/shared/LoadingIndicator";
 
@@ -246,6 +246,67 @@ export default function CloudflarePage() {
     >
       <LoadingIndicator visible={!tunLoaded || !cfLoaded} />
 
+      {/* Setup Status */}
+      {tunLoaded && cfLoaded && (
+        <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
+          <p className="text-sm font-semibold">Setup Status</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Tunnel Token */}
+            <div className="flex items-start gap-2.5">
+              {tunToken ? (
+                <CheckCircle size={16} className="text-success shrink-0 mt-0.5" />
+              ) : (
+                <Circle size={16} className="text-muted-foreground/40 shrink-0 mt-0.5" />
+              )}
+              <div>
+                <p className="text-xs font-medium">Tunnel Token</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {tunToken ? "Configured" : "Required for traffic routing"}
+                </p>
+              </div>
+            </div>
+            {/* API Token */}
+            <div className="flex items-start gap-2.5">
+              {cfApiToken ? (
+                <CheckCircle size={16} className="text-success shrink-0 mt-0.5" />
+              ) : (
+                <Circle size={16} className="text-muted-foreground/40 shrink-0 mt-0.5" />
+              )}
+              <div>
+                <p className="text-xs font-medium">API Token</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {cfApiToken ? "Configured" : "Required for DNS & ingress sync"}
+                </p>
+              </div>
+            </div>
+            {/* Connector */}
+            <div className="flex items-start gap-2.5">
+              {cfdState === "running" ? (
+                <CheckCircle size={16} className="text-success shrink-0 mt-0.5" />
+              ) : tunToken ? (
+                <AlertCircle size={16} className="text-warning shrink-0 mt-0.5" />
+              ) : (
+                <Circle size={16} className="text-muted-foreground/40 shrink-0 mt-0.5" />
+              )}
+              <div>
+                <p className="text-xs font-medium">Connector</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {cfdState === "running" ? "Running" : tunToken ? "Not running — start below" : "Set tunnel token first"}
+                </p>
+              </div>
+            </div>
+          </div>
+          {tunToken && cfApiToken && cfdState === "running" && (
+            <p className="text-xs text-success font-medium">All set — routes will auto-sync DNS records and tunnel ingress.</p>
+          )}
+          {(!tunToken || !cfApiToken) && (
+            <p className="text-xs text-muted-foreground">
+              Both tokens are required for full automation. Without API Token, DNS and tunnel ingress must be configured manually in Cloudflare dashboard.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Cloudflare Tunnel */}
       <Card>
         <CardHeader>
@@ -295,13 +356,16 @@ export default function CloudflarePage() {
             )}
             <div className="space-y-2">
               <label className="text-sm font-medium">Tunnel Token</label>
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium">Networks &gt; Tunnels</span> &gt; Select tunnel &gt; Configure &gt; Copy token
+              </p>
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
                   <Input
                     type={showTunToken ? "text" : "password"}
                     value={tunToken}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTunToken(e.target.value)}
-                    placeholder="Tunnel token from Cloudflare dashboard"
+                    placeholder="eyJhIjoiNmI..."
                   />
                   <button
                     type="button"
@@ -312,18 +376,57 @@ export default function CloudflarePage() {
                     {showTunToken ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
-                <Button
-                  variant="secondary"
-                  disabled={tokenSaving || actionLoading !== null || !tunLoaded}
-                  onClick={handleSaveToken}
-                >
-                  {tokenSaving ? "Saving..." : "Save"}
-                </Button>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              <span className="font-medium">Networks &gt; Tunnels</span> &gt; Select tunnel &gt; Configure &gt; Copy token. Routes created in Proxima automatically sync as Tunnel Public Hostnames and DNS CNAME records.
-            </p>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">API Token</label>
+              <p className="text-xs text-muted-foreground">
+                Required permissions: <span className="font-medium">Cloudflare Tunnel:Edit</span>, <span className="font-medium">DNS:Edit</span>, <span className="font-medium">Analytics:Read</span>
+              </p>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    type={showApiToken ? "text" : "password"}
+                    value={cfApiToken}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCfApiToken(e.target.value)}
+                    placeholder="Cloudflare API Token"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setShowApiToken((v) => !v)}
+                    tabIndex={-1}
+                  >
+                    {showApiToken ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <Button
+                variant="secondary"
+                disabled={tokenSaving || actionLoading !== null || !tunLoaded || !cfLoaded}
+                onClick={async () => {
+                  setTokenSaving(true);
+                  try {
+                    const [tunRes, cfRes] = await Promise.all([
+                      api.updateTunnelSettings({ enabled: true, tunnelToken: tunToken }),
+                      api.updateCloudflareSettings({ apiToken: cfApiToken, zones: cfZones, autoSync: cfAutoSync }),
+                    ]);
+                    if (tunRes.ok && tunRes.data) setTunToken(tunRes.data.tunnelToken);
+                    if (cfRes.ok && cfRes.data) { setCfApiToken(cfRes.data.apiToken); setCfZones(cfRes.data.zones ?? []); }
+                    if (tunRes.ok && cfRes.ok) toast("Tokens saved", { variant: "success" });
+                    else toast("Some settings failed to save", { variant: "warning" });
+                  } catch {
+                    toast("Failed to save tokens", { variant: "error" });
+                  } finally {
+                    setTokenSaving(false);
+                  }
+                }}
+              >
+                {tokenSaving ? "Saving..." : "Save Tokens"}
+              </Button>
+            </div>
             <div className="flex items-center gap-2">
               <Button
                 variant="primary"
@@ -357,7 +460,7 @@ export default function CloudflarePage() {
         </CardContent>
       </Card>
 
-      {/* Cloudflare Analytics API */}
+      {/* Zones */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
@@ -365,36 +468,13 @@ export default function CloudflarePage() {
               <Cloud size={18} className="text-info" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold">Cloudflare Analytics</h2>
-              <p className="text-xs text-muted-foreground">API credentials for traffic analytics</p>
+              <h2 className="text-sm font-semibold">Zones</h2>
+              <p className="text-xs text-muted-foreground">Manage Cloudflare zones for DNS sync and analytics</p>
             </div>
           </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">API Token</label>
-              <p className="text-xs text-muted-foreground">
-                Required permissions: <span className="font-medium">Cloudflare Tunnel:Edit</span>, <span className="font-medium">DNS:Edit</span>, <span className="font-medium">Analytics:Read</span>
-              </p>
-              <div className="relative">
-                <Input
-                  type={showApiToken ? "text" : "password"}
-                  value={cfApiToken}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCfApiToken(e.target.value)}
-                  placeholder="Cloudflare API Token"
-                />
-                <button
-                  type="button"
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={() => setShowApiToken((v) => !v)}
-                  tabIndex={-1}
-                >
-                  {showApiToken ? <EyeOff size={15} /> : <Eye size={15} />}
-                </button>
-              </div>
-            </div>
-
             {/* Zones list */}
             <div>
               <div className="flex items-center justify-between mb-2">

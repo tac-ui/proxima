@@ -61,7 +61,8 @@ export async function POST(req: NextRequest) {
     broadcast({ type: "proxyHostList", data: hosts as import("@/types").ProxyHost[] });
 
     logAudit({ userId: auth.userId, username: auth.username, action: "create", category: "proxy", targetType: "proxyHost", targetName: domainNames.join(", "), ipAddress: getClientIp(req) });
-    return ok(host);
+    const warnings = (host as any)._warnings as string[] | undefined;
+    return ok({ ...host, warnings: warnings?.length ? warnings : undefined });
   } catch (err) {
     return errorResponse(err);
   }

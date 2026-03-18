@@ -34,15 +34,15 @@ export function useRoutes() {
     return unsub;
   }, [subscribe]);
 
-  const create = useCallback(async (data: Partial<ProxyHost>) => {
+  const create = useCallback(async (data: Partial<ProxyHost>): Promise<ProxyHost & { warnings?: string[] }> => {
     const res = await api.createRoute(data);
-    if (res.ok && res.data) return res.data;
+    if (res.ok && res.data) return res.data as ProxyHost & { warnings?: string[] };
     throw new Error(res.error ?? "Create failed");
   }, []);
 
-  const update = useCallback(async (id: number, data: Partial<ProxyHost>) => {
+  const update = useCallback(async (id: number, data: Partial<ProxyHost>): Promise<ProxyHost & { warnings?: string[] }> => {
     const res = await api.updateRoute(id, data);
-    if (res.ok && res.data) return res.data;
+    if (res.ok && res.data) return res.data as ProxyHost & { warnings?: string[] };
     throw new Error(res.error ?? "Update failed");
   }, []);
 
