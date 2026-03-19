@@ -72,7 +72,7 @@ export const api = {
 
   // Repos
   getRepos: () => request<RepositoryInfo[]>("GET", "/api/repos"),
-  getRepo: (id: number) => request<RepositoryInfo>("GET", `/api/repos/${id}`),
+  getRepo: (id: number | string) => request<RepositoryInfo>("GET", `/api/repos/${encodeURIComponent(id)}`),
   deleteRepo: (id: number) => request("DELETE", `/api/repos/${id}`),
   pullRepo: (id: number) => request<{ message: string }>("POST", `/api/repos/${id}/pull`),
   getRepoEnv: (id: number, filePath: string = ".env") => request<{ content: string }>("GET", `/api/repos/${id}/env?path=${encodeURIComponent(filePath)}`),
@@ -83,9 +83,13 @@ export const api = {
   checkoutBranch: (id: number, branch: string) => request<{ message: string; branch: string }>("POST", `/api/repos/${id}/checkout`, { branch }),
   getRepoBranches: (id: number) => request<{ branches: string[]; current: string }>("GET", `/api/repos/${id}/branches`),
   getSuggestedScripts: (id: number) => request<{ suggestions: { name: string; command: string; preCommand?: string }[] }>("GET", `/api/repos/${id}/suggest-scripts`),
-  addRepoScript: (id: number, name: string, command: string, preCommand?: string) => request<RepositoryInfo>("POST", `/api/repos/${id}/scripts`, { name, command, ...(preCommand ? { preCommand } : {}) }),
-  removeRepoScript: (id: number, index: number) => request("DELETE", `/api/repos/${id}/scripts/${index}`),
-  runRepoScript: (id: number, index: number) => request<{ terminalId: string }>("POST", `/api/repos/${id}/scripts/${index}/run`),
+  getRepoScripts: (id: number) => request<{ name: string; filename: string }[]>("GET", `/api/repos/${id}/scripts`),
+  createRepoScript: (id: number, name: string, content?: string) => request<{ name: string; filename: string; content: string }>("POST", `/api/repos/${id}/scripts`, { name, content }),
+  getRepoScript: (id: number, slug: string) => request<{ name: string; filename: string; content: string }>("GET", `/api/repos/${id}/scripts/${slug}`),
+  updateRepoScript: (id: number, slug: string, content: string, name?: string) => request<{ name: string; filename: string; content: string; hookEnabled?: boolean }>("PUT", `/api/repos/${id}/scripts/${slug}`, { content, ...(name ? { name } : {}) }),
+  toggleScriptHook: (id: number, slug: string, hookEnabled: boolean) => request<{ name: string; filename: string; content: string; hookEnabled?: boolean }>("PUT", `/api/repos/${id}/scripts/${slug}`, { hookEnabled }),
+  deleteRepoScript: (id: number, slug: string) => request("DELETE", `/api/repos/${id}/scripts/${slug}`),
+  runRepoScript: (id: number, slug: string) => request<{ terminalId: string }>("POST", `/api/repos/${id}/scripts/${slug}/run`),
   getRepoCommits: (id: number, limit: number = 10) => request<{ commits: { hash: string; shortHash: string; message: string; author: string; date: string }[] }>("GET", `/api/repos/${id}/commits?limit=${limit}`),
 
   // SSH Keys

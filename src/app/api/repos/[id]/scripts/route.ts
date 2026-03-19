@@ -1,30 +1,33 @@
 import { type NextRequest } from "next/server";
-import { requireAdmin, errorResponse, ok } from "../../../_lib/auth";
+import { requireAuth, requireAdmin, errorResponse, ok } from "../../../_lib/auth";
 import { ensureDb } from "../../../_lib/db";
 import { getDb, schema } from "@server/db/index";
 import { eq } from "drizzle-orm";
 import { logger } from "@server/lib/logger";
+import { parseJson } from "../../../_lib/repo-utils";
+import { ScriptService } from "@server/services/script";
 
-function parseJson(raw: string) {
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-}
+    ensureDb();
+    requireAuth(req);
 
-function toRepoInfo(row: typeof schema.repositories.$inferSelect) {
-  return {
-    id: row.id,
-    name: row.name,
-    repoUrl: row.repoUrl,
-    path: row.path,
-    branch: row.branch,
-    scripts: parseJson(row.scripts),
-    envFiles: parseJson(row.envFiles),
-    hookEnabled: row.hookEnabled,
-    hookApiKey: row.hookApiKey,
-  };
+    const { id } = await params;
+    const repoId = parseInt(id, 10);
+    if (isNaN(repoId)) throw new Error("Invalid repository id");
+
+    const db = getDb();
+    const repo = db.select().from(schema.repositories).where(eq(schema.repositories.id, repoId)).get();
+    if (!repo) throw new Error("Repository not found");
+
+    const scripts = parseJson(repo.scripts) as { name: string; filename: string }[];
+    return ok(scripts);
+  } catch (err) {
+    return errorResponse(err);
+  }
 }
 
 export async function POST(
@@ -39,29 +42,37 @@ export async function POST(
     const repoId = parseInt(id, 10);
     if (isNaN(repoId)) throw new Error("Invalid repository id");
 
-    const body = await req.json() as { name?: string; command?: string; preCommand?: string };
-    const { name, command, preCommand } = body;
+    const body = await req.json() as { name?: string; content?: string };
+    const { name, content } = body;
 
-    if (!name || !command) {
-      throw new Error("name and command are required");
-    }
+    if (!name?.trim()) throw new Error("name is required");
 
     const db = getDb();
     const repo = db.select().from(schema.repositories).where(eq(schema.repositories.id, repoId)).get();
     if (!repo) throw new Error("Repository not found");
 
-    const scripts = parseJson(repo.scripts);
-    const newScript: { name: string; command: string; preCommand?: string } = { name: name.trim(), command: command.trim() };
-    if (preCommand?.trim()) newScript.preCommand = preCommand.trim();
-    scripts.push(newScript);
+    const filename = ScriptService.toFilename(name.trim());
+    ScriptService.validateFilename(filename);
 
+    // Check for duplicate filename
+    const scripts = parseJson(repo.scripts) as { name: string; filename: string }[];
+    if (scripts.some((s) => s.filename === filename)) {
+      throw new Error(`Script "${filename}" already exists`);
+    }
+
+    // Save file with default template if no content provided
+    const scriptContent = content?.trim() || "#!/bin/bash\nset -e\n\n";
+    ScriptService.save(repo.name, filename, scriptContent);
+
+    // Update DB
+    scripts.push({ name: name.trim(), filename });
     db.update(schema.repositories)
       .set({ scripts: JSON.stringify(scripts) })
       .where(eq(schema.repositories.id, repoId))
       .run();
 
-    logger.info("repo", `Added script "${name}" to repo ${repo.name}`);
-    return ok(toRepoInfo({ ...repo, scripts: JSON.stringify(scripts) }));
+    logger.info("repo", `Created script "${name}" (${filename}) for repo ${repo.name}`);
+    return ok({ name: name.trim(), filename, content: scriptContent });
   } catch (err) {
     return errorResponse(err);
   }

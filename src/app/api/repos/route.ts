@@ -2,28 +2,7 @@ import { type NextRequest } from "next/server";
 import { requireAuth, errorResponse, ok } from "../_lib/auth";
 import { ensureDb } from "../_lib/db";
 import { getDb, schema } from "@server/db/index";
-
-function parseJson(raw: string) {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-}
-
-function toRepoInfo(row: typeof schema.repositories.$inferSelect) {
-  return {
-    id: row.id,
-    name: row.name,
-    repoUrl: row.repoUrl,
-    path: row.path,
-    branch: row.branch,
-    scripts: parseJson(row.scripts),
-    envFiles: parseJson(row.envFiles),
-    hookEnabled: row.hookEnabled,
-    hookApiKey: row.hookApiKey,
-  };
-}
+import { toRepoInfo } from "../_lib/repo-utils";
 
 export async function GET(req: NextRequest) {
   try {

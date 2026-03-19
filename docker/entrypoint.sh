@@ -21,9 +21,11 @@ if [ -n "$TARGET_UID" ] && [ "$TARGET_UID" != "0" ]; then
 
   # Grant access to Docker socket
   if [ -S /var/run/docker.sock ]; then
-    DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
-    addgroup -g "$DOCKER_GID" -S hostdocker 2>/dev/null || true
-    addgroup proxima hostdocker 2>/dev/null || true
+    DOCKER_GID=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo "")
+    if [ -n "$DOCKER_GID" ]; then
+      addgroup -g "$DOCKER_GID" -S hostdocker 2>/dev/null || true
+      addgroup proxima hostdocker 2>/dev/null || true
+    fi
   fi
 
   chown -R "$TARGET_UID:$TARGET_GID" /data /app 2>/dev/null || true

@@ -195,9 +195,9 @@ export interface ClientToServerEvents {
   // Repositories
   listRepos: (cb: (res: ApiResponse<RepositoryInfo[]>) => void) => void;
   getRepo: (id: number, cb: (res: ApiResponse<RepositoryInfo>) => void) => void;
-  addRepoScript: (repoId: number, name: string, command: string, cb: (res: ApiResponse<RepositoryInfo>) => void) => void;
-  removeRepoScript: (repoId: number, scriptIndex: number, cb: (res: ApiResponse<RepositoryInfo>) => void) => void;
-  runRepoScript: (repoId: number, scriptIndex: number, cb: (res: ApiResponse<{ terminalId: string }>) => void) => void;
+  createRepoScript: (repoId: number, name: string, content: string, cb: (res: ApiResponse<RepositoryInfo>) => void) => void;
+  deleteRepoScript: (repoId: number, slug: string, cb: (res: ApiResponse) => void) => void;
+  runRepoScript: (repoId: number, slug: string, cb: (res: ApiResponse<{ terminalId: string }>) => void) => void;
   deleteRepo: (id: number, cb: (res: ApiResponse) => void) => void;
 }
 
@@ -227,8 +227,12 @@ export interface SshKeyInfo {
 // === Repository Types ===
 export interface RepoScript {
   name: string;
-  command: string;
-  preCommand?: string;
+  filename: string;
+  hookEnabled?: boolean;
+}
+
+export interface RepoScriptDetail extends RepoScript {
+  content: string;
 }
 
 export interface RepoEnvFile {

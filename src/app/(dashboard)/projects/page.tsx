@@ -27,6 +27,7 @@ import {
   Skeleton,
   SegmentController,
   useToast,
+  pageEntrance,
 } from "@tac-ui/web";
 import {
   Github,
@@ -203,7 +204,7 @@ export default function ProjectsPage() {
   // --- Render ---
 
   return (
-    <div className="space-y-6">
+    <motion.div className="space-y-6" {...pageEntrance}>
       {/* Page actions bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -415,7 +416,7 @@ export default function ProjectsPage() {
                 <Card
                   key={repo.id}
                   className="cursor-pointer hover:border-point/30 transition-colors"
-                  onClick={() => router.push(`/projects/${repo.id}`)}
+                  onClick={() => router.push(`/projects/${encodeURIComponent(repo.name)}`)}
                 >
                   <div className="flex items-center justify-between px-5 py-3">
                     <div className="flex items-center gap-3 min-w-0">
@@ -456,6 +457,6 @@ export default function ProjectsPage() {
           </motion.div>
         ) : null}
       </AnimatePresence>
-    </div>
+    </motion.div>
   );
 }

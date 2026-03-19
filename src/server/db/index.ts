@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import fs from "node:fs";
 import path from "node:path";
 import { logger } from "../lib/logger";
+import { ScriptService } from "../services/script";
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 let _sqlite: Database.Database | null = null;
@@ -235,6 +236,42 @@ function migrateSchema(sqlite: Database.Database): void {
   } catch (err) {
     try { sqlite.exec("ROLLBACK"); } catch { /* already rolled back */ }
     logger.error("db", `Role migration failed: ${err}`);
+  }
+
+  // v8 → v9: migrate inline scripts to .sh files
+  try {
+    const repos = sqlite.prepare(`SELECT id, name, scripts FROM repositories`).all() as { id: number; name: string; scripts: string }[];
+    for (const repo of repos) {
+      let scripts: unknown[];
+      try { scripts = JSON.parse(repo.scripts); } catch { continue; }
+      if (!Array.isArray(scripts) || scripts.length === 0) continue;
+
+      // Check if already migrated (new format has 'filename', old has 'command')
+      const first = scripts[0] as Record<string, unknown>;
+      if (first.filename && !first.command) continue;
+
+      const newScripts: { name: string; filename: string }[] = [];
+      for (const s of scripts as { name: string; command: string; preCommand?: string }[]) {
+        if (!s.command) continue;
+        const filename = ScriptService.toFilename(s.name);
+        const lines = ["#!/bin/bash", "set -e", ""];
+        if (s.preCommand) lines.push(s.preCommand);
+        lines.push(s.command, "");
+        try {
+          ScriptService.save(repo.name, filename, lines.join("\n"));
+          newScripts.push({ name: s.name, filename });
+        } catch (err) {
+          logger.error("db", `Migration: failed to create script file ${filename} for repo ${repo.name}: ${err}`);
+        }
+      }
+
+      if (newScripts.length > 0) {
+        sqlite.prepare(`UPDATE repositories SET scripts = ? WHERE id = ?`).run(JSON.stringify(newScripts), repo.id);
+        logger.info("db", `Migration: migrated ${newScripts.length} scripts to files for repo ${repo.name}`);
+      }
+    }
+  } catch (err) {
+    logger.error("db", `Script file migration failed: ${err}`);
   }
 }
 
