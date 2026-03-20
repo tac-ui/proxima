@@ -14,9 +14,12 @@ import { ScriptService } from "@server/services/script";
 
 const MAX_CONCURRENT_HOOKS = 10;
 
-function verifyApiKey(provided: string, stored: string): boolean {
-  const hash = (s: string) => createHash("sha256").update(s).digest();
-  return timingSafeEqual(hash(provided), hash(stored));
+function verifyApiKey(provided: string, storedHash: string): boolean {
+  const providedHash = createHash("sha256").update(provided).digest("hex");
+  return timingSafeEqual(
+    Buffer.from(providedHash, "utf-8"),
+    Buffer.from(storedHash, "utf-8"),
+  );
 }
 
 export async function POST(

@@ -1,4 +1,5 @@
 import { type NextRequest } from "next/server";
+import nodePath from "node:path";
 import { requireManager, errorResponse, ok, ValidationError } from "../../../_lib/auth";
 import { ensureDb } from "../../../_lib/db";
 import { getDb, schema } from "@server/db/index";
@@ -50,6 +51,11 @@ export async function POST(
     const { name, path } = body;
     if (!name || typeof name !== "string") throw new ValidationError("name is required");
     if (!path || typeof path !== "string") throw new ValidationError("path is required");
+
+    const normalized = nodePath.normalize(path);
+    if (normalized.startsWith("..") || nodePath.isAbsolute(normalized) || normalized.includes("..")) {
+      throw new ValidationError("Invalid env file path");
+    }
 
     const envFiles = JSON.parse(repo.envFiles || "[]") as { name: string; path: string }[];
 

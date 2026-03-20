@@ -138,7 +138,7 @@ export default function MonitoringPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Activity size={20} className="text-point" />
-          <h2 className="text-lg font-bold">System Monitoring</h2>
+          <h1 className="text-xl font-bold">System Monitoring</h1>
         </div>
         <Button
           variant="secondary"

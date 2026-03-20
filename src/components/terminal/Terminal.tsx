@@ -146,20 +146,25 @@ export function Terminal({ terminalId, mode = "interactive", rows, cols, onExit,
       // WebSocket connection
       const token = localStorage.getItem("proxima_auth_token") ?? "";
       const proto = location.protocol === "https:" ? "wss:" : "ws:";
-      ws = new WebSocket(`${proto}//${location.host}/api/terminal?token=${encodeURIComponent(token)}`);
+      ws = new WebSocket(`${proto}//${location.host}/api/terminal`);
 
       ws.onopen = () => {
-        setConnected(true);
-        ws!.send(JSON.stringify({ type: "join", terminalId }));
-        // Immediately send actual terminal dimensions so PTY resizes from default
-        try {
-          ws!.send(JSON.stringify({ type: "resize", terminalId, rows: term.rows, cols: term.cols }));
-        } catch {}
+        // Send auth as the first message
+        ws!.send(JSON.stringify({ type: "auth", token }));
       };
 
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
+          if (msg.type === "auth" && msg.status === "ok") {
+            setConnected(true);
+            ws!.send(JSON.stringify({ type: "join", terminalId }));
+            // Immediately send actual terminal dimensions so PTY resizes from default
+            try {
+              ws!.send(JSON.stringify({ type: "resize", terminalId, rows: term.rows, cols: term.cols }));
+            } catch {}
+            return;
+          }
           if (msg.terminalId !== terminalId) return;
           if (msg.type === "write") {
             term.write(msg.data);

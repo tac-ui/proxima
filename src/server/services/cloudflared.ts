@@ -242,7 +242,8 @@ export async function startCloudflared(token: string): Promise<void> {
   const container = await docker.createContainer({
     name: CONTAINER_NAME,
     Image: IMAGE,
-    Cmd: ["tunnel", "--no-autoupdate", "--config", "/dev/null", "run", "--token", token],
+    Cmd: ["tunnel", "--no-autoupdate", "run"],
+    Env: [`TUNNEL_TOKEN=${token}`],
     HostConfig: {
       NetworkMode: networkMode,
       RestartPolicy: { Name: "on-failure", MaximumRetryCount: 3 },

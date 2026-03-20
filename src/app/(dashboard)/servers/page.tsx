@@ -21,6 +21,7 @@ import {
   Button,
   SegmentController,
   Tooltip,
+  pageEntrance,
 } from "@tac-ui/web";
 import { Server, Search, RefreshCw, Terminal, AlertTriangle, Star } from "@tac-ui/icon";
 import { CopyButton } from "@/components/shared/CopyButton";
@@ -177,7 +178,8 @@ export default function ServersPage() {
   const loading = tab === "containers" ? loadingServices : loadingProcesses;
 
   return (
-    <div className="space-y-6">
+    <motion.div className="space-y-6" {...pageEntrance}>
+      <h1 className="text-xl font-bold">Servers</h1>
       {/* Top bar */}
       <div className="flex items-center gap-4 flex-wrap">
         <SegmentController
@@ -301,106 +303,105 @@ export default function ServersPage() {
             >
               <Card>
                 <CardContent className="p-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-8 pl-4"></TableHead>
-                        <TableHead>Stack</TableHead>
-                        <TableHead>Service</TableHead>
-                        <TableHead className="hidden lg:table-cell">Container</TableHead>
-                        <TableHead>IP</TableHead>
-                        <TableHead>Ports</TableHead>
-                        <TableHead className="hidden xl:table-cell">Volumes</TableHead>
-                        <TableHead className="hidden md:table-cell">Networks</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sortedServices.map((svc) => (
-                        <TableRow key={svc.containerName} className="group">
-                          <TableCell className="pl-4">
-                            <Tooltip content={svc.managed ? "Managed" : "Add to managed"} placement="top">
-                              <button
-                                onClick={() => toggleContainerManaged(svc)}
-                                className="p-1 rounded hover:bg-muted transition-colors"
-                              >
-                                <Star
-                                  size={14}
-                                  className={svc.managed ? "text-warning fill-warning" : "text-muted-foreground"}
-                                />
-                              </button>
-                            </Tooltip>
-                          </TableCell>
-                          <TableCell>
-                            <Link
-                              href={`/stacks/${svc.stackName}`}
-                              className="font-semibold text-sm hover:text-point transition-colors"
-                            >
-                              {svc.stackName}
-                            </Link>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <span className="font-medium text-sm">{svc.serviceName}</span>
-                              <p className="text-[11px] text-muted-foreground font-mono lg:hidden">{svc.containerName}</p>
-                            </div>
-                          </TableCell>
-                          <TableCell className="hidden lg:table-cell">
-                            <span className="inline-flex items-center gap-1 font-mono text-xs text-muted-foreground">
-                              {svc.containerName}
-                              <CopyButton value={svc.containerName} label="container" />
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            {svc.internalIp ? (
-                              <span className="inline-flex items-center gap-1 font-mono text-xs">
-                                {svc.internalIp}
-                                <CopyButton value={svc.internalIp} label="IP" />
-                              </span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">-</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {svc.ports.length > 0 ? (
-                              <div className="flex flex-wrap gap-1">
-                                {svc.ports
-                                  .filter((p, i, arr) => arr.findIndex((x) => x.hostPort === p.hostPort && x.containerPort === p.containerPort) === i)
-                                  .map((p) => (
-                                  <Chip key={`${p.hostPort}:${p.containerPort}`} variant="filter">
-                                    {p.hostPort}:{p.containerPort}
-                                  </Chip>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">-</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="hidden xl:table-cell">
-                            {svc.mounts && svc.mounts.length > 0 ? (
-                              <div className="space-y-0.5 max-w-[280px]">
-                                {svc.mounts.map((m: MountInfo, i: number) => (
-                                  <Tooltip key={i} content={`${m.source} → ${m.destination}${!m.rw ? " (ro)" : ""}`} placement="top">
-                                    <div className="font-mono text-[11px] text-muted-foreground truncate">
-                                      {m.destination}{!m.rw ? " (ro)" : ""}
-                                    </div>
-                                  </Tooltip>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">-</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell">
-                            <div className="flex flex-wrap gap-1">
-                              {svc.networks.map((n) => (
-                                <Chip key={n} variant="filter">{n}</Chip>
-                              ))}
-                            </div>
-                          </TableCell>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-10 pl-4 pr-0"></TableHead>
+                          <TableHead className="min-w-[100px]">Stack</TableHead>
+                          <TableHead className="min-w-[120px]">Service</TableHead>
+                          <TableHead className="min-w-[160px]">Container</TableHead>
+                          <TableHead className="min-w-[120px]">IP</TableHead>
+                          <TableHead className="min-w-[100px]">Ports</TableHead>
+                          <TableHead className="min-w-[140px]">Networks</TableHead>
+                          <TableHead className="min-w-[180px]">Volumes</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {sortedServices.map((svc) => (
+                          <TableRow key={svc.containerName} className="group">
+                            <TableCell className="pl-4 pr-0">
+                              <Tooltip content={svc.managed ? "Managed" : "Add to managed"} placement="top">
+                                <button
+                                  onClick={() => toggleContainerManaged(svc)}
+                                  className="p-1 rounded hover:bg-muted transition-colors"
+                                >
+                                  <Star
+                                    size={14}
+                                    className={svc.managed ? "text-warning fill-warning" : "text-muted-foreground"}
+                                  />
+                                </button>
+                              </Tooltip>
+                            </TableCell>
+                            <TableCell>
+                              <Link
+                                href={`/stacks/${svc.stackName}`}
+                                className="font-semibold text-sm hover:text-point transition-colors whitespace-nowrap"
+                              >
+                                {svc.stackName}
+                              </Link>
+                            </TableCell>
+                            <TableCell>
+                              <span className="font-medium text-sm whitespace-nowrap">{svc.serviceName}</span>
+                            </TableCell>
+                            <TableCell>
+                              <span className="inline-flex items-center gap-1 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                                {svc.containerName}
+                                <CopyButton value={svc.containerName} label="container" />
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              {svc.internalIp ? (
+                                <span className="inline-flex items-center gap-1 font-mono text-xs whitespace-nowrap">
+                                  {svc.internalIp}
+                                  <CopyButton value={svc.internalIp} label="IP" />
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {svc.ports.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {svc.ports
+                                    .filter((p, i, arr) => arr.findIndex((x) => x.hostPort === p.hostPort && x.containerPort === p.containerPort) === i)
+                                    .map((p) => (
+                                    <Chip key={`${p.hostPort}:${p.containerPort}`} variant="filter">
+                                      {p.hostPort}:{p.containerPort}
+                                    </Chip>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap gap-1">
+                                {svc.networks.map((n) => (
+                                  <Chip key={n} variant="filter">{n}</Chip>
+                                ))}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {svc.mounts && svc.mounts.length > 0 ? (
+                                <div className="space-y-0.5 max-w-[280px]">
+                                  {svc.mounts.map((m: MountInfo, i: number) => (
+                                    <Tooltip key={i} content={`${m.source} → ${m.destination}${!m.rw ? " (ro)" : ""}`} placement="top">
+                                      <div className="font-mono text-[11px] text-muted-foreground truncate whitespace-nowrap">
+                                        {m.destination}{!m.rw ? " (ro)" : ""}
+                                      </div>
+                                    </Tooltip>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -426,63 +427,66 @@ export default function ServersPage() {
           />
         ) : (
           <Card>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10"></TableHead>
-                    <TableHead>PID</TableHead>
-                    <TableHead>Process</TableHead>
-                    <TableHead>User</TableHead>
-                    <TableHead>Address</TableHead>
-                    <TableHead>Port</TableHead>
-                    <TableHead>Protocol</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredProcesses.map((p) => (
-                    <TableRow key={`${p.pid}:${p.port}`}>
-                      <TableCell>
-                        <Tooltip content={p.managed ? "Managed" : "Add to managed"} placement="top">
-                          <button
-                            onClick={() => toggleProcessManaged(p)}
-                            className="p-1 rounded hover:bg-muted transition-colors"
-                          >
-                            <Star
-                              size={14}
-                              className={p.managed ? "text-warning fill-warning" : "text-muted-foreground"}
-                            />
-                          </button>
-                        </Tooltip>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-mono text-xs">{p.pid}</span>
-                      </TableCell>
-                      <TableCell>
-                        <Tooltip content={p.name} placement="top">
-                          <span className="font-medium">{p.name}</span>
-                        </Tooltip>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-muted-foreground">{p.user}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-mono text-xs">{p.address}</span>
-                      </TableCell>
-                      <TableCell>
-                        <Chip variant="filter">{p.port}</Chip>
-                      </TableCell>
-                      <TableCell>
-                        <Chip variant="filter">{p.protocol}</Chip>
-                      </TableCell>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10 pl-4 pr-0"></TableHead>
+                      <TableHead className="min-w-[120px]">Process</TableHead>
+                      <TableHead className="min-w-[70px]">PID</TableHead>
+                      <TableHead className="min-w-[80px]">Port</TableHead>
+                      <TableHead className="min-w-[120px]">Address</TableHead>
+                      <TableHead className="min-w-[80px]">User</TableHead>
+                      <TableHead className="min-w-[80px]">Protocol</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredProcesses.map((p) => (
+                      <TableRow key={`${p.pid}:${p.port}`}>
+                        <TableCell className="pl-4 pr-0">
+                          <Tooltip content={p.managed ? "Managed" : "Add to managed"} placement="top">
+                            <button
+                              onClick={() => toggleProcessManaged(p)}
+                              className="p-1 rounded hover:bg-muted transition-colors"
+                            >
+                              <Star
+                                size={14}
+                                className={p.managed ? "text-warning fill-warning" : "text-muted-foreground"}
+                              />
+                            </button>
+                          </Tooltip>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium text-sm whitespace-nowrap">{p.name}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-mono text-xs text-muted-foreground">{p.pid}</span>
+                        </TableCell>
+                        <TableCell>
+                          <Chip variant="filter">{p.port}</Chip>
+                        </TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center gap-1 font-mono text-xs whitespace-nowrap">
+                            {p.address}
+                            <CopyButton value={`${p.address === "*" || p.address === "0.0.0.0" ? "127.0.0.1" : p.address}:${p.port}`} label="address" />
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-xs text-muted-foreground">{p.user || "-"}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-xs text-muted-foreground">{p.protocol}</span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         )
       )}
-    </div>
+    </motion.div>
   );
 }

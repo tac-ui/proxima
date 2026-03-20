@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useApiContext } from "@/contexts/ApiContext";
 import { api } from "@/lib/api";
+import { motion } from "framer-motion";
 import {
   Badge,
   Button,
@@ -19,6 +20,7 @@ import {
   Skeleton,
   EmptyState,
   useToast,
+  pageEntrance,
 } from "@tac-ui/web";
 import { ComposeEditor } from "@/components/stacks/ComposeEditor";
 import { ChevronLeft, Play, Square, RotateCw, RefreshCw, Trash2, Box, FileText, Plus } from "@tac-ui/icon";
@@ -187,7 +189,7 @@ export default function StackDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <motion.div className="space-y-6" {...pageEntrance}>
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-4 min-w-0">
@@ -477,6 +479,6 @@ export default function StackDetailPage() {
           </Card>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -3,7 +3,15 @@ import { requireAdmin, errorResponse, ok } from "../../../_lib/auth";
 import { ensureDb } from "../../../_lib/db";
 import { getDb, schema } from "@server/db/index";
 import { eq } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
+
+function hashApiKey(key: string): string {
+  return createHash("sha256").update(key).digest("hex");
+}
+
+function maskApiKey(storedHash: string): string {
+  return `sk-••••${storedHash.slice(-4)}`;
+}
 
 /** GET — return webhook config for a project */
 export async function GET(
@@ -22,7 +30,10 @@ export async function GET(
     const repo = db.select().from(schema.repositories).where(eq(schema.repositories.id, repoId)).get();
     if (!repo) throw new Error("Repository not found");
 
-    return ok({ hookEnabled: repo.hookEnabled, hookApiKey: repo.hookApiKey });
+    return ok({
+      hookEnabled: repo.hookEnabled,
+      hookApiKey: repo.hookApiKey ? maskApiKey(repo.hookApiKey) : null,
+    });
   } catch (err) {
     return errorResponse(err);
   }
@@ -48,11 +59,17 @@ export async function PUT(
     if (!repo) throw new Error("Repository not found");
 
     let hookApiKey = repo.hookApiKey;
+    let rawKeyForResponse: string | null = null;
 
     if (body.apiKey !== undefined) {
-      hookApiKey = body.apiKey;
+      // Caller provided a custom key — hash it before storing
+      rawKeyForResponse = body.apiKey;
+      hookApiKey = hashApiKey(body.apiKey);
     } else if (body.enabled && !hookApiKey) {
-      hookApiKey = randomUUID();
+      // Auto-generate a new key — hash before storing, return raw once
+      const newKey = randomUUID();
+      rawKeyForResponse = newKey;
+      hookApiKey = hashApiKey(newKey);
     }
 
     db.update(schema.repositories)
@@ -60,7 +77,12 @@ export async function PUT(
       .where(eq(schema.repositories.id, repoId))
       .run();
 
-    return ok({ hookEnabled: body.enabled, hookApiKey: hookApiKey! });
+    return ok({
+      hookEnabled: body.enabled,
+      // Return the raw key only when a new key was generated/set; otherwise return masked
+      hookApiKey: rawKeyForResponse ?? (hookApiKey ? maskApiKey(hookApiKey) : null),
+      ...(rawKeyForResponse ? { rawApiKey: rawKeyForResponse } : {}),
+    });
   } catch (err) {
     return errorResponse(err);
   }

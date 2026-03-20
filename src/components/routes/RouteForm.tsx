@@ -179,7 +179,13 @@ export function RouteForm({
         label: `[Host] ${proc.name} — :${proc.port}`,
       });
     }
-    return opts;
+    // Deduplicate by value
+    const seen = new Set<string>();
+    return opts.filter((o) => {
+      if (seen.has(o.value)) return false;
+      seen.add(o.value);
+      return true;
+    });
   }, [discoveredServices, listeningPorts, managedServices]);
 
   const handleTargetSelect = (value: string) => {
@@ -283,7 +289,7 @@ export function RouteForm({
         <p className="text-sm font-medium">Origin Service</p>
         {tunnelActive && (
           <p className="text-xs text-muted-foreground -mt-1">
-            SSL is terminated at Cloudflare Edge — use <code className="text-xs px-1 py-0.5 rounded bg-muted">http</code> for local services. cloudflared uses host networking, so <code className="text-xs px-1 py-0.5 rounded bg-muted">localhost</code> works directly.
+            SSL is terminated at Cloudflare Edge — use <code className="text-xs px-1 py-0.5 rounded bg-muted">http</code> for local services. <code className="text-xs px-1 py-0.5 rounded bg-muted">localhost</code> is automatically resolved to the Proxima container.
           </p>
         )}
         {targetOptions.length > 0 && (

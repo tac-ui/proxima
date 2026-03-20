@@ -63,16 +63,21 @@ export function ScriptLogViewer({
 
     const token = localStorage.getItem("proxima_auth_token") ?? "";
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${proto}//${location.host}/api/terminal?token=${encodeURIComponent(token)}`);
+    const ws = new WebSocket(`${proto}//${location.host}/api/terminal`);
 
     ws.onopen = () => {
-      setDisconnected(false);
-      ws.send(JSON.stringify({ type: "join", terminalId }));
+      // Send auth as the first message
+      ws.send(JSON.stringify({ type: "auth", token }));
     };
 
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
+        if (msg.type === "auth" && msg.status === "ok") {
+          setDisconnected(false);
+          ws.send(JSON.stringify({ type: "join", terminalId }));
+          return;
+        }
         if (msg.terminalId !== terminalId) return;
 
         if (msg.type === "write" || msg.type === "buffer") {
