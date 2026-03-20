@@ -38,6 +38,7 @@ export async function PUT(req: NextRequest) {
       apiToken,
       zones: Array.isArray(body.zones) ? body.zones : existing.zones,
       autoSync: typeof body.autoSync === "boolean" ? body.autoSync : existing.autoSync,
+      defaultZone: typeof body.defaultZone === "string" ? body.defaultZone : existing.defaultZone,
     });
 
     logAudit({ userId: auth.userId, username: auth.username, action: "update", category: "settings", targetType: "setting", targetName: "cloudflare", ipAddress: getClientIp(req) });
