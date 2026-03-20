@@ -136,10 +136,22 @@ export default function ServersPage() {
     const res = await api.discoverServices();
     if (res.ok && res.data) {
       setServices(res.data);
-      checkPortStatus(res.data);
+      // Inline port check to avoid dependency cycle
+      const allPorts = res.data
+        .flatMap((s) => s.ports)
+        .filter((p, i, arr) => arr.findIndex((x) => x.hostPort === p.hostPort) === i)
+        .map((p) => ({ port: p.hostPort }));
+      if (allPorts.length > 0) {
+        setCheckingPorts(true);
+        const portRes = await api.checkPorts(allPorts);
+        if (portRes.ok && portRes.data) {
+          setPortStatus(portRes.data.results);
+        }
+        setCheckingPorts(false);
+      }
     }
     setLoadingServices(false);
-  }, [checkPortStatus]);
+  }, []);
 
   const fetchProcesses = useCallback(async () => {
     setLoadingProcesses(true);
@@ -174,13 +186,15 @@ export default function ServersPage() {
     if (connected) fetchProcesses();
   }, [connected, fetchProcesses]);
 
-  // Subscribe to real-time container updates via SSE
+  // Subscribe to real-time container updates via SSE (stable ref to avoid re-subscription loops)
+  const fetchServicesRef = useRef(fetchServices);
+  fetchServicesRef.current = fetchServices;
   useEffect(() => {
     const unsub = subscribe("discoveredServices", () => {
-      fetchServices();
+      fetchServicesRef.current();
     });
     return unsub;
-  }, [subscribe, fetchServices]);
+  }, [subscribe]);
 
   const handleRefresh = () => {
     if (tab === "containers") fetchServices();

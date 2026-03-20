@@ -8,6 +8,21 @@ const IMAGE = "cloudflare/cloudflared:latest";
 
 const docker = new Docker();
 
+// Mutex for container lifecycle operations to prevent concurrent start/stop/restart
+let containerBusy = false;
+
+async function withContainerLock<T>(fn: () => Promise<T>): Promise<T> {
+  if (containerBusy) {
+    throw new Error("Another tunnel operation is already in progress");
+  }
+  containerBusy = true;
+  try {
+    return await fn();
+  } finally {
+    containerBusy = false;
+  }
+}
+
 /** Detect the network and container name of the Proxima container (self). */
 async function getProximaContainerInfo(): Promise<{ network: string; hostname: string } | null> {
   try {
@@ -40,16 +55,20 @@ interface TunnelCredentials {
 
 export function parseTunnelToken(token: string): TunnelCredentials {
   // Tunnel token is base64-encoded JSON: {"a":"<account>","t":"<tunnel_id>","s":"<secret>"}
-  const decoded = Buffer.from(token, "base64").toString("utf-8");
-  const parsed = JSON.parse(decoded);
-  if (!parsed.a || !parsed.t || !parsed.s) {
-    throw new Error("Invalid tunnel token: missing required fields");
+  try {
+    const decoded = Buffer.from(token, "base64").toString("utf-8");
+    const parsed = JSON.parse(decoded);
+    if (!parsed.a || !parsed.t || !parsed.s) {
+      throw new Error("missing required fields (a, t, s)");
+    }
+    return {
+      accountTag: parsed.a,
+      tunnelId: parsed.t,
+      tunnelSecret: parsed.s,
+    };
+  } catch (err) {
+    throw new Error(`Invalid tunnel token: ${err instanceof Error ? err.message : "not valid base64-encoded JSON"}`);
   }
-  return {
-    accountTag: parsed.a,
-    tunnelId: parsed.t,
-    tunnelSecret: parsed.s,
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -63,6 +82,14 @@ export async function pushTunnelIngress(token: string, apiToken: string): Promis
   const hosts = await listProxyHosts();
   const enabledHosts = hosts.filter((h) => h.enabled);
 
+  // Check if cloudflared is running on host network — if so, localhost works directly
+  let cloudflaredOnHost = true;
+  try {
+    const cfdContainer = docker.getContainer(CONTAINER_NAME);
+    const cfdInfo = await cfdContainer.inspect();
+    cloudflaredOnHost = cfdInfo.HostConfig?.NetworkMode === "host";
+  } catch { /* not running yet, assume host mode */ }
+
   // Resolve Proxima container name so localhost references can be rewritten
   const proximaInfo = await getProximaContainerInfo();
   const proximaHost = proximaInfo?.hostname ?? "localhost";
@@ -74,8 +101,10 @@ export async function pushTunnelIngress(token: string, apiToken: string): Promis
   }> = [];
 
   for (const host of enabledHosts) {
-    // If forwardHost is localhost/127.0.0.1 and we're on a Docker network, rewrite to Proxima container name
-    const resolvedHost = (host.forwardHost === "localhost" || host.forwardHost === "127.0.0.1")
+    // If cloudflared is on host network, localhost/127.0.0.1 resolves to the host directly
+    // Only rewrite to container name when cloudflared is on a Docker bridge network
+    const resolvedHost = !cloudflaredOnHost
+      && (host.forwardHost === "localhost" || host.forwardHost === "127.0.0.1")
       && proximaInfo?.network && proximaInfo.network !== "host"
       ? proximaHost
       : host.forwardHost;
@@ -232,6 +261,7 @@ async function removeExisting(): Promise<void> {
  * No config files or volume mounts needed — ingress is managed via Cloudflare API.
  */
 export async function startCloudflared(token: string): Promise<void> {
+  return withContainerLock(async () => {
   await ensureImage();
   await removeExisting();
 
@@ -275,28 +305,87 @@ export async function startCloudflared(token: string): Promise<void> {
   } catch (err) {
     logger.warn("cloudflared", `Failed to push initial ingress config: ${err}`);
   }
+  });
 }
 
 export async function stopCloudflared(): Promise<void> {
-  try {
-    const container = docker.getContainer(CONTAINER_NAME);
-    const info = await container.inspect();
-    if (info.State?.Running) {
-      await container.stop();
+  return withContainerLock(async () => {
+    try {
+      const container = docker.getContainer(CONTAINER_NAME);
+      const info = await container.inspect();
+      if (info.State?.Running) {
+        await container.stop();
+      }
+      await container.remove();
+      logger.info("cloudflared", "Container stopped and removed");
+    } catch (err: unknown) {
+      if (err && typeof err === "object" && "statusCode" in err && (err as { statusCode: number }).statusCode === 404) {
+        return;
+      }
+      throw err;
     }
-    await container.remove();
-    logger.info("cloudflared", "Container stopped and removed");
-  } catch (err: unknown) {
-    if (err && typeof err === "object" && "statusCode" in err && (err as { statusCode: number }).statusCode === 404) {
-      return;
-    }
-    throw err;
-  }
+  });
 }
 
 export async function restartCloudflared(token: string): Promise<void> {
-  await stopCloudflared();
-  await startCloudflared(token);
+  return withContainerLock(async () => {
+    // Inline stop logic to avoid double-locking
+    try {
+      const container = docker.getContainer(CONTAINER_NAME);
+      const info = await container.inspect();
+      if (info.State?.Running) {
+        await container.stop();
+      }
+      await container.remove();
+      logger.info("cloudflared", "Container stopped and removed");
+    } catch (err: unknown) {
+      if (err && typeof err === "object" && "statusCode" in err && (err as { statusCode: number }).statusCode === 404) {
+        // ok — container didn't exist
+      } else {
+        throw err;
+      }
+    }
+
+    // Inline start logic
+    await ensureImage();
+    await removeExisting();
+
+    const container = await docker.createContainer({
+      name: CONTAINER_NAME,
+      Image: IMAGE,
+      Cmd: ["tunnel", "--no-autoupdate", "run"],
+      Env: [`TUNNEL_TOKEN=${token}`],
+      HostConfig: {
+        NetworkMode: "host",
+        RestartPolicy: { Name: "on-failure", MaximumRetryCount: 3 },
+      },
+    });
+
+    await container.start();
+
+    const proximaInfo = await getProximaContainerInfo();
+    if (proximaInfo?.network && proximaInfo.network !== "host") {
+      try {
+        const network = docker.getNetwork(proximaInfo.network);
+        await network.connect({ Container: container.id });
+        logger.info("cloudflared", `Also connected to network: ${proximaInfo.network}`);
+      } catch (err) {
+        logger.warn("cloudflared", `Failed to connect to ${proximaInfo.network}: ${err}`);
+      }
+    }
+
+    logger.info("cloudflared", "Container restarted (host + proxima network)");
+
+    try {
+      const { getCloudflareSettings } = await import("./cloudflare");
+      const cfSettings = getCloudflareSettings();
+      if (cfSettings.apiToken) {
+        await pushTunnelIngress(token, cfSettings.apiToken);
+      }
+    } catch (err) {
+      logger.warn("cloudflared", `Failed to push ingress config after restart: ${err}`);
+    }
+  });
 }
 
 /**

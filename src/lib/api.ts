@@ -73,6 +73,8 @@ export const api = {
   // Repos
   getRepos: () => request<RepositoryInfo[]>("GET", "/api/repos"),
   getRepo: (id: number | string) => request<RepositoryInfo>("GET", `/api/repos/${encodeURIComponent(id)}`),
+  updateRepoDomain: (id: number, domainConnection: import("@/types").DomainConnection | null) =>
+    request<RepositoryInfo>("PUT", `/api/repos/${id}`, { domainConnection }),
   deleteRepo: (id: number) => request("DELETE", `/api/repos/${id}`),
   pullRepo: (id: number) => request<{ message: string }>("POST", `/api/repos/${id}/pull`),
   getRepoEnv: (id: number, filePath: string = ".env") => request<{ content: string }>("GET", `/api/repos/${id}/env?path=${encodeURIComponent(filePath)}`),
@@ -181,6 +183,7 @@ export const api = {
   getCloudflaredStatus: () => request<CloudflaredStatus>("GET", "/api/settings/cloudflare/tunnel/status"),
   tunnelAction: (action: "start" | "stop" | "restart") =>
     request<{ success: boolean }>("POST", "/api/settings/cloudflare/tunnel/action", { action }),
+  syncAllDns: () => request<{ synced: number; failed: number; errors: string[] }>("POST", "/api/settings/cloudflare/sync"),
 
   // Monitoring
   getStackLogs: (name: string) => request<{ logs: string }>("GET", `/api/stacks/${encodeURIComponent(name)}/logs`),

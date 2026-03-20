@@ -240,6 +240,14 @@ export interface RepoEnvFile {
   path: string;  // Relative path (e.g. "backend/.env.production")
 }
 
+export interface DomainConnection {
+  domain: string;
+  forwardHost: string;
+  forwardPort: number;
+  forwardScheme: "http" | "https";
+  proxyHostId?: number;
+}
+
 export interface RepositoryInfo {
   id: number;
   name: string;
@@ -250,6 +258,7 @@ export interface RepositoryInfo {
   envFiles: RepoEnvFile[];
   hookEnabled: boolean;
   hookApiKey: string | null;
+  domainConnection: DomainConnection | null;
 }
 
 export interface WebhookLog {

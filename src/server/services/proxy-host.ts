@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../db/index";
 import { proxyHosts, type ProxyHost, type NewProxyHost } from "../db/schema";
 import { logger } from "../lib/logger";
+import { ValidationError } from "../lib/errors";
 import { syncCloudflaredConfig } from "./cloudflared";
 import { syncDomainsCreate, syncDomainsDelete } from "./cloudflare";
 import type { ProxyLocation } from "@/types";
@@ -68,7 +69,7 @@ export async function get(id: number): Promise<ReturnType<typeof serializeRow>> 
   const db = getDb();
   const row = await db.select().from(proxyHosts).where(eq(proxyHosts.id, id)).get();
   if (!row) {
-    throw new Error(`Proxy host ${id} not found`);
+    throw new ValidationError(`Proxy host ${id} not found`);
   }
   return serializeRow(row);
 }
@@ -76,10 +77,19 @@ export async function get(id: number): Promise<ReturnType<typeof serializeRow>> 
 export type ProxyHostResult = ReturnType<typeof serializeRow> & { _warnings?: string[] };
 
 export async function create(data: CreateProxyHostData): Promise<ProxyHostResult> {
+  // Validate no duplicate domains within the request
+  const unique = new Set(data.domainNames);
+  if (unique.size !== data.domainNames.length) {
+    throw new ValidationError("Duplicate domain names in request");
+  }
+  if (data.domainNames.length === 0) {
+    throw new ValidationError("At least one domain name is required");
+  }
+
   // Check all domains are available
   for (const domain of data.domainNames) {
     if (await isDomainTaken(domain)) {
-      throw new Error(`Domain ${domain} is already in use`);
+      throw new ValidationError(`Domain ${domain} is already in use`);
     }
   }
 
@@ -132,10 +142,17 @@ export async function update(id: number, data: UpdateProxyHostData): Promise<Pro
   const existing = await get(id);
 
   // Check domain availability (exclude current host)
-  if (data.domainNames) {
+  if (data.domainNames !== undefined) {
+    if (data.domainNames.length === 0) {
+      throw new ValidationError("At least one domain name is required");
+    }
+    const unique = new Set(data.domainNames);
+    if (unique.size !== data.domainNames.length) {
+      throw new ValidationError("Duplicate domain names in request");
+    }
     for (const domain of data.domainNames) {
       if (await isDomainTaken(domain, id)) {
-        throw new Error(`Domain ${domain} is already in use`);
+        throw new ValidationError(`Domain ${domain} is already in use`);
       }
     }
   }
@@ -175,13 +192,23 @@ export async function update(id: number, data: UpdateProxyHostData): Promise<Pro
     const oldDomains: string[] = existing.domainNames;
     const removed = oldDomains.filter((d) => !data.domainNames!.includes(d));
     const added = data.domainNames.filter((d) => !oldDomains.includes(d));
-    try {
-      if (removed.length > 0) await syncDomainsDelete(removed);
-      if (added.length > 0) await syncDomainsCreate(added);
-    } catch (err) {
-      const msg = `DNS sync failed: ${err instanceof Error ? err.message : err}`;
-      logger.warn("proxy-host", msg);
-      warnings.push(msg);
+    if (removed.length > 0) {
+      try {
+        await syncDomainsDelete(removed);
+      } catch (err) {
+        const msg = `DNS delete sync failed: ${err instanceof Error ? err.message : err}`;
+        logger.warn("proxy-host", msg);
+        warnings.push(msg);
+      }
+    }
+    if (added.length > 0) {
+      try {
+        await syncDomainsCreate(added);
+      } catch (err) {
+        const msg = `DNS create sync failed: ${err instanceof Error ? err.message : err}`;
+        logger.warn("proxy-host", msg);
+        warnings.push(msg);
+      }
     }
   }
 

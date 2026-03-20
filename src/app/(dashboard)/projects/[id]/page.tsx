@@ -46,7 +46,8 @@ import {
 import { CopyButton } from "@/components/shared/CopyButton";
 import dynamic from "next/dynamic";
 import { useConfirm } from "@/hooks/useConfirm";
-import type { RepositoryInfo, RepoEnvFile, WebhookLog } from "@/types";
+import { Globe } from "@tac-ui/icon";
+import type { RepositoryInfo, RepoEnvFile, WebhookLog, DomainConnection, CloudflareZone } from "@/types";
 
 const TerminalView = dynamic(
   () => import("@/components/terminal/Terminal").then((m) => m.Terminal),
@@ -133,6 +134,12 @@ export default function ProjectDetailPage() {
   const [webhookLogsPage, setWebhookLogsPage] = useState(1);
   const [webhookLogsLoading, setWebhookLogsLoading] = useState(false);
 
+  // Domain connection
+  const [domainForm, setDomainForm] = useState({ subdomain: "", host: "127.0.0.1", port: "3000", scheme: "http" as "http" | "https" });
+  const [domainSaving, setDomainSaving] = useState(false);
+  const [cfZones, setCfZones] = useState<CloudflareZone[]>([]);
+  const [selectedZone, setSelectedZone] = useState("");
+
   // Derive repoId from loaded repo (used for all API calls)
   const repoId = repo?.id ?? 0;
 
@@ -176,8 +183,52 @@ export default function ProjectDetailPage() {
     if (connected) {
       fetchRepo();
       fetchCommits();
+      api.getCloudflareSettings().then((res) => {
+        const data = res.data;
+        if (res.ok && data?.zones?.length) {
+          setCfZones(data.zones);
+          const defaultZ = data.defaultZone && data.zones.some((z) => z.zoneName === data.defaultZone)
+            ? data.defaultZone
+            : data.zones[0].zoneName;
+          setSelectedZone(defaultZ);
+        }
+      }).catch(() => {});
     }
   }, [connected, fetchRepo, fetchCommits]);
+
+  const handleSaveDomain = async () => {
+    if (!repo || !selectedZone) return;
+    const sub = domainForm.subdomain.trim();
+    if (!sub) { toast("Subdomain is required", { variant: "error" }); return; }
+    const domain = `${sub}.${selectedZone}`;
+    setDomainSaving(true);
+    const res = await api.updateRepoDomain(repo.id, {
+      domain,
+      forwardHost: domainForm.host,
+      forwardPort: Number(domainForm.port),
+      forwardScheme: domainForm.scheme,
+    });
+    if (res.ok && res.data) {
+      setRepo(res.data);
+      toast(`Domain ${domain} connected`, { variant: "success" });
+    } else {
+      toast(res.error ?? "Failed to save domain", { variant: "error" });
+    }
+    setDomainSaving(false);
+  };
+
+  const handleRemoveDomain = async () => {
+    if (!repo) return;
+    setDomainSaving(true);
+    const res = await api.updateRepoDomain(repo.id, null);
+    if (res.ok && res.data) {
+      setRepo(res.data);
+      toast("Domain disconnected", { variant: "success" });
+    } else {
+      toast(res.error ?? "Failed to remove domain", { variant: "error" });
+    }
+    setDomainSaving(false);
+  };
 
   // Restore active terminals
   useEffect(() => {
@@ -676,6 +727,90 @@ export default function ProjectDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Domain Connection */}
+      {isManager && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-point/15 flex items-center justify-center">
+                <Globe size={18} className="text-point" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold">Domain Connection</h2>
+                <p className="text-xs text-muted-foreground">Connect a domain to route traffic to this project</p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {repo.domainConnection ? (
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <a href={`https://${repo.domainConnection.domain}`} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-point hover:underline inline-flex items-center gap-1">
+                    {repo.domainConnection.domain}
+                    <ExternalLink size={12} />
+                  </a>
+                  <p className="text-xs text-muted-foreground font-mono">
+                    → {repo.domainConnection.forwardScheme}://{repo.domainConnection.forwardHost}:{repo.domainConnection.forwardPort}
+                  </p>
+                </div>
+                <Button variant="destructive" size="sm" onClick={handleRemoveDomain} loading={domainSaving}>
+                  Disconnect
+                </Button>
+              </div>
+            ) : cfZones.length > 0 ? (
+              <div className="space-y-3">
+                <div className="flex items-end gap-2">
+                  <div className="flex-1">
+                    <label className="text-xs font-medium mb-1 block">Subdomain</label>
+                    <Input
+                      value={domainForm.subdomain}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDomainForm((f) => ({ ...f, subdomain: e.target.value }))}
+                      placeholder={repo.name}
+                    />
+                  </div>
+                  <span className="flex items-center h-[var(--input-md-height)] text-sm text-muted-foreground pb-px">.</span>
+                  <div>
+                    <label className="text-xs font-medium mb-1 block">Zone</label>
+                    <select
+                      value={selectedZone}
+                      onChange={(e) => setSelectedZone(e.target.value)}
+                      className="h-[var(--input-md-height)] px-3 rounded-lg border border-border bg-surface text-sm"
+                    >
+                      {cfZones.map((z) => (
+                        <option key={z.zoneId} value={z.zoneName}>{z.zoneName}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex items-end gap-2">
+                  <div className="flex-1">
+                    <label className="text-xs font-medium mb-1 block">Forward Host</label>
+                    <Input
+                      value={domainForm.host}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDomainForm((f) => ({ ...f, host: e.target.value }))}
+                      placeholder="127.0.0.1"
+                    />
+                  </div>
+                  <div className="w-24">
+                    <label className="text-xs font-medium mb-1 block">Port</label>
+                    <Input
+                      value={domainForm.port}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDomainForm((f) => ({ ...f, port: e.target.value }))}
+                      placeholder="3000"
+                    />
+                  </div>
+                </div>
+                <Button size="sm" onClick={handleSaveDomain} loading={domainSaving}>
+                  Connect Domain
+                </Button>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Configure Cloudflare zones in Settings to enable domain connection.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} variant="underline">

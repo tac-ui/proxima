@@ -35,12 +35,14 @@ export async function PUT(req: NextRequest) {
 
     const newEnabled = typeof body.enabled === "boolean" ? body.enabled : existing.enabled;
 
-    // Auto-extract tunnelId from token
+    // Auto-extract tunnelId and accountId from token
     let tunnelId = existing.tunnelId;
+    let accountId = existing.accountId;
     if (tunnelToken && tunnelToken !== existing.tunnelToken) {
       try {
         const creds = parseTunnelToken(tunnelToken);
         tunnelId = creds.tunnelId;
+        accountId = creds.accountTag;
       } catch (err) {
         logger.warn("cloudflare", `Failed to parse tunnel token: ${err}`);
       }
@@ -49,8 +51,8 @@ export async function PUT(req: NextRequest) {
     saveTunnelSettings({
       enabled: newEnabled,
       tunnelId,
-      tunnelName: "",
-      accountId: "",
+      tunnelName: existing.tunnelName,
+      accountId,
       tunnelToken,
     });
 

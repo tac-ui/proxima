@@ -273,6 +273,16 @@ function migrateSchema(sqlite: Database.Database): void {
   } catch (err) {
     logger.error("db", `Script file migration failed: ${err}`);
   }
+
+  // v9 → v10: add domain_connection column to repositories
+  try {
+    sqlite.exec(`ALTER TABLE repositories ADD COLUMN domain_connection TEXT`);
+    logger.info("db", "Migration: added domain_connection column to repositories table");
+  } catch (err) {
+    if (err instanceof Error && !err.message.includes("duplicate column")) {
+      throw err;
+    }
+  }
 }
 
 export function getDb(): ReturnType<typeof drizzle<typeof schema>> {

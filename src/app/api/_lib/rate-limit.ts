@@ -4,16 +4,22 @@ const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 interface RateLimitEntry {
   attempts: number;
   lockedUntil: number;
+  lastAttempt: number;
 }
 
 const MAX_ENTRIES = 10_000;
 const rateLimitMap = new Map<string, RateLimitEntry>();
 
-// Periodic cleanup of expired entries to prevent memory growth
+// Periodic cleanup of expired and stale entries to prevent memory growth
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of rateLimitMap) {
+    // Remove expired lockouts
     if (entry.lockedUntil <= now && entry.attempts >= MAX_LOGIN_ATTEMPTS) {
+      rateLimitMap.delete(key);
+    }
+    // Remove stale sub-threshold entries (older than lockout duration)
+    else if (entry.lockedUntil === 0 && entry.lastAttempt && now - entry.lastAttempt > LOCKOUT_DURATION_MS) {
       rateLimitMap.delete(key);
     }
   }
@@ -38,8 +44,9 @@ export function recordFailedAttempt(ip: string): void {
     const firstKey = rateLimitMap.keys().next().value;
     if (firstKey) rateLimitMap.delete(firstKey);
   }
-  const entry = rateLimitMap.get(ip) ?? { attempts: 0, lockedUntil: 0 };
+  const entry = rateLimitMap.get(ip) ?? { attempts: 0, lockedUntil: 0, lastAttempt: 0 };
   entry.attempts += 1;
+  entry.lastAttempt = Date.now();
   if (entry.attempts >= MAX_LOGIN_ATTEMPTS) {
     entry.lockedUntil = Date.now() + LOCKOUT_DURATION_MS;
   }

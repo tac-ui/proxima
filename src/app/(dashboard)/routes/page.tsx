@@ -150,13 +150,13 @@ export default function RoutesPage() {
         </motion.div>
       ) : (
         <motion.div
-          className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"
+          className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 items-stretch"
           variants={staggerContainer}
           initial="hidden"
           animate="visible"
         >
           {filtered.map((host) => (
-            <motion.div key={host.id} variants={cardItem}>
+            <motion.div key={host.id} variants={cardItem} className="h-full">
               <RouteCard host={host} tunnelActive={tunnelActive} onDelete={remove} isManager={isManager} />
             </motion.div>
           ))}

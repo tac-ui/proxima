@@ -70,6 +70,13 @@ export class Stack {
     skipFSOperations: boolean = false,
     dockerfiles?: Record<string, string>,
   ) {
+    // Validate name early before any filesystem operations
+    if (!name.match(/^[a-z0-9_-]+$/)) {
+      throw new ValidationError(
+        "Stack name can only contain lowercase letters, digits, underscores, and hyphens",
+      );
+    }
+
     this.stacksDir = stacksDir;
     this.name = name;
     this._composeYAML = composeYAML;
@@ -77,6 +84,12 @@ export class Stack {
     this._dockerfiles = dockerfiles;
 
     if (!skipFSOperations) {
+      // Verify resolved path stays within stacksDir
+      const resolved = path.resolve(path.join(stacksDir, name));
+      if (!resolved.startsWith(path.resolve(stacksDir))) {
+        throw new ValidationError("Invalid stack name: path traversal detected");
+      }
+
       for (const filename of ACCEPTED_COMPOSE_FILENAMES) {
         if (fs.existsSync(path.join(this.path, filename))) {
           this._composeFileName = filename;
@@ -255,8 +268,16 @@ export class Stack {
       }
 
       for (const [filename, content] of Object.entries(this._dockerfiles)) {
+        // Validate Dockerfile filename to prevent path traversal
+        if (!/^Dockerfile(\.[a-zA-Z0-9_-]+)?$/.test(filename)) {
+          throw new ValidationError(`Invalid Dockerfile name: ${filename}`);
+        }
+        const resolvedPath = path.resolve(path.join(dir, filename));
+        if (!resolvedPath.startsWith(path.resolve(dir))) {
+          throw new ValidationError(`Invalid Dockerfile path: ${filename}`);
+        }
         if (content.trim() !== "") {
-          await fsAsync.writeFile(path.join(dir, filename), content, "utf-8");
+          await fsAsync.writeFile(resolvedPath, content, "utf-8");
         }
       }
     }

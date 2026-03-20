@@ -7,6 +7,8 @@ import { logger } from "@server/lib/logger";
 import { logAudit, getClientIp } from "@server/services/audit";
 import { toRepoInfo } from "../../_lib/repo-utils";
 import { ScriptService } from "@server/services/script";
+import { create as createProxyHost, remove as removeProxyHost, update as updateProxyHost } from "@server/services/proxy-host";
+import type { DomainConnection } from "@/types";
 
 export async function GET(
   req: NextRequest,
@@ -27,6 +29,86 @@ export async function GET(
     if (!repo) throw new Error("Repository not found");
 
     return ok(toRepoInfo(repo));
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    ensureDb();
+    const auth = requireManager(req);
+    const { id } = await params;
+    const repoId = parseInt(id, 10);
+    if (isNaN(repoId)) throw new Error("Invalid repository id");
+
+    const db = getDb();
+    const repo = db.select().from(schema.repositories).where(eq(schema.repositories.id, repoId)).get();
+    if (!repo) throw new Error("Repository not found");
+
+    const body = await req.json();
+    const { domainConnection } = body as { domainConnection: DomainConnection | null };
+
+    const existing = repo.domainConnection ? JSON.parse(repo.domainConnection) as DomainConnection : null;
+
+    if (domainConnection) {
+      // Create or update proxy host
+      if (existing?.proxyHostId) {
+        // Update existing proxy host
+        try {
+          await updateProxyHost(existing.proxyHostId, {
+            domainNames: [domainConnection.domain],
+            forwardScheme: domainConnection.forwardScheme,
+            forwardHost: domainConnection.forwardHost,
+            forwardPort: domainConnection.forwardPort,
+          });
+          domainConnection.proxyHostId = existing.proxyHostId;
+        } catch {
+          // Proxy host may have been deleted externally, create new
+          const result = await createProxyHost({
+            domainNames: [domainConnection.domain],
+            forwardScheme: domainConnection.forwardScheme,
+            forwardHost: domainConnection.forwardHost,
+            forwardPort: domainConnection.forwardPort,
+            enabled: true,
+            meta: { repoId, type: "domain-connection" },
+          });
+          domainConnection.proxyHostId = result.id;
+        }
+      } else {
+        // Create new proxy host
+        const result = await createProxyHost({
+          domainNames: [domainConnection.domain],
+          forwardScheme: domainConnection.forwardScheme,
+          forwardHost: domainConnection.forwardHost,
+          forwardPort: domainConnection.forwardPort,
+          enabled: true,
+          meta: { repoId, type: "domain-connection" },
+        });
+        domainConnection.proxyHostId = result.id;
+      }
+
+      db.update(schema.repositories)
+        .set({ domainConnection: JSON.stringify(domainConnection) })
+        .where(eq(schema.repositories.id, repoId))
+        .run();
+    } else {
+      // Remove domain connection
+      if (existing?.proxyHostId) {
+        try { await removeProxyHost(existing.proxyHostId); } catch { /* may already be deleted */ }
+      }
+      db.update(schema.repositories)
+        .set({ domainConnection: null })
+        .where(eq(schema.repositories.id, repoId))
+        .run();
+    }
+
+    const updated = db.select().from(schema.repositories).where(eq(schema.repositories.id, repoId)).get();
+    logAudit({ userId: auth.userId, username: auth.username, action: "update", category: "repo", targetType: "repo", targetName: repo.name, ipAddress: getClientIp(req) });
+    return ok(toRepoInfo(updated!));
   } catch (err) {
     return errorResponse(err);
   }

@@ -8,7 +8,6 @@ import {
   Input,
   Select,
   Switch,
-  Chip,
   Combobox,
 } from "@tac-ui/web";
 import { Cloud, ArrowRight, Lock, Server } from "@tac-ui/icon";
@@ -28,7 +27,7 @@ export function RouteForm({
   submitLabel = "Save",
 }: RouteFormProps) {
   const { connected } = useApiContext();
-  const [domains, setDomains] = useState<string[]>(initial?.domainNames ?? [""]);
+  const [domain, setDomain] = useState<string>(initial?.domainNames?.[0] ?? "");
   const [domainInput, setDomainInput] = useState("");
   const [scheme, setScheme] = useState<"http" | "https">(initial?.forwardScheme ?? "http");
   const [forwardHost, setForwardHost] = useState(initial?.forwardHost ?? "");
@@ -78,63 +77,30 @@ export function RouteForm({
     }).catch(() => {});
   }, [connected]);
 
-  const addDomain = () => {
-    const d = domainInput.trim();
-    if (d && !domains.includes(d)) {
-      setDomains((prev) => [...prev.filter(Boolean), d]);
-      setDomainInput("");
-    }
-  };
-
-  const removeDomain = (d: string) => setDomains((prev) => prev.filter((x) => x !== d));
-
-  const addZoneDomain = () => {
-    const sub = subdomainInput.trim();
-    if (!selectedZone) return;
-    const full = sub ? `${sub}.${selectedZone}` : selectedZone;
-    if (!domains.includes(full)) {
-      setDomains((prev) => [...prev.filter(Boolean), full]);
-      setSubdomainInput("");
-    }
-  };
-
-  const validate = () => {
-    const e: Record<string, string> = {};
-    if (domains.filter(Boolean).length === 0) e.domains = "At least one domain is required";
-    if (!forwardHost.trim()) e.forwardHost = "Forward host is required";
-    if (!forwardPort || isNaN(Number(forwardPort))) e.forwardPort = "Valid port is required";
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
-
-  const collectDomains = (): string[] => {
-    const all = [...domains];
-    // Auto-include current input value
+  /** Resolve the final domain string from current inputs */
+  const resolveDomain = (): string => {
     if (domainMode === "zone" && selectedZone) {
       const sub = subdomainInput.trim();
-      const full = sub ? `${sub}.${selectedZone}` : selectedZone;
-      if (!all.includes(full)) all.push(full);
-    } else {
-      const d = domainInput.trim();
-      if (d && !all.includes(d)) all.push(d);
+      return sub ? `${sub}.${selectedZone}` : "";
     }
-    return all.filter(Boolean);
+    return domainInput.trim() || domain;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const finalDomains = collectDomains();
-    setDomains(finalDomains);
+    // Use current input or existing domain
+    const finalDomain = resolveDomain() || domain;
+    setDomain(finalDomain);
     setDomainInput("");
     setSubdomainInput("");
     const errs: Record<string, string> = {};
-    if (finalDomains.length === 0) errs.domains = "At least one domain is required";
+    if (!finalDomain) errs.domains = "Domain is required";
     if (!forwardHost.trim()) errs.forwardHost = "Forward host is required";
     if (!forwardPort || isNaN(Number(forwardPort))) errs.forwardPort = "Valid port is required";
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
     await onSubmit({
-      domainNames: finalDomains,
+      domainNames: [finalDomain],
       forwardScheme: scheme,
       forwardHost: forwardHost.trim(),
       forwardPort: Number(forwardPort),
@@ -226,10 +192,10 @@ export function RouteForm({
         </div>
       )}
 
-      {/* Domain Names */}
+      {/* Domain Name */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-medium">Domain Names</p>
+          <p className="text-sm font-medium">Domain Name</p>
           {cfZones.length > 0 && (
             <button
               type="button"
@@ -244,42 +210,41 @@ export function RouteForm({
           <div className="flex items-end gap-2">
             <Input
               value={subdomainInput}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSubdomainInput(e.target.value)}
-              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                if (e.key === "Enter") { e.preventDefault(); addZoneDomain(); }
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                setSubdomainInput(e.target.value);
+                const sub = e.target.value.trim();
+                if (selectedZone && sub) {
+                  setDomain(`${sub}.${selectedZone}`);
+                }
               }}
               placeholder="subdomain"
               className="flex-1"
+              error={!!errors.domains}
             />
             <span className="flex items-center h-[var(--input-md-height)] text-sm text-muted-foreground pb-px">.</span>
             <Select
               options={cfZones.map((z) => ({ value: z.zoneName, label: z.zoneName }))}
               value={selectedZone}
-              onChange={(v: string) => setSelectedZone(v)}
+              onChange={(v: string) => {
+                setSelectedZone(v);
+                const sub = subdomainInput.trim();
+                if (sub) setDomain(`${sub}.${v}`);
+              }}
               className="!h-[var(--input-md-height)]"
             />
           </div>
         ) : (
-          <div className="flex gap-2">
-            <Input
-              value={domainInput}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDomainInput(e.target.value)}
-              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                if (e.key === "Enter") { e.preventDefault(); addDomain(); }
-              }}
-              placeholder="example.com"
-              className="flex-1"
-            />
-          </div>
+          <Input
+            value={domain}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDomain(e.target.value)}
+            placeholder="example.com"
+            error={!!errors.domains}
+          />
         )}
-        {domains.filter(Boolean).length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-2">
-            {domains.filter(Boolean).map((d) => (
-              <Chip key={d} variant="input" onDismiss={() => removeDomain(d)}>
-                {d}
-              </Chip>
-            ))}
-          </div>
+        {domain && (
+          <p className="text-xs text-muted-foreground">
+            {domain}
+          </p>
         )}
         {errors.domains && <p className="text-xs text-error">{errors.domains}</p>}
       </div>
@@ -309,7 +274,7 @@ export function RouteForm({
             ]}
             value={scheme}
             onChange={(v: string) => setScheme(v as "http" | "https")}
-            className="!h-[var(--input-md-height)]"
+            className="!h-[var(--input-md-height)] min-w-[100px]"
           />
           <Input
             value={forwardHost}

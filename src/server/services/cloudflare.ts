@@ -48,11 +48,11 @@ export function getCloudflareSettings(): CloudflareSettings {
   return { apiToken, zones, autoSync, defaultZone: defaultZone || undefined };
 }
 
-export function saveCloudflareSettings(data: CloudflareSettings): void {
+export function saveCloudflareSettings(data: Omit<CloudflareSettings, "autoSync">): void {
   const db = getDb();
   dbHelpers.setSetting(db, SETTING_KEYS.apiToken, data.apiToken);
   dbHelpers.setSetting(db, SETTING_KEYS.zones, JSON.stringify(data.zones));
-  dbHelpers.setSetting(db, SETTING_KEYS.autoSync, String(data.autoSync));
+  dbHelpers.setSetting(db, SETTING_KEYS.autoSync, "true"); // Always enabled
   dbHelpers.setSetting(db, SETTING_KEYS.defaultZone, data.defaultZone ?? "");
   // Clear legacy key on save
   dbHelpers.setSetting(db, SETTING_KEYS.zoneId, "");
@@ -172,7 +172,15 @@ export async function cfFetch<T>(path: string, token: string, options?: RequestI
       ...options?.headers,
     },
   });
-  return res.json();
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    return { success: false, errors: [{ message: `HTTP ${res.status}: ${text.slice(0, 200)}` }] };
+  }
+  try {
+    return await res.json();
+  } catch {
+    return { success: false, errors: [{ message: `Invalid JSON response (HTTP ${res.status})` }] };
+  }
 }
 
 export async function verifyConnection(): Promise<CloudflareTestResult> {
@@ -233,10 +241,14 @@ export async function upsertDnsRecord(domain: string): Promise<void> {
     // Delete any stale A record if it exists
     const staleA = await findDnsRecord(domain, settings.apiToken, zone.zoneId, "A");
     if (staleA) {
-      await cfFetch(`/zones/${zone.zoneId}/dns_records/${staleA.id}`, settings.apiToken, {
+      const delRes = await cfFetch(`/zones/${zone.zoneId}/dns_records/${staleA.id}`, settings.apiToken, {
         method: "DELETE",
       });
-      logger.info("cloudflare", `Deleted stale A record for ${domain}`);
+      if (!delRes.success) {
+        logger.warn("cloudflare", `Failed to delete stale A record for ${domain}: ${delRes.errors?.[0]?.message}`);
+      } else {
+        logger.info("cloudflare", `Deleted stale A record for ${domain}`);
+      }
     }
 
     const existing = await findDnsRecord(domain, settings.apiToken, zone.zoneId, "CNAME");
@@ -249,16 +261,22 @@ export async function upsertDnsRecord(domain: string): Promise<void> {
     });
 
     if (existing) {
-      await cfFetch(`/zones/${zone.zoneId}/dns_records/${existing.id}`, settings.apiToken, {
+      const res = await cfFetch(`/zones/${zone.zoneId}/dns_records/${existing.id}`, settings.apiToken, {
         method: "PUT",
         body,
       });
+      if (!res.success) {
+        throw new Error(`Failed to update CNAME for ${domain}: ${res.errors?.[0]?.message ?? "Unknown error"}`);
+      }
       logger.info("cloudflare", `Updated CNAME record for ${domain} → ${content}`);
     } else {
-      await cfFetch(`/zones/${zone.zoneId}/dns_records`, settings.apiToken, {
+      const res = await cfFetch(`/zones/${zone.zoneId}/dns_records`, settings.apiToken, {
         method: "POST",
         body,
       });
+      if (!res.success) {
+        throw new Error(`Failed to create CNAME for ${domain}: ${res.errors?.[0]?.message ?? "Unknown error"}`);
+      }
       logger.info("cloudflare", `Created CNAME record for ${domain} → ${content}`);
     }
   } catch (err) {
@@ -308,4 +326,37 @@ export async function syncDomainsDelete(domains: string[]): Promise<void> {
   for (const domain of domains) {
     await deleteDnsRecord(domain);
   }
+}
+
+/** Re-sync DNS records for ALL existing proxy hosts. Used for bulk recovery. */
+export async function syncAllDns(): Promise<{ synced: number; failed: number; errors: string[] }> {
+  const { list } = await import("./proxy-host");
+  const hosts = await list();
+  const enabledHosts = hosts.filter((h) => h.enabled);
+  let synced = 0;
+  let failed = 0;
+  const errors: string[] = [];
+
+  for (const host of enabledHosts) {
+    for (const domain of host.domainNames) {
+      try {
+        await upsertDnsRecord(domain);
+        synced++;
+      } catch (err) {
+        failed++;
+        errors.push(`${domain}: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+  }
+
+  // Also push tunnel ingress
+  try {
+    const { syncCloudflaredConfig } = await import("./cloudflared");
+    await syncCloudflaredConfig();
+  } catch (err) {
+    errors.push(`Tunnel ingress: ${err instanceof Error ? err.message : err}`);
+  }
+
+  logger.info("cloudflare", `Sync all DNS: ${synced} synced, ${failed} failed`);
+  return { synced, failed, errors };
 }

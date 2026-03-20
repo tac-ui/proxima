@@ -34,19 +34,28 @@ export function verifyToken(token: string): JWTPayload {
   return jwt.verify(token, secret, { algorithms: ["HS256"] }) as JWTPayload;
 }
 
+let cachedJwtSecret: string | null = null;
+
 export function getJwtSecret(): string {
+  if (cachedJwtSecret) return cachedJwtSecret;
+
   const db = getDb();
   const row = dbHelpers.getSetting(db, "jwtSecret");
 
   if (row) {
+    cachedJwtSecret = row.value;
     return row.value;
   }
 
-  // Generate and persist a new secret
+  // Generate and persist a new secret atomically
   const secret = crypto.randomBytes(64).toString("hex");
   dbHelpers.setSetting(db, "jwtSecret", secret);
+
+  // Re-read to handle race condition: if another request wrote first, use theirs
+  const confirmed = dbHelpers.getSetting(db, "jwtSecret");
+  cachedJwtSecret = confirmed?.value ?? secret;
   logger.info("auth", "Generated new JWT secret and stored in database");
-  return secret;
+  return cachedJwtSecret;
 }
 
 export function needsSetup(): boolean {

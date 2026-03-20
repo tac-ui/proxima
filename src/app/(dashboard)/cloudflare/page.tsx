@@ -51,7 +51,6 @@ export default function CloudflarePage() {
   const [actionLoading, setActionLoading] = useState<"start" | "stop" | "restart" | null>(null);
 
   // Analytics state
-  const cfAutoSync = true; // Always enabled
   const [cfApiToken, setCfApiToken] = useState("");
   const [cfZones, setCfZones] = useState<CloudflareZone[]>([]);
   const [cfDefaultZone, setCfDefaultZone] = useState("");
@@ -121,7 +120,8 @@ export default function CloudflarePage() {
     const res = await api.tunnelAction(action);
     setActionLoading(null);
     if (res.ok) {
-      toast(`Tunnel ${action}ed`, { variant: "success" });
+      const pastTense: Record<string, string> = { start: "started", stop: "stopped", restart: "restarted" };
+      toast(`Tunnel ${pastTense[action] ?? action}`, { variant: "success" });
       setCfdState(action === "stop" ? "stopped" : "starting");
       if (action !== "stop") startPolling();
     } else {
@@ -155,7 +155,7 @@ export default function CloudflarePage() {
       const cfRes = await api.updateCloudflareSettings({
         apiToken: cfApiToken,
         zones,
-        autoSync: cfAutoSync,
+        autoSync: true,
         defaultZone,
       });
       if (cfRes.ok && cfRes.data) {
@@ -310,7 +310,25 @@ export default function CloudflarePage() {
             </div>
           </div>
           {tunToken && cfApiToken && cfdState === "running" && (
-            <p className="text-xs text-success font-medium">All set — routes will auto-sync DNS records and tunnel ingress.</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-success font-medium">All set — routes will auto-sync DNS records and tunnel ingress.</p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={async () => {
+                  toast("Syncing all DNS records...", { variant: "info" });
+                  const res = await api.syncAllDns();
+                  if (res.ok && res.data) {
+                    const { synced, failed } = res.data;
+                    toast(`DNS sync complete: ${synced} synced${failed > 0 ? `, ${failed} failed` : ""}`, { variant: failed > 0 ? "warning" : "success" });
+                  } else {
+                    toast(res.error ?? "Sync failed", { variant: "error" });
+                  }
+                }}
+              >
+                Sync All DNS
+              </Button>
+            </div>
           )}
           {(!tunToken || !cfApiToken) && (
             <p className="text-xs text-muted-foreground">
@@ -424,7 +442,7 @@ export default function CloudflarePage() {
                   try {
                     const [tunRes, cfRes] = await Promise.all([
                       api.updateTunnelSettings({ enabled: true, tunnelToken: tunToken }),
-                      api.updateCloudflareSettings({ apiToken: cfApiToken, zones: cfZones, autoSync: cfAutoSync, defaultZone: cfDefaultZone }),
+                      api.updateCloudflareSettings({ apiToken: cfApiToken, zones: cfZones, autoSync: true, defaultZone: cfDefaultZone }),
                     ]);
                     if (tunRes.ok && tunRes.data) setTunToken(tunRes.data.tunnelToken);
                     if (cfRes.ok && cfRes.data) { setCfApiToken(cfRes.data.apiToken); setCfZones(cfRes.data.zones ?? []); }
