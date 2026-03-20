@@ -11,6 +11,7 @@ RUN apk add --no-cache \
   make \
   g++ \
   su-exec \
+  lsof \
   && npm install -g pnpm
 
 # ---- Dependencies ----

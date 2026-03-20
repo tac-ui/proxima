@@ -250,7 +250,7 @@ export function RouteForm({
               options={cfZones.map((z) => ({ value: z.zoneName, label: z.zoneName }))}
               value={selectedZone}
               onChange={(v: string) => setSelectedZone(v)}
-              className="[&_button]:!h-[var(--input-md-height)] [&_button]:!min-h-[var(--input-md-height)]"
+              className="!h-[var(--input-md-height)]"
             />
           </div>
         ) : (
@@ -303,6 +303,7 @@ export function RouteForm({
             ]}
             value={scheme}
             onChange={(v: string) => setScheme(v as "http" | "https")}
+            className="!h-[var(--input-md-height)]"
           />
           <Input
             value={forwardHost}
