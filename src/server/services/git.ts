@@ -146,12 +146,18 @@ export class GitService {
     this.configureRepo(git, repoUrl, sshKeyPath);
 
     try {
-      await git.fetch(["origin"]);
-      const branches = await git.branch(["-r"]);
-      const remote = branches.all
-        .filter((b) => b.startsWith("origin/") && !b.includes("HEAD"))
-        .map((b) => b.replace("origin/", ""));
-      if (remote.length > 0) return remote;
+      // Use ls-remote to list all remote branches (works with shallow clones)
+      const raw = await git.listRemote(["--heads", "origin"]);
+      const branches = raw
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .map((line) => {
+          const ref = line.split("\t")[1] ?? "";
+          return ref.replace("refs/heads/", "");
+        })
+        .filter((b) => b.length > 0);
+      if (branches.length > 0) return branches;
     } catch {
       // Remote fetch failed (auth/network), fall back to local branches
     }
