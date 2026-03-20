@@ -51,7 +51,7 @@ export default function CloudflarePage() {
   const [actionLoading, setActionLoading] = useState<"start" | "stop" | "restart" | null>(null);
 
   // Analytics state
-  const [cfAutoSync, setCfAutoSync] = useState(false);
+  const cfAutoSync = true; // Always enabled
   const [cfApiToken, setCfApiToken] = useState("");
   const [cfZones, setCfZones] = useState<CloudflareZone[]>([]);
   const [cfDefaultZone, setCfDefaultZone] = useState("");
@@ -66,7 +66,6 @@ export default function CloudflarePage() {
   useEffect(() => {
     api.getCloudflareSettings().then((res) => {
       if (res.ok && res.data) {
-        setCfAutoSync(res.data.autoSync);
         setCfApiToken(res.data.apiToken);
         setCfZones(res.data.zones ?? []);
         setCfDefaultZone(res.data.defaultZone ?? "");

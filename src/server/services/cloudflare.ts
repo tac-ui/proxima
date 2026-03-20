@@ -22,7 +22,7 @@ export interface CloudflareSettings {
 export function getCloudflareSettings(): CloudflareSettings {
   const db = getDb();
   const apiToken = dbHelpers.getSetting(db, SETTING_KEYS.apiToken)?.value ?? "";
-  const autoSync = dbHelpers.getSetting(db, SETTING_KEYS.autoSync)?.value === "true";
+  const autoSync = true; // Always enabled
 
   // Try loading zones JSON
   const zonesRaw = dbHelpers.getSetting(db, SETTING_KEYS.zones)?.value;
