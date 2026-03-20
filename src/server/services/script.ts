@@ -40,7 +40,23 @@ export class ScriptService {
     ScriptService.validateFilename(filename);
     ScriptService.ensureScriptsDir(projectName);
     const filePath = ScriptService.getScriptPath(projectName, filename);
-    fs.writeFileSync(filePath, content, { mode: 0o755 });
+    const normalized = ScriptService.normalizeContent(content);
+    fs.writeFileSync(filePath, normalized, { mode: 0o755 });
+  }
+
+  /** Normalize script content: LF line endings, ensure shebang, trailing newline. */
+  static normalizeContent(content: string): string {
+    // CRLF → LF
+    let result = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    // Ensure shebang
+    if (!result.startsWith("#!")) {
+      result = "#!/bin/bash\nset -e\n\n" + result;
+    }
+    // Ensure trailing newline
+    if (!result.endsWith("\n")) {
+      result += "\n";
+    }
+    return result;
   }
 
   static delete(projectName: string, filename: string): void {

@@ -434,7 +434,12 @@ export default function ProjectDetailPage() {
     setBranchLoading(true);
     const res = await api.getRepoBranches(repoId);
     setBranchLoading(false);
-    if (res.ok && res.data) setBranchList(res.data.branches);
+    if (res.ok && res.data) {
+      setBranchList(res.data.branches);
+    } else {
+      setBranchList([]);
+      toast(res.error ?? "Failed to load branches", { variant: "error" });
+    }
     setBranchOpen(true);
   };
 
@@ -585,9 +590,11 @@ export default function ProjectDetailPage() {
                   <span className="font-mono">{repo.branch}</span>
                   {branchLoading ? <RefreshCw size={10} className="animate-spin" /> : <ChevronDown size={10} />}
                 </button>
-                {branchOpen && branchList.length > 0 && (
+                {branchOpen && (
                   <div className="absolute z-50 top-full left-0 mt-1 max-h-60 overflow-auto rounded-lg border border-border bg-surface shadow-lg p-1 min-w-[180px]">
-                    {branchList.map((b) => (
+                    {branchList.length === 0 ? (
+                      <p className="px-3 py-2 text-xs text-muted-foreground">No branches found</p>
+                    ) : branchList.map((b) => (
                       <button
                         key={b}
                         disabled={checkingOut}
@@ -1054,6 +1061,67 @@ export default function ProjectDetailPage() {
                           />
                         </div>
                       </div>
+                    </div>
+
+                    {/* Webhook Scripts */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Scripts</p>
+                        {isManager && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            leftIcon={<Plus size={12} />}
+                            onClick={() => {
+                              setEditingScript({ name: "", content: "#!/bin/bash\nset -e\n\n" });
+                              setActiveTab("scripts");
+                            }}
+                          >
+                            New Script
+                          </Button>
+                        )}
+                      </div>
+                      {repo.scripts.length === 0 ? (
+                        <p className="text-xs text-muted-foreground py-4 text-center">No scripts yet. Create a script to use with webhooks.</p>
+                      ) : (
+                        <div className="space-y-1">
+                          {repo.scripts.map((script) => {
+                            const slug = script.filename.replace(/\.sh$/, "");
+                            const enabled = script.hookEnabled !== false;
+                            return (
+                              <div key={script.filename} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-border bg-surface">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${enabled ? "bg-success" : "bg-muted-foreground/30"}`} />
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-medium truncate">{script.name}</p>
+                                    <p className="text-[10px] text-muted-foreground font-mono truncate">/api/hook/{repo.name}/{slug}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <CopyButton
+                                    value={`${typeof window !== "undefined" ? window.location.origin : ""}/api/hook/${repo.name}/${slug}`}
+                                    label="webhook URL"
+                                  />
+                                  {isManager && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      iconOnly
+                                      onClick={() => {
+                                        api.toggleScriptHook(repoId, slug, !enabled).then((res) => { if (res.ok) fetchRepo(); });
+                                      }}
+                                      title={enabled ? "Disable webhook for this script" : "Enable webhook for this script"}
+                                      aria-label="Toggle webhook"
+                                    >
+                                      <Webhook size={12} className={enabled ? "text-point" : "text-muted-foreground"} />
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
 
                     {/* Webhook Logs */}

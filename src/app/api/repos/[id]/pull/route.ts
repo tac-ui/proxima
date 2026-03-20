@@ -7,6 +7,7 @@ import { GitService } from "@server/services/git";
 import { getConfig } from "@server/lib/config";
 import { logger } from "@server/lib/logger";
 import { logAudit, getClientIp } from "@server/services/audit";
+import { findSshKeyPath } from "../../../_lib/repo-utils";
 
 export async function POST(
   req: NextRequest,
@@ -28,7 +29,7 @@ export async function POST(
     const gitService = new GitService(config.stacksDir);
 
     logger.info("repo", `Pulling repo id=${repoId} path=${repo.path}`);
-    const message = await gitService.pullRepo(repo.path, repo.branch);
+    const message = await gitService.pullRepo(repo.path, repo.branch, repo.repoUrl, findSshKeyPath());
     logger.info("repo", `Pull result: ${message}`);
 
     logAudit({ userId: auth.userId, username: auth.username, action: "execute", category: "repo", targetType: "repo", targetName: repo.name, details: { operation: "pull" }, ipAddress: getClientIp(req) });

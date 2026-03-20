@@ -1,10 +1,21 @@
-import { schema } from "@server/db/index";
+import { getDb, schema } from "@server/db/index";
 
 export function parseJson(raw: string) {
   try {
     return JSON.parse(raw);
   } catch {
     return [];
+  }
+}
+
+/** Find the most recently added SSH key path (used for SSH repo operations). */
+export function findSshKeyPath(): string | undefined {
+  try {
+    const db = getDb();
+    const key = db.select().from(schema.sshKeys).orderBy(schema.sshKeys.id).all().pop();
+    return key?.keyPath;
+  } catch {
+    return undefined;
   }
 }
 

@@ -10,7 +10,8 @@ RUN apk add --no-cache \
   python3 \
   make \
   g++ \
-  su-exec
+  su-exec \
+  && npm install -g pnpm
 
 # ---- Dependencies ----
 FROM base AS deps

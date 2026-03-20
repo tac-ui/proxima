@@ -110,6 +110,11 @@ export async function handleTerminalConnection(
       const buffer = terminal.getBuffer();
       console.log(`[terminal-ws] Sending buffer (${buffer.length} chars) for ${terminalId}`);
       ws.send(JSON.stringify({ type: "buffer", terminalId, data: buffer }));
+
+      // If the terminal already exited (late join), immediately send exit event
+      if (terminal.exitInfo) {
+        ws.send(JSON.stringify({ type: "exit", terminalId, exitCode: terminal.exitInfo.exitCode }));
+      }
     } else if (type === "input") {
       const terminal = Terminal.getTerminal(terminalId);
       if (terminal && "write" in terminal && typeof (terminal as InteractiveTerminal).write === "function" && msg.data !== undefined) {

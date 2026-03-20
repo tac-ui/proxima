@@ -5,6 +5,7 @@ import { getDb, schema } from "@server/db/index";
 import { eq } from "drizzle-orm";
 import { GitService } from "@server/services/git";
 import { getConfig } from "@server/lib/config";
+import { findSshKeyPath } from "../../../_lib/repo-utils";
 
 export async function GET(
   req: NextRequest,
@@ -24,7 +25,7 @@ export async function GET(
 
     const config = getConfig();
     const gitService = new GitService(config.stacksDir);
-    const branches = await gitService.listRemoteBranches(repo.path);
+    const branches = await gitService.listRemoteBranches(repo.path, repo.repoUrl, findSshKeyPath());
 
     return ok({ branches, current: repo.branch });
   } catch (err) {

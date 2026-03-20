@@ -1,4 +1,5 @@
 import { type NextRequest } from "next/server";
+import { existsSync, chmodSync } from "node:fs";
 import { requireAdmin, errorResponse, ok } from "../../../../../_lib/auth";
 import { ensureDb } from "../../../../../_lib/db";
 import { getDb, schema } from "@server/db/index";
@@ -33,6 +34,15 @@ export async function POST(
     if (!script) throw new Error("Script not found");
 
     const scriptPath = ScriptService.getScriptPath(repo.name, filename);
+
+    // Verify script file exists
+    if (!existsSync(scriptPath)) {
+      throw new Error(`Script file not found on disk: ${filename}`);
+    }
+
+    // Ensure executable permission (may be lost on Docker volume mounts)
+    try { chmodSync(scriptPath, 0o755); } catch { /* ignore */ }
+
     const terminalId = `repo-${repo.name}-${slug}-${Date.now()}`;
 
     const terminal = new InteractiveTerminal(
@@ -43,7 +53,7 @@ export async function POST(
     );
     terminal.start();
 
-    logger.info("repo", `Running script "${script.name}" (${filename}) in ${repo.path}`);
+    logger.info("repo", `Running script "${script.name}" (${filename}) at ${scriptPath} in ${repo.path}`);
     logAudit({ userId: auth.userId, username: auth.username, action: "execute", category: "repo", targetType: "repo", targetName: repo.name, details: { script: script.name }, ipAddress: getClientIp(req) });
     return ok({ terminalId });
   } catch (err) {

@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { existsSync, chmodSync } from "node:fs";
 import { errorResponse, ok, AuthError } from "../../../_lib/auth";
 import { ensureDb } from "../../../_lib/db";
 import { getDb, schema } from "@server/db/index";
@@ -97,6 +98,12 @@ export async function POST(
 
     // Execute via file
     const scriptPath = ScriptService.getScriptPath(repo.name, script.filename);
+    if (!existsSync(scriptPath)) {
+      logger.error("hook", `Script file not found: ${scriptPath}`);
+      return NextResponse.json({ ok: false, error: "Script file not found" }, { status: 404 });
+    }
+    try { chmodSync(scriptPath, 0o755); } catch { /* ignore */ }
+
     const terminalId = `hook-${repo.name}-${Date.now()}`;
 
     const terminal = new InteractiveTerminal(

@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { GitService } from "@server/services/git";
 import { getConfig } from "@server/lib/config";
 import { logger } from "@server/lib/logger";
+import { findSshKeyPath } from "../../../_lib/repo-utils";
 
 export async function POST(
   req: NextRequest,
@@ -33,7 +34,7 @@ export async function POST(
     const gitService = new GitService(config.stacksDir);
 
     logger.info("repo", `Checkout branch=${branch} for repo id=${repoId}`);
-    const message = await gitService.checkoutBranch(repo.path, branch);
+    const message = await gitService.checkoutBranch(repo.path, branch, repo.repoUrl, findSshKeyPath());
 
     // Update branch in DB
     db.update(schema.repositories)

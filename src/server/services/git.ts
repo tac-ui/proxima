@@ -78,13 +78,31 @@ export class GitService {
     }
   }
 
-  async pullRepo(repoPath: string, branch?: string): Promise<string> {
+  /** Configure SSH to accept new host keys (prevents "Host key verification failed" in Docker). */
+  private configureSsh(git: SimpleGit, sshKeyPath?: string): void {
+    const parts = ["ssh", "-o", "StrictHostKeyChecking=accept-new"];
+    if (sshKeyPath && existsSync(sshKeyPath)) {
+      parts.push("-i", sshKeyPath);
+    }
+    git.env("GIT_SSH_COMMAND", parts.join(" "));
+  }
+
+  /** Configure both GitHub token and SSH for a repo operation. */
+  private configureRepo(git: SimpleGit, repoUrl?: string, sshKeyPath?: string): void {
+    this.configureGithubToken(git);
+    // For SSH URLs, always configure SSH command
+    if (!repoUrl || repoUrl.startsWith("git@") || repoUrl.includes("ssh://")) {
+      this.configureSsh(git, sshKeyPath);
+    }
+  }
+
+  async pullRepo(repoPath: string, branch?: string, repoUrl?: string, sshKeyPath?: string): Promise<string> {
     if (!existsSync(repoPath)) {
       throw new Error(`Repository path does not exist: ${repoPath}`);
     }
 
     const git: SimpleGit = simpleGit(repoPath);
-    this.configureGithubToken(git);
+    this.configureRepo(git, repoUrl, sshKeyPath);
 
     // Unshallow if needed (clone was --depth 1)
     const isShallow = existsSync(path.join(repoPath, ".git", "shallow"));
@@ -98,13 +116,13 @@ export class GitService {
       : "Already up to date.";
   }
 
-  async checkoutBranch(repoPath: string, branch: string): Promise<string> {
+  async checkoutBranch(repoPath: string, branch: string, repoUrl?: string, sshKeyPath?: string): Promise<string> {
     if (!existsSync(repoPath)) {
       throw new Error(`Repository path does not exist: ${repoPath}`);
     }
 
     const git: SimpleGit = simpleGit(repoPath);
-    this.configureGithubToken(git);
+    this.configureRepo(git, repoUrl, sshKeyPath);
 
     // Unshallow first if needed
     const isShallow = existsSync(path.join(repoPath, ".git", "shallow"));
@@ -121,18 +139,25 @@ export class GitService {
       : `Switched to ${branch}`;
   }
 
-  async listRemoteBranches(repoPath: string): Promise<string[]> {
+  async listRemoteBranches(repoPath: string, repoUrl?: string, sshKeyPath?: string): Promise<string[]> {
     if (!existsSync(repoPath)) return [];
 
     const git: SimpleGit = simpleGit(repoPath);
-    this.configureGithubToken(git);
+    this.configureRepo(git, repoUrl, sshKeyPath);
 
-    await git.fetch(["origin"]);
+    try {
+      await git.fetch(["origin"]);
+      const branches = await git.branch(["-r"]);
+      const remote = branches.all
+        .filter((b) => b.startsWith("origin/") && !b.includes("HEAD"))
+        .map((b) => b.replace("origin/", ""));
+      if (remote.length > 0) return remote;
+    } catch {
+      // Remote fetch failed (auth/network), fall back to local branches
+    }
 
-    const branches = await git.branch(["-r"]);
-    return branches.all
-      .filter((b) => b.startsWith("origin/") && !b.includes("HEAD"))
-      .map((b) => b.replace("origin/", ""));
+    const local = await git.branchLocal();
+    return local.all;
   }
 
   detectComposeFiles(dir: string): string[] {

@@ -87,6 +87,12 @@ export class Terminal {
 
   protected socketList: Record<string, AppSocket> = {};
 
+  /** Set after the process exits; allows late-joining clients to receive the exit info. */
+  public exitInfo?: { exitCode: number; signal?: number };
+  private _cleanupTimeout?: NodeJS.Timeout;
+  /** Grace period (ms) to keep exited terminal in map for late-joining clients. */
+  private static readonly EXIT_GRACE_MS = 30_000;
+
   constructor(
     name: string,
     file: string,
@@ -197,12 +203,13 @@ export class Terminal {
   protected onExitHandler = (res: { exitCode: number; signal?: number }): void => {
     console.log(`[Terminal] ${this._name} exited — code: ${res.exitCode}, signal: ${res.signal}`);
 
+    this.exitInfo = res;
+
     for (const socket of Object.values(this.socketList)) {
       socket.emit("terminalExit", this._name, res.exitCode);
     }
 
     this.socketList = {};
-    Terminal.terminalMap.delete(this._name);
 
     clearInterval(this.keepAliveInterval);
     clearInterval(this.kickDisconnectedClientsInterval);
@@ -210,6 +217,11 @@ export class Terminal {
     if (this.callback) {
       this.callback(res.exitCode);
     }
+
+    // Keep terminal in map briefly so late-joining WS clients can retrieve buffer + exit info
+    this._cleanupTimeout = setTimeout(() => {
+      Terminal.terminalMap.delete(this._name);
+    }, Terminal.EXIT_GRACE_MS);
   };
 
   public onExit(callback: (exitCode: number) => void): void {
@@ -235,6 +247,7 @@ export class Terminal {
   }
 
   public removeFromMap(): void {
+    clearTimeout(this._cleanupTimeout);
     Terminal.terminalMap.delete(this._name);
   }
 
