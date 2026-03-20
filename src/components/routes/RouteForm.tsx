@@ -67,8 +67,12 @@ export function RouteForm({
     }).catch(() => {});
     api.getCloudflareSettings().then((res) => {
       if (res.ok && res.data && res.data.zones?.length) {
-        setCfZones(res.data.zones);
-        setSelectedZone(res.data.zones[0].zoneName);
+        const data = res.data;
+        setCfZones(data.zones);
+        const defaultZ = data.defaultZone && data.zones.some((z) => z.zoneName === data.defaultZone)
+          ? data.defaultZone
+          : data.zones[0].zoneName;
+        setSelectedZone(defaultZ);
         setDomainMode("zone");
       }
     }).catch(() => {});
@@ -241,12 +245,12 @@ export function RouteForm({
               placeholder="subdomain"
               className="flex-1"
             />
-            <span className="flex items-center h-[var(--input-md-height)] text-sm text-muted-foreground">.</span>
+            <span className="flex items-center h-[var(--input-md-height)] text-sm text-muted-foreground pb-px">.</span>
             <Select
               options={cfZones.map((z) => ({ value: z.zoneName, label: z.zoneName }))}
               value={selectedZone}
               onChange={(v: string) => setSelectedZone(v)}
-              className="[&_button]:h-[var(--input-md-height)]"
+              className="[&_button]:!h-[var(--input-md-height)] [&_button]:!min-h-[var(--input-md-height)]"
             />
           </div>
         ) : (

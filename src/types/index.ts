@@ -308,12 +308,14 @@ export interface CloudflareSettingsResponse {
   apiToken: string;
   zones: CloudflareZone[];
   autoSync: boolean;
+  defaultZone?: string;
 }
 
 export interface CloudflareSettingsPayload {
   apiToken: string;
   zones: CloudflareZone[];
   autoSync: boolean;
+  defaultZone?: string;
 }
 
 export interface CloudflareTestResult {

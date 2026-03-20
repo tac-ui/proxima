@@ -9,12 +9,14 @@ const SETTING_KEYS = {
   zoneId: "cloudflare:zoneId", // legacy — kept for migration
   zones: "cloudflare:zones",
   autoSync: "cloudflare:autoSync",
+  defaultZone: "cloudflare:defaultZone",
 } as const;
 
 export interface CloudflareSettings {
   apiToken: string;
   zones: CloudflareZone[];
   autoSync: boolean;
+  defaultZone?: string;
 }
 
 export function getCloudflareSettings(): CloudflareSettings {
@@ -41,7 +43,9 @@ export function getCloudflareSettings(): CloudflareSettings {
     }
   }
 
-  return { apiToken, zones, autoSync };
+  const defaultZone = dbHelpers.getSetting(db, SETTING_KEYS.defaultZone)?.value ?? "";
+
+  return { apiToken, zones, autoSync, defaultZone: defaultZone || undefined };
 }
 
 export function saveCloudflareSettings(data: CloudflareSettings): void {
@@ -49,6 +53,7 @@ export function saveCloudflareSettings(data: CloudflareSettings): void {
   dbHelpers.setSetting(db, SETTING_KEYS.apiToken, data.apiToken);
   dbHelpers.setSetting(db, SETTING_KEYS.zones, JSON.stringify(data.zones));
   dbHelpers.setSetting(db, SETTING_KEYS.autoSync, String(data.autoSync));
+  dbHelpers.setSetting(db, SETTING_KEYS.defaultZone, data.defaultZone ?? "");
   // Clear legacy key on save
   dbHelpers.setSetting(db, SETTING_KEYS.zoneId, "");
 }

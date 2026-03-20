@@ -14,7 +14,7 @@ import {
   useToast,
   pageEntrance,
 } from "@tac-ui/web";
-import { Cloud, ShieldAlert, Eye, EyeOff, Plus, Trash2, CheckCircle, Loader2, Download, ChevronDown, ChevronRight, Play, Square, RotateCw, Circle, AlertCircle } from "@tac-ui/icon";
+import { Cloud, ShieldAlert, Eye, EyeOff, Plus, Trash2, CheckCircle, Loader2, Download, ChevronDown, ChevronRight, Play, Square, RotateCw, Circle, AlertCircle, Star } from "@tac-ui/icon";
 import type { CloudflareZone } from "@/types";
 import { LoadingIndicator } from "@/components/shared/LoadingIndicator";
 
@@ -54,6 +54,7 @@ export default function CloudflarePage() {
   const [cfAutoSync, setCfAutoSync] = useState(false);
   const [cfApiToken, setCfApiToken] = useState("");
   const [cfZones, setCfZones] = useState<CloudflareZone[]>([]);
+  const [cfDefaultZone, setCfDefaultZone] = useState("");
   const [newZoneId, setNewZoneId] = useState("");
   const [verifyingZone, setVerifyingZone] = useState(false);
   const [fetchingZones, setFetchingZones] = useState(false);
@@ -69,6 +70,7 @@ export default function CloudflarePage() {
         setCfAutoSync(res.data.autoSync);
         setCfApiToken(res.data.apiToken);
         setCfZones(res.data.zones ?? []);
+        setCfDefaultZone(res.data.defaultZone ?? "");
         setCfLoaded(true);
       }
     }).catch(() => {});
@@ -156,10 +158,12 @@ export default function CloudflarePage() {
         apiToken: cfApiToken,
         zones: cfZones,
         autoSync: cfAutoSync,
+        defaultZone: cfDefaultZone,
       });
       if (cfRes.ok && cfRes.data) {
         setCfApiToken(cfRes.data.apiToken);
         setCfZones(cfRes.data.zones ?? []);
+        setCfDefaultZone(cfRes.data.defaultZone ?? "");
         toast("Analytics settings saved", { variant: "success" });
       } else {
         toast(cfRes.error ?? "Failed to save", { variant: "error" });
@@ -411,7 +415,7 @@ export default function CloudflarePage() {
                   try {
                     const [tunRes, cfRes] = await Promise.all([
                       api.updateTunnelSettings({ enabled: true, tunnelToken: tunToken }),
-                      api.updateCloudflareSettings({ apiToken: cfApiToken, zones: cfZones, autoSync: cfAutoSync }),
+                      api.updateCloudflareSettings({ apiToken: cfApiToken, zones: cfZones, autoSync: cfAutoSync, defaultZone: cfDefaultZone }),
                     ]);
                     if (tunRes.ok && tunRes.data) setTunToken(tunRes.data.tunnelToken);
                     if (cfRes.ok && cfRes.data) { setCfApiToken(cfRes.data.apiToken); setCfZones(cfRes.data.zones ?? []); }
@@ -491,27 +495,44 @@ export default function CloudflarePage() {
               </div>
               {cfZones.length > 0 ? (
                 <div className="space-y-1.5 mb-3">
-                  {cfZones.map((zone) => (
-                    <div key={zone.zoneId} className="flex items-center justify-between px-3 py-2 rounded-lg border bg-muted/30">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <CheckCircle size={14} className="text-success shrink-0" />
-                        <span className="text-sm truncate">
-                          {zone.zoneName ? (
-                            <>{zone.zoneName} <span className="text-muted-foreground text-xs">({zone.zoneId})</span></>
-                          ) : (
-                            <span className="text-muted-foreground">{zone.zoneId}</span>
-                          )}
-                        </span>
+                  {cfZones.map((zone) => {
+                    const isDefault = cfDefaultZone === zone.zoneName;
+                    return (
+                      <div key={zone.zoneId} className={`flex items-center justify-between px-3 py-2 rounded-lg border transition-colors ${isDefault ? "border-point/30 bg-point/5" : "bg-muted/30"}`}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <CheckCircle size={14} className="text-success shrink-0" />
+                          <span className="text-sm truncate">
+                            {zone.zoneName ? (
+                              <>{zone.zoneName} <span className="text-muted-foreground text-xs">({zone.zoneId})</span></>
+                            ) : (
+                              <span className="text-muted-foreground">{zone.zoneId}</span>
+                            )}
+                          </span>
+                          {isDefault && <Badge variant="secondary">Default</Badge>}
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0 ml-2">
+                          <button
+                            type="button"
+                            onClick={() => setCfDefaultZone(isDefault ? "" : zone.zoneName)}
+                            className={`transition-colors p-1 rounded ${isDefault ? "text-point" : "text-muted-foreground/40 hover:text-point"}`}
+                            title={isDefault ? "Remove as default" : "Set as default domain"}
+                          >
+                            <Star size={14} fill={isDefault ? "currentColor" : "none"} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleRemoveZone(zone.zoneId);
+                              if (isDefault) setCfDefaultZone("");
+                            }}
+                            className="text-muted-foreground hover:text-error transition-colors p-1 rounded"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveZone(zone.zoneId)}
-                        className="text-muted-foreground hover:text-error transition-colors shrink-0 ml-2"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground mb-3">No zones configured</p>
