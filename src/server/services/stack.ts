@@ -264,7 +264,7 @@ export class Stack {
 
   // ----- docker operations -----------------------------------------------
 
-  async deploy(socket: AppSocket): Promise<number> {
+  async deploy(socket?: AppSocket): Promise<number> {
     const terminalName = getComposeTerminalName(this.name);
     const exitCode = await Terminal.exec(
       socket,
@@ -279,7 +279,7 @@ export class Stack {
     return exitCode;
   }
 
-  async start(socket: AppSocket): Promise<number> {
+  async start(socket?: AppSocket): Promise<number> {
     const terminalName = getComposeTerminalName(this.name);
     const exitCode = await Terminal.exec(
       socket,
@@ -294,7 +294,7 @@ export class Stack {
     return exitCode;
   }
 
-  async stop(socket: AppSocket): Promise<number> {
+  async stop(socket?: AppSocket): Promise<number> {
     const terminalName = getComposeTerminalName(this.name);
     const exitCode = await Terminal.exec(
       socket,
@@ -309,7 +309,7 @@ export class Stack {
     return exitCode;
   }
 
-  async restart(socket: AppSocket): Promise<number> {
+  async restart(socket?: AppSocket): Promise<number> {
     const terminalName = getComposeTerminalName(this.name);
     const exitCode = await Terminal.exec(
       socket,

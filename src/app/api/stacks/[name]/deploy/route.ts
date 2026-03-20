@@ -41,7 +41,7 @@ export async function POST(
     const config = getConfig();
     const stack = new Stack(config.stacksDir, name, yaml, env, false, dockerfiles);
     await stack.save(isNew);
-    await stack.deploy(undefined as any);
+    await stack.deploy();
     await broadcastStackList(config.stacksDir);
 
     logAudit({ userId: auth.userId, username: auth.username, action: "deploy", category: "stack", targetType: "stack", targetName: name, ipAddress: getClientIp(req) });

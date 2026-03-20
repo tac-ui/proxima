@@ -201,7 +201,7 @@ export class Terminal {
   }
 
   protected onExitHandler = (res: { exitCode: number; signal?: number }): void => {
-    console.log(`[Terminal] ${this._name} exited — code: ${res.exitCode}, signal: ${res.signal}`);
+    logger.info("terminal", `${this._name} exited — code: ${res.exitCode}, signal: ${res.signal}`);
 
     this.exitInfo = res;
 

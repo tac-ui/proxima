@@ -36,7 +36,7 @@ export async function POST(
     const { name } = await params;
     const config = getConfig();
     const stack = await Stack.getStack(config.stacksDir, name);
-    await stack.restart(undefined as any);
+    await stack.restart();
     await broadcastStackList(config.stacksDir);
 
     return ok();

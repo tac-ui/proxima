@@ -73,7 +73,9 @@ export async function get(id: number): Promise<ReturnType<typeof serializeRow>> 
   return serializeRow(row);
 }
 
-export async function create(data: CreateProxyHostData): Promise<ReturnType<typeof serializeRow>> {
+export type ProxyHostResult = ReturnType<typeof serializeRow> & { _warnings?: string[] };
+
+export async function create(data: CreateProxyHostData): Promise<ProxyHostResult> {
   // Check all domains are available
   for (const domain of data.domainNames) {
     if (await isDomainTaken(domain)) {
@@ -125,7 +127,7 @@ export async function create(data: CreateProxyHostData): Promise<ReturnType<type
   return Object.assign(host, { _warnings: warnings });
 }
 
-export async function update(id: number, data: UpdateProxyHostData): Promise<ReturnType<typeof serializeRow>> {
+export async function update(id: number, data: UpdateProxyHostData): Promise<ProxyHostResult> {
   // Verify host exists
   const existing = await get(id);
 

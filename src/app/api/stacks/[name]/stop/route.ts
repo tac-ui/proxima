@@ -37,7 +37,7 @@ export async function POST(
     const { name } = await params;
     const config = getConfig();
     const stack = await Stack.getStack(config.stacksDir, name);
-    await stack.stop(undefined as any);
+    await stack.stop();
     await broadcastStackList(config.stacksDir);
 
     logAudit({ userId: auth.userId, username: auth.username, action: "stop", category: "stack", targetType: "stack", targetName: name, ipAddress: getClientIp(req) });
