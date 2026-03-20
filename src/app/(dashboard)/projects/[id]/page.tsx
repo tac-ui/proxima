@@ -46,8 +46,8 @@ import dynamic from "next/dynamic";
 import { useConfirm } from "@/hooks/useConfirm";
 import type { RepositoryInfo, RepoEnvFile, WebhookLog } from "@/types";
 
-const ScriptLogViewer = dynamic(
-  () => import("@/components/terminal/ScriptLogViewer").then((m) => m.ScriptLogViewer),
+const TerminalView = dynamic(
+  () => import("@/components/terminal/Terminal").then((m) => m.Terminal),
   { ssr: false },
 );
 
@@ -81,7 +81,7 @@ export default function ProjectDetailPage() {
   const [activeTab, setActiveTab] = useState("scripts");
 
   // Script management
-  const [editingScript, setEditingScript] = useState<{ slug?: string; name: string; content: string } | null>(null);
+  const [editingScript, setEditingScript] = useState<{ slug?: string; name: string; content: string; preCommand?: string; command?: string; advancedMode?: boolean } | null>(null);
 
   // Running terminals
   const [runningTerminals, setRunningTerminals] = useState<Record<string, string>>({});
@@ -91,7 +91,6 @@ export default function ProjectDetailPage() {
 
   // Script exit codes and output
   const [exitCodes, setExitCodes] = useState<Record<string, number>>({});
-  const [scriptOutputs, setScriptOutputs] = useState<Record<string, string>>({});
 
   // Pull state
   const [pulling, setPulling] = useState(false);
@@ -279,12 +278,36 @@ export default function ProjectDetailPage() {
     }
   };
 
+  /** Build full script content from simple mode fields */
+  const buildScriptContent = (preCmd?: string, cmd?: string): string => {
+    const lines = ["#!/bin/bash", "set -e", ""];
+    if (preCmd?.trim()) lines.push(preCmd.trim());
+    if (cmd?.trim()) lines.push(cmd.trim());
+    lines.push("");
+    return lines.join("\n");
+  };
+
+  /** Parse script content into preCommand + command for simple mode */
+  const parseScriptContent = (content: string): { preCommand: string; command: string } => {
+    const lines = content.split("\n").filter((l) => {
+      const t = l.trim();
+      return t && !t.startsWith("#!") && t !== "set -e";
+    });
+    if (lines.length <= 1) return { preCommand: "", command: lines[0] ?? "" };
+    return { preCommand: lines.slice(0, -1).join("\n"), command: lines[lines.length - 1] };
+  };
+
   const handleSaveScript = async () => {
     if (!editingScript) return;
     if (!editingScript.name.trim()) return;
+
+    // Build final content: in simple mode assemble from fields, in advanced use raw content
+    const finalContent = editingScript.advancedMode
+      ? editingScript.content
+      : buildScriptContent(editingScript.preCommand, editingScript.command);
+
     if (editingScript.slug) {
-      // Update existing
-      const res = await api.updateRepoScript(repoId, editingScript.slug, editingScript.content, editingScript.name);
+      const res = await api.updateRepoScript(repoId, editingScript.slug, finalContent, editingScript.name);
       if (res.ok) {
         fetchRepo();
         setEditingScript(null);
@@ -293,8 +316,7 @@ export default function ProjectDetailPage() {
         toast(res.error ?? "Failed to save script", { variant: "error" });
       }
     } else {
-      // Create new
-      const res = await api.createRepoScript(repoId, editingScript.name.trim(), editingScript.content);
+      const res = await api.createRepoScript(repoId, editingScript.name.trim(), finalContent);
       if (res.ok) {
         fetchRepo();
         setEditingScript(null);
@@ -307,7 +329,6 @@ export default function ProjectDetailPage() {
 
   const handleRunScript = (slug: string) => {
     setExitCodes((prev) => { const next = { ...prev }; delete next[slug]; return next; });
-    setScriptOutputs((prev) => { const next = { ...prev }; delete next[slug]; return next; });
     api.runRepoScript(repoId, slug).then((res) => {
       if (res.ok && res.data) {
         setRunningTerminals((prev) => ({ ...prev, [slug]: res.data!.terminalId }));
@@ -328,10 +349,9 @@ export default function ProjectDetailPage() {
     api.killTerminal(terminalId);
   };
 
-  const handleTerminalExit = (slug: string, exitCode?: number, output?: string) => {
+  const handleTerminalExit = (slug: string, exitCode?: number) => {
     setRunningTerminals((prev) => { const next = { ...prev }; delete next[slug]; return next; });
     if (exitCode !== undefined) setExitCodes((prev) => ({ ...prev, [slug]: exitCode }));
-    if (output !== undefined) setScriptOutputs((prev) => ({ ...prev, [slug]: output }));
     const restart = pendingRestart[slug];
     if (restart !== undefined) {
       setPendingRestart((prev) => { const next = { ...prev }; delete next[slug]; return next; });
@@ -351,7 +371,8 @@ export default function ProjectDetailPage() {
     const slug = script.filename.replace(/\.sh$/, "");
     const res = await api.getRepoScript(repoId, slug);
     if (res.ok && res.data) {
-      setEditingScript({ slug, name: res.data.name, content: res.data.content });
+      const parsed = parseScriptContent(res.data.content);
+      setEditingScript({ slug, name: res.data.name, content: res.data.content, preCommand: parsed.preCommand, command: parsed.command });
     } else {
       toast(res.error ?? "Failed to load script", { variant: "error" });
     }
@@ -692,7 +713,7 @@ export default function ProjectDetailPage() {
                     <Button size="sm" variant="ghost" onClick={() => { setShowSuggestions(!showSuggestions); }}>
                       Detect
                     </Button>
-                    <Button size="sm" variant="secondary" onClick={() => setEditingScript({ name: "", content: "#!/bin/bash\nset -e\n\n" })} leftIcon={<Plus size={12} />}>
+                    <Button size="sm" variant="secondary" onClick={() => setEditingScript({ name: "", content: "", preCommand: "", command: "" })} leftIcon={<Plus size={12} />}>
                       New Script
                     </Button>
                   </div>
@@ -744,30 +765,85 @@ export default function ProjectDetailPage() {
                         </p>
                       )}
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium">Content</label>
-                      <textarea
-                        className="w-full min-h-[300px] p-4 rounded-lg border border-border bg-surface text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-point/30 focus:border-point/50 leading-relaxed transition-shadow"
-                        placeholder={"#!/bin/bash\nset -e\n\n# Your script here..."}
-                        value={editingScript.content}
-                        onChange={(e) => setEditingScript({ ...editingScript, content: e.target.value })}
-                        onKeyDown={(e) => {
-                          if (e.key === "Tab") {
-                            e.preventDefault();
-                            const target = e.target as HTMLTextAreaElement;
-                            const start = target.selectionStart;
-                            const end = target.selectionEnd;
-                            const newContent = editingScript.content.substring(0, start) + "  " + editingScript.content.substring(end);
-                            setEditingScript({ ...editingScript, content: newContent });
-                            setTimeout(() => { target.selectionStart = target.selectionEnd = start + 2; }, 0);
+
+                    {/* Simple / Advanced toggle */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        className={`text-xs px-2 py-1 rounded-md transition-colors ${!editingScript.advancedMode ? "bg-point/10 text-point font-medium" : "text-muted-foreground hover:text-foreground"}`}
+                        onClick={() => {
+                          if (editingScript.advancedMode) {
+                            const parsed = parseScriptContent(editingScript.content);
+                            setEditingScript({ ...editingScript, advancedMode: false, preCommand: parsed.preCommand, command: parsed.command });
                           }
                         }}
-                        spellCheck={false}
-                      />
+                      >
+                        Simple
+                      </button>
+                      <button
+                        className={`text-xs px-2 py-1 rounded-md transition-colors ${editingScript.advancedMode ? "bg-point/10 text-point font-medium" : "text-muted-foreground hover:text-foreground"}`}
+                        onClick={() => {
+                          if (!editingScript.advancedMode) {
+                            const content = buildScriptContent(editingScript.preCommand, editingScript.command);
+                            setEditingScript({ ...editingScript, advancedMode: true, content });
+                          }
+                        }}
+                      >
+                        Advanced
+                      </button>
                     </div>
+
+                    {!editingScript.advancedMode ? (
+                      <div className="space-y-3">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium text-muted-foreground">Pre-Run <span className="font-normal">(optional)</span></label>
+                          <textarea
+                            className="w-full min-h-[60px] p-3 rounded-lg border border-border bg-surface text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-point/30 focus:border-point/50 leading-relaxed transition-shadow"
+                            placeholder="e.g. cd frontend && pnpm install"
+                            value={editingScript.preCommand ?? ""}
+                            onChange={(e) => setEditingScript({ ...editingScript, preCommand: e.target.value })}
+                            spellCheck={false}
+                            rows={2}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium text-muted-foreground">Run Command</label>
+                          <textarea
+                            className="w-full min-h-[60px] p-3 rounded-lg border border-border bg-surface text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-point/30 focus:border-point/50 leading-relaxed transition-shadow"
+                            placeholder="e.g. pnpm run build"
+                            value={editingScript.command ?? ""}
+                            onChange={(e) => setEditingScript({ ...editingScript, command: e.target.value })}
+                            spellCheck={false}
+                            rows={2}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">Script Content</label>
+                        <textarea
+                          className="w-full min-h-[200px] p-3 rounded-lg border border-border bg-surface text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-point/30 focus:border-point/50 leading-relaxed transition-shadow"
+                          placeholder={"#!/bin/bash\nset -e\n\n# Your script here..."}
+                          value={editingScript.content}
+                          onChange={(e) => setEditingScript({ ...editingScript, content: e.target.value })}
+                          onKeyDown={(e) => {
+                            if (e.key === "Tab") {
+                              e.preventDefault();
+                              const target = e.target as HTMLTextAreaElement;
+                              const start = target.selectionStart;
+                              const end = target.selectionEnd;
+                              const newContent = editingScript.content.substring(0, start) + "  " + editingScript.content.substring(end);
+                              setEditingScript({ ...editingScript, content: newContent });
+                              setTimeout(() => { target.selectionStart = target.selectionEnd = start + 2; }, 0);
+                            }
+                          }}
+                          spellCheck={false}
+                        />
+                      </div>
+                    )}
+
                     <div className="flex justify-end gap-2">
                       <Button size="sm" variant="secondary" onClick={() => setEditingScript(null)}>Cancel</Button>
-                      <Button size="sm" onClick={handleSaveScript} disabled={!editingScript.name.trim()} leftIcon={<Save size={12} />}>
+                      <Button size="sm" onClick={handleSaveScript} disabled={!editingScript.name.trim() || (!editingScript.advancedMode && !editingScript.command?.trim())} leftIcon={<Save size={12} />}>
                         {editingScript.slug ? "Save" : "Create"}
                       </Button>
                     </div>
@@ -785,7 +861,7 @@ export default function ProjectDetailPage() {
                       <p className="text-xs text-muted-foreground">Create a script to automate builds, deploys, and more.</p>
                     </div>
                     {isManager && (
-                      <Button size="sm" variant="secondary" onClick={() => setEditingScript({ name: "", content: "#!/bin/bash\nset -e\n\n" })} leftIcon={<Plus size={12} />}>
+                      <Button size="sm" variant="secondary" onClick={() => setEditingScript({ name: "", content: "", preCommand: "", command: "" })} leftIcon={<Plus size={12} />}>
                         New Script
                       </Button>
                     )}
@@ -870,19 +946,14 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
                       {isRunning && isExpanded && (
-                        <ScriptLogViewer
-                          terminalId={terminalId}
-                          title={script.name}
-                          onExit={(code: number, output: string) => handleTerminalExit(slug, code, output)}
-                        />
-                      )}
-                      {!isRunning && scriptOutputs[slug] && (
-                        <ScriptLogViewer
-                          terminalId=""
-                          title={script.name}
-                          staticOutput={scriptOutputs[slug]}
-                          exitCode={exitCodes[slug]}
-                        />
+                        <div className="rounded-lg border border-border overflow-hidden" style={{ height: "260px" }}>
+                          <TerminalView
+                            terminalId={terminalId}
+                            mode="interactive"
+                            rows={12}
+                            onExit={(code: number) => handleTerminalExit(slug, code)}
+                          />
+                        </div>
                       )}
                     </div>
                   );
@@ -1073,7 +1144,7 @@ export default function ProjectDetailPage() {
                             variant="ghost"
                             leftIcon={<Plus size={12} />}
                             onClick={() => {
-                              setEditingScript({ name: "", content: "#!/bin/bash\nset -e\n\n" });
+                              setEditingScript({ name: "", content: "", preCommand: "", command: "" });
                               setActiveTab("scripts");
                             }}
                           >
@@ -1084,37 +1155,35 @@ export default function ProjectDetailPage() {
                       {repo.scripts.length === 0 ? (
                         <p className="text-xs text-muted-foreground py-4 text-center">No scripts yet. Create a script to use with webhooks.</p>
                       ) : (
-                        <div className="space-y-1">
+                        <div className="space-y-1.5">
                           {repo.scripts.map((script) => {
                             const slug = script.filename.replace(/\.sh$/, "");
                             const enabled = script.hookEnabled !== false;
                             return (
-                              <div key={script.filename} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-border bg-surface">
+                              <div key={script.filename} className={`flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border transition-colors ${enabled ? "border-border bg-surface" : "border-border/50 bg-surface/50 opacity-60"}`}>
                                 <div className="flex items-center gap-2.5 min-w-0">
-                                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${enabled ? "bg-success" : "bg-muted-foreground/30"}`} />
+                                  <FileCode2 size={14} className={enabled ? "text-point shrink-0" : "text-muted-foreground shrink-0"} />
                                   <div className="min-w-0">
                                     <p className="text-xs font-medium truncate">{script.name}</p>
                                     <p className="text-[10px] text-muted-foreground font-mono truncate">/api/hook/{repo.name}/{slug}</p>
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-1.5 shrink-0">
+                                <div className="flex items-center gap-2 shrink-0">
                                   <CopyButton
                                     value={`${typeof window !== "undefined" ? window.location.origin : ""}/api/hook/${repo.name}/${slug}`}
                                     label="webhook URL"
                                   />
                                   {isManager && (
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      iconOnly
+                                    <button
                                       onClick={() => {
                                         api.toggleScriptHook(repoId, slug, !enabled).then((res) => { if (res.ok) fetchRepo(); });
                                       }}
-                                      title={enabled ? "Disable webhook for this script" : "Enable webhook for this script"}
+                                      title={enabled ? "Disable webhook" : "Enable webhook"}
                                       aria-label="Toggle webhook"
+                                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${enabled ? "bg-point" : "bg-muted"}`}
                                     >
-                                      <Webhook size={12} className={enabled ? "text-point" : "text-muted-foreground"} />
-                                    </Button>
+                                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${enabled ? "translate-x-[18px]" : "translate-x-[3px]"}`} />
+                                    </button>
                                   )}
                                 </div>
                               </div>
