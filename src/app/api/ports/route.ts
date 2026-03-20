@@ -6,40 +6,27 @@ import { ensureDb } from "../_lib/db";
 import { listManaged, processIdentifier } from "@server/services/managed-service";
 import type { ListeningProcess, ListeningProcessWithManaged } from "@/types";
 
-/** Try lsof first (most info), fall back to /proc/net/tcp parsing. */
+/** Detect listening TCP processes. Uses /proc/net/tcp as primary (no permissions needed). */
 function detectListeningProcesses(): ListeningProcess[] {
-  // Try lsof
+  // Primary: /proc/net/tcp + /proc/net/tcp6 (always works, no privileges needed)
+  const procNetResult = parseProcNet();
+  if (procNetResult.length > 0) return procNetResult;
+
+  // Fallback: ss (needs iproute2)
   try {
-    const output = execSync("lsof +c 0 -iTCP -sTCP:LISTEN -P -n", {
-      encoding: "utf-8",
-      timeout: 5000,
-    });
+    const output = execSync("ss -tln", { encoding: "utf-8", timeout: 5000 });
+    const procs = parseSs(output);
+    if (procs.length > 0) return procs;
+  } catch { /* fall through */ }
+
+  // Last resort: lsof (needs privileges)
+  try {
+    const output = execSync("lsof +c 0 -iTCP -sTCP:LISTEN -P -n", { encoding: "utf-8", timeout: 5000 });
     const procs = parseLsof(output);
     if (procs.length > 0) return procs;
   } catch { /* fall through */ }
 
-  // Try ss with process info
-  try {
-    const output = execSync("ss -tlnp", {
-      encoding: "utf-8",
-      timeout: 5000,
-    });
-    const procs = parseSs(output);
-    if (procs.length > 0) return procs;
-  } catch { /* fall through */ }
-
-  // Try ss without -p (doesn't need privileges)
-  try {
-    const output = execSync("ss -tln", {
-      encoding: "utf-8",
-      timeout: 5000,
-    });
-    const procs = parseSs(output);
-    if (procs.length > 0) return procs;
-  } catch { /* fall through */ }
-
-  // Fall back to /proc/net/tcp
-  return parseProcNet();
+  return [];
 }
 
 function parseLsof(output: string): ListeningProcess[] {
@@ -214,7 +201,8 @@ export async function GET(req: NextRequest) {
     ensureDb();
     requireManager(req);
 
-    const processes = detectListeningProcesses();
+    const processes = detectListeningProcesses()
+      .filter((p) => p.address !== "127.0.0.11"); // exclude Docker internal DNS
     processes.sort((a, b) => a.port - b.port);
 
     // Cross-reference with managed_services table

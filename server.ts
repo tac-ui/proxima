@@ -41,17 +41,21 @@ async function main() {
   // Sync auto-managed services (register stack containers)
   syncAutoManaged();
 
-  // Start Docker event watcher for auto-discovery
+  // Start Docker event watcher for auto-discovery (debounced to avoid rapid re-renders)
   try {
     const discovery = new NetworkDiscovery();
-    discovery.watchEvents(async ({ action }) => {
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    discovery.watchEvents(({ action }) => {
       if (action === "start" || action === "stop" || action === "die" || action === "destroy") {
-        try {
-          const services = await discovery.discoverServices();
-          broadcast({ type: "discoveredServices", data: services });
-        } catch (err) {
-          logger.warn("server", `Failed to refresh discovered services: ${err}`);
-        }
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(async () => {
+          try {
+            const services = await discovery.discoverServices();
+            broadcast({ type: "discoveredServices", data: services });
+          } catch (err) {
+            logger.warn("server", `Failed to refresh discovered services: ${err}`);
+          }
+        }, 2000);
       }
     });
     logger.info("server", "Docker event watcher started");

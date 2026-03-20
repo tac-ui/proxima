@@ -108,6 +108,10 @@ export class NetworkDiscovery {
       });
     }
 
+    // Sort for stable ordering across refreshes
+    mounts.sort((a, b) => a.destination.localeCompare(b.destination));
+    ports.sort((a, b) => a.containerPort - b.containerPort);
+
     return { networks, ports, mounts };
   }
 
