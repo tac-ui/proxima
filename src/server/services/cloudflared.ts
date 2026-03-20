@@ -8,6 +8,26 @@ const IMAGE = "cloudflare/cloudflared:latest";
 
 const docker = new Docker();
 
+/** Detect the network and container name of the Proxima container (self). */
+async function getProximaContainerInfo(): Promise<{ network: string; hostname: string } | null> {
+  try {
+    // Try well-known container name first
+    const hostname = process.env.HOSTNAME || "";
+    const candidates = ["proxima", hostname].filter(Boolean);
+    for (const name of candidates) {
+      try {
+        const info = await docker.getContainer(name).inspect();
+        const networks = info.NetworkSettings?.Networks ?? {};
+        const netName = Object.keys(networks).find((n) => n !== "bridge" && n !== "host" && n !== "none") ?? Object.keys(networks)[0];
+        if (netName) {
+          return { network: netName, hostname: info.Config?.Hostname ?? name };
+        }
+      } catch { /* not found, try next */ }
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Token parsing
 // ---------------------------------------------------------------------------
@@ -43,6 +63,10 @@ export async function pushTunnelIngress(token: string, apiToken: string): Promis
   const hosts = await listProxyHosts();
   const enabledHosts = hosts.filter((h) => h.enabled);
 
+  // Resolve Proxima container name so localhost references can be rewritten
+  const proximaInfo = await getProximaContainerInfo();
+  const proximaHost = proximaInfo?.hostname ?? "localhost";
+
   const ingress: Array<{
     hostname?: string;
     service: string;
@@ -50,7 +74,12 @@ export async function pushTunnelIngress(token: string, apiToken: string): Promis
   }> = [];
 
   for (const host of enabledHosts) {
-    const service = `${host.forwardScheme}://${host.forwardHost}:${host.forwardPort}`;
+    // If forwardHost is localhost/127.0.0.1 and we're on a Docker network, rewrite to Proxima container name
+    const resolvedHost = (host.forwardHost === "localhost" || host.forwardHost === "127.0.0.1")
+      && proximaInfo?.network && proximaInfo.network !== "host"
+      ? proximaHost
+      : host.forwardHost;
+    const service = `${host.forwardScheme}://${resolvedHost}:${host.forwardPort}`;
     for (const domain of host.domainNames) {
       ingress.push({
         hostname: domain,
@@ -180,18 +209,22 @@ export async function startCloudflared(token: string): Promise<void> {
   await ensureImage();
   await removeExisting();
 
+  // Try to join the same Docker network as the Proxima container
+  const proximaInfo = await getProximaContainerInfo();
+  const networkMode = proximaInfo?.network ?? "host";
+
   const container = await docker.createContainer({
     name: CONTAINER_NAME,
     Image: IMAGE,
     Cmd: ["tunnel", "--no-autoupdate", "--config", "/dev/null", "run", "--token", token],
     HostConfig: {
-      NetworkMode: "host",
+      NetworkMode: networkMode,
       RestartPolicy: { Name: "on-failure", MaximumRetryCount: 3 },
     },
   });
 
   await container.start();
-  logger.info("cloudflared", "Container started (token mode, no file mounts)");
+  logger.info("cloudflared", `Container started (network: ${networkMode})`);
 
   // Push ingress rules via API
   try {
