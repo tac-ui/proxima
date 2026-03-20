@@ -46,8 +46,8 @@ export default function NewRoutePage() {
         <h1 className="text-xl font-bold">Add Route</h1>
       </div>
 
-      <Card>
-        <CardContent>
+      <Card className="overflow-visible">
+        <CardContent className="overflow-visible">
           <RouteForm
             onSubmit={handleSubmit}
             submitting={submitting}

@@ -7,7 +7,6 @@ import { motion } from "framer-motion";
 import { api } from "@/lib/api";
 import { useRoutes } from "@/hooks/useRoutes";
 import { useApiContext } from "@/contexts/ApiContext";
-import { LoadingIndicator } from "@/components/shared/LoadingIndicator";
 import {
   Card,
   CardHeader,
@@ -17,7 +16,9 @@ import {
   LineChart,
   DonutChart,
   SegmentController,
+  Select,
   Button,
+  Indicator,
   pageEntrance,
   tacSpring,
 } from "@tac-ui/web";
@@ -182,7 +183,7 @@ function AnalyticsContent() {
 
   return (
     <motion.div className="space-y-6" {...pageEntrance}>
-      <LoadingIndicator visible={loading} />
+      {loading && <Indicator variant="linear" />}
 
       {/* Summary cards */}
       <motion.div
@@ -219,17 +220,12 @@ function AnalyticsContent() {
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-4">
-        <select
-          className="px-3 py-2 rounded-lg border border-border bg-surface text-sm"
-          value={selectedHostId ?? ""}
-          onChange={(e) => setSelectedHostId(parseInt(e.target.value, 10))}
-        >
-          {routeList.map((h) => (
-            <option key={h.id} value={h.id}>
-              {h.domainNames.join(", ")}
-            </option>
-          ))}
-        </select>
+        <Select
+          size="sm"
+          value={selectedHostId !== null ? String(selectedHostId) : ""}
+          options={routeList.map((h) => ({ value: String(h.id), label: h.domainNames.join(", ") }))}
+          onChange={(val) => setSelectedHostId(parseInt(val, 10))}
+        />
 
         <SegmentController
           options={PERIOD_OPTIONS}

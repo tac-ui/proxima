@@ -87,7 +87,7 @@ export async function DELETE(
     const { name } = await params;
     const config = getConfig();
     const stack = await Stack.getStack(config.stacksDir, name);
-    await stack.delete(undefined as any);
+    await stack.delete();
     await broadcastStackList(config.stacksDir);
 
     logAudit({ userId: auth.userId, username: auth.username, action: "delete", category: "stack", targetType: "stack", targetName: name, ipAddress: getClientIp(req) });

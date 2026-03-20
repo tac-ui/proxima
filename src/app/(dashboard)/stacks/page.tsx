@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useStacks } from "@/hooks/useStacks";
 import { api } from "@/lib/api";
 import { StackCard } from "@/components/stacks/StackCard";
-import { LoadingIndicator } from "@/components/shared/LoadingIndicator";
 import {
   Button,
   Input,
@@ -23,6 +22,7 @@ import {
   TabsList,
   TabTrigger,
   TabContent,
+  Indicator,
   pageEntrance,
   tacSpring,
 } from "@tac-ui/web";
@@ -114,7 +114,7 @@ export default function StacksPage() {
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex-1 min-w-[200px] max-w-96">
           <Input
-            inputSize="sm"
+            size="sm"
             placeholder="Search stacks..."
             value={search}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
@@ -129,7 +129,7 @@ export default function StacksPage() {
         )}
       </div>
 
-      <LoadingIndicator visible={dockerConnected === null || loading} />
+      {(dockerConnected === null || loading) && <Indicator variant="linear" />}
 
       <AnimatePresence mode="wait">
         {dockerConnected === null ? (
@@ -166,8 +166,8 @@ export default function StacksPage() {
                 variant="secondary"
                 size="sm"
                 onClick={checkDocker}
-                disabled={dockerChecking}
-                leftIcon={<RefreshCw size={14} className={dockerChecking ? "animate-spin" : ""} />}
+                loading={dockerChecking}
+                leftIcon={dockerChecking ? undefined : <RefreshCw size={14} />}
               >
                 {dockerChecking ? "Checking..." : "Retry"}
               </Button>

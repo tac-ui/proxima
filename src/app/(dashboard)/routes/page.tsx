@@ -6,10 +6,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRoutes } from "@/hooks/useRoutes";
 import { RouteCard } from "@/components/routes/RouteCard";
 import { api } from "@/lib/api";
-import { Button, Input, EmptyState, Skeleton, pageEntrance, fadeVariants, tacSpring } from "@tac-ui/web";
+import { Button, Input, EmptyState, Skeleton, Indicator, pageEntrance, fadeVariants, tacSpring } from "@tac-ui/web";
 import { Plus, Globe, Search, Cloud, Settings } from "@tac-ui/icon";
 import { useAuth } from "@/contexts/AuthContext";
-import { LoadingIndicator } from "@/components/shared/LoadingIndicator";
 import type { CloudflaredStatus } from "@/types";
 
 const staggerContainer = {
@@ -98,7 +97,7 @@ export default function RoutesPage() {
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex-1 min-w-[200px] max-w-96">
           <Input
-            inputSize="sm"
+            size="sm"
             placeholder="Search domains..."
             value={search}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
@@ -114,7 +113,7 @@ export default function RoutesPage() {
         )}
       </div>
 
-      <LoadingIndicator visible={loading} />
+      {loading && <Indicator variant="linear" />}
 
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">

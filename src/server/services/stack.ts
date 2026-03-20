@@ -16,6 +16,7 @@ import {
   TERMINAL_ROWS,
 } from "./terminal";
 import { statusToEnum, parseComposePs } from "../lib/docker-utils";
+import { ValidationError } from "../lib/errors";
 import Docker from "dockerode";
 import type { StackStatus, ContainerInfo, MountInfo } from "@/types";
 import type { AppSocket } from "./terminal";
@@ -31,16 +32,6 @@ const ACCEPTED_COMPOSE_FILENAMES = [
   "docker-compose.yaml",
   "docker-compose.yml",
 ];
-
-// ---------------------------------------------------------------------------
-// Validation error
-// ---------------------------------------------------------------------------
-export class ValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ValidationError";
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Helper
@@ -348,7 +339,7 @@ export class Stack {
     return exitCode;
   }
 
-  async delete(socket: AppSocket): Promise<number> {
+  async delete(socket?: AppSocket): Promise<number> {
     const terminalName = getComposeTerminalName(this.name);
     const exitCode = await Terminal.exec(
       socket,

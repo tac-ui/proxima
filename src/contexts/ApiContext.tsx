@@ -50,7 +50,6 @@ export function ApiProvider({ children }: { children: React.ReactNode }) {
         // Exponential backoff reconnect
         const delay = Math.min(1000 * Math.pow(2, retryCount.current - 5), 30000);
         retryTimeout.current = setTimeout(() => {
-          retryCount.current = 0;
           setConnectionFailed(false);
           connect();
         }, delay);

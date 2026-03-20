@@ -20,10 +20,10 @@ import {
   ModalFooter,
   Skeleton,
   useToast,
+  Indicator,
   pageEntrance,
 } from "@tac-ui/web";
 import { Users, UserPlus, Trash2, ShieldAlert } from "@tac-ui/icon";
-import { LoadingIndicator } from "@/components/shared/LoadingIndicator";
 
 export default function UsersPage() {
   const { user, isAdmin } = useAuth();
@@ -45,8 +45,10 @@ export default function UsersPage() {
         setUsers(res.data);
         setUsersLoaded(true);
       }
-    } catch {}
-  }, []);
+    } catch {
+      toast("Failed to load users", { variant: "error" });
+    }
+  }, [toast]);
 
   useEffect(() => {
     if (isAdmin) loadUsers();
@@ -160,7 +162,7 @@ export default function UsersPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <LoadingIndicator visible={!usersLoaded} className="pb-4" />
+          {!usersLoaded && <Indicator variant="linear" className="pb-4" />}
           {!usersLoaded ? (
             <div className="space-y-3">
               {Array.from({ length: 3 }).map((_, i) => (
@@ -190,7 +192,7 @@ export default function UsersPage() {
                     {!isSelf && !isSA && (
                       <div className="flex items-center gap-2">
                         <Select
-                          selectSize="sm"
+                          size="sm"
                           options={[
                             { value: "manager", label: "Manager" },
                             { value: "viewer", label: "Viewer" },

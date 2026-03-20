@@ -51,8 +51,8 @@ export default function EditRoutePage() {
         <h1 className="text-xl font-bold">Edit Route</h1>
       </div>
 
-      <Card>
-        <CardContent>
+      <Card className="overflow-visible">
+        <CardContent className="overflow-visible">
           {loading ? (
             <div className="space-y-4">
               <Skeleton className="h-10 rounded-lg" />

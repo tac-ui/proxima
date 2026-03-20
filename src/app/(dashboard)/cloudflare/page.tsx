@@ -14,7 +14,7 @@ import {
   useToast,
   pageEntrance,
 } from "@tac-ui/web";
-import { Cloud, ShieldAlert, Eye, EyeOff, Plus, Trash2, CheckCircle, Loader2, Download, ChevronDown, ChevronRight, Play, Square, RotateCw, Circle, AlertCircle, Star } from "@tac-ui/icon";
+import { Cloud, ShieldAlert, Eye, EyeOff, Plus, Trash2, CheckCircle, Download, ChevronDown, ChevronRight, Play, Square, RotateCw, Circle, AlertCircle, Star } from "@tac-ui/icon";
 import type { CloudflareZone } from "@/types";
 import { LoadingIndicator } from "@/components/shared/LoadingIndicator";
 
@@ -383,9 +383,9 @@ export default function CloudflarePage() {
                   />
                   <button
                     type="button"
+                    aria-label="Toggle visibility"
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                     onClick={() => setShowTunToken((v) => !v)}
-                    tabIndex={-1}
                   >
                     {showTunToken ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
@@ -407,9 +407,9 @@ export default function CloudflarePage() {
                   />
                   <button
                     type="button"
+                    aria-label="Toggle visibility"
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                     onClick={() => setShowApiToken((v) => !v)}
-                    tabIndex={-1}
                   >
                     {showApiToken ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
@@ -447,7 +447,8 @@ export default function CloudflarePage() {
                 size="sm"
                 disabled={tokenSaving || actionLoading !== null || cfdState === "running" || cfdState === "starting" || cfdState === "restarting"}
                 onClick={() => handleTunnelAction("start")}
-                leftIcon={actionLoading === "start" ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+                loading={actionLoading === "start"}
+                leftIcon={actionLoading === "start" ? undefined : <Play size={14} />}
               >
                 {actionLoading === "start" ? "Starting..." : "Start"}
               </Button>
@@ -456,7 +457,8 @@ export default function CloudflarePage() {
                 size="sm"
                 disabled={tokenSaving || actionLoading !== null || (cfdState !== "running" && cfdState !== "starting" && cfdState !== "restarting")}
                 onClick={() => handleTunnelAction("stop")}
-                leftIcon={actionLoading === "stop" ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
+                loading={actionLoading === "stop"}
+                leftIcon={actionLoading === "stop" ? undefined : <Square size={14} />}
               >
                 {actionLoading === "stop" ? "Stopping..." : "Stop"}
               </Button>
@@ -465,7 +467,8 @@ export default function CloudflarePage() {
                 size="sm"
                 disabled={tokenSaving || actionLoading !== null || cfdState !== "running"}
                 onClick={() => handleTunnelAction("restart")}
-                leftIcon={actionLoading === "restart" ? <Loader2 size={14} className="animate-spin" /> : <RotateCw size={14} />}
+                loading={actionLoading === "restart"}
+                leftIcon={actionLoading === "restart" ? undefined : <RotateCw size={14} />}
               >
                 {actionLoading === "restart" ? "Restarting..." : "Restart"}
               </Button>
@@ -496,11 +499,12 @@ export default function CloudflarePage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  disabled={fetchingZones || !cfApiToken}
+                  disabled={!cfApiToken}
                   onClick={handleFetchZones}
+                  loading={fetchingZones}
+                  leftIcon={fetchingZones ? undefined : <Download size={13} />}
                 >
-                  {fetchingZones ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                  <span className="ml-1 text-xs">Fetch Zones</span>
+                  <span className="text-xs">Fetch Zones</span>
                 </Button>
               </div>
               {cfZones.length > 0 ? (
@@ -557,11 +561,12 @@ export default function CloudflarePage() {
                 </div>
                 <Button
                   variant="secondary"
-                  disabled={verifyingZone || !newZoneId.trim() || !cfApiToken}
+                  disabled={!newZoneId.trim() || !cfApiToken}
                   onClick={handleAddZone}
+                  loading={verifyingZone}
+                  leftIcon={verifyingZone ? undefined : <Plus size={14} />}
                 >
-                  {verifyingZone ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                  <span className="ml-1">Add</span>
+                  Add
                 </Button>
               </div>
             </div>

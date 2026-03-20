@@ -21,6 +21,8 @@ import {
   Skeleton,
   useToast,
   pageEntrance,
+  Switch,
+  StatusDot,
 } from "@tac-ui/web";
 import {
   Trash2,
@@ -657,8 +659,8 @@ export default function ProjectDetailPage() {
                 size="sm"
                 variant="secondary"
                 onClick={handlePull}
-                disabled={pulling}
-                leftIcon={<RefreshCw size={14} className={pulling ? "animate-spin" : ""} />}
+                loading={pulling}
+                leftIcon={pulling ? undefined : <RefreshCw size={14} />}
               >
                 {pulling ? "Pulling..." : "Pull"}
               </Button>
@@ -690,7 +692,7 @@ export default function ProjectDetailPage() {
           <TabTrigger value="webhook">
             <span className="inline-flex items-center gap-1.5">
               Webhook
-              {hookEnabled && <span className="w-1.5 h-1.5 rounded-full bg-success" />}
+              {hookEnabled && <StatusDot status="success" size="sm" />}
             </span>
           </TabTrigger>
           <TabTrigger value="git">Git</TabTrigger>
@@ -1259,16 +1261,13 @@ export default function ProjectDetailPage() {
                               label="webhook URL"
                             />
                             {isManager && (
-                              <button
-                                onClick={() => {
+                              <Switch
+                                size="sm"
+                                checked={enabled}
+                                onChange={(v) => {
                                   api.toggleScriptHook(repoId, slug, !enabled).then((res) => { if (res.ok) fetchRepo(); });
                                 }}
-                                title={enabled ? "Disable webhook" : "Enable webhook"}
-                                aria-label="Toggle webhook"
-                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${enabled ? "bg-point" : "bg-muted"}`}
-                              >
-                                <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${enabled ? "translate-x-[18px]" : "translate-x-[3px]"}`} />
-                              </button>
+                              />
                             )}
                           </div>
                         </div>

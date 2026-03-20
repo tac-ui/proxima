@@ -28,22 +28,7 @@ import { useConfirm } from "@/hooks/useConfirm";
 import { useAuth } from "@/contexts/AuthContext";
 import { CopyButton } from "@/components/shared/CopyButton";
 import type { Stack, ContainerInfo, MountInfo, NetworkInfo } from "@/types";
-
-const statusVariantMap: Record<string, "success" | "destructive" | "warning" | "secondary"> = {
-  running: "success",
-  exited: "destructive",
-  created: "warning",
-  partial: "warning",
-  unknown: "secondary",
-};
-
-const statusLabelMap: Record<string, string> = {
-  running: "Running",
-  exited: "Exited",
-  created: "Created",
-  partial: "Partial",
-  unknown: "Unknown",
-};
+import { statusVariantMap, statusLabelMap } from "@/lib/stack-constants";
 
 export default function StackDetailPage() {
   const params = useParams();
@@ -381,9 +366,9 @@ export default function StackDetailPage() {
                   size="sm"
                   iconOnly
                   onClick={fetchLogs}
-                  disabled={logsLoading}
+                  loading={logsLoading}
                 >
-                  <RefreshCw size={14} className={logsLoading ? "animate-spin" : ""} />
+                  {!logsLoading && <RefreshCw size={14} />}
                 </Button>
               </div>
             </CardHeader>

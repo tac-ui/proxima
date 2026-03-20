@@ -147,8 +147,9 @@ export default function TerminalPage() {
                   className={`shrink-0 ${tab.connected ? "text-success" : "text-muted-foreground/30"}`}
                 />
                 <span>Shell {i + 1}</span>
-                <span
-                  role="button"
+                <button
+                  type="button"
+                  aria-label="Close terminal"
                   onClick={(e) => {
                     e.stopPropagation();
                     closeTab(tab.id);
@@ -156,7 +157,7 @@ export default function TerminalPage() {
                   className="text-muted-foreground/50 hover:text-foreground hover:bg-surface-hover transition-all p-0.5 rounded"
                 >
                   <X size={10} />
-                </span>
+                </button>
                 {activeTab === tab.id && (
                   <motion.div
                     layoutId="activeTab"

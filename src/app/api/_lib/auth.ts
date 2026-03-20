@@ -67,13 +67,8 @@ export function requireAdmin(req: NextRequest): { userId: number; username: stri
   return auth;
 }
 
-/** Known user-facing errors that are safe to expose. */
-export class ValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ValidationError";
-  }
-}
+import { ValidationError } from "@server/lib/errors";
+export { ValidationError };
 
 export function errorResponse(err: unknown, defaultMsg: string = "Internal server error") {
   if (err instanceof AuthError) {

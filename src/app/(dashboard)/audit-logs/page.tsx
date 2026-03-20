@@ -16,9 +16,9 @@ import {
   pageEntrance,
   fadeVariants,
   tacSpring,
+  Indicator,
 } from "@tac-ui/web";
 import { ScrollText, ShieldAlert, ChevronLeft, ChevronRight } from "@tac-ui/icon";
-import { LoadingIndicator } from "@/components/shared/LoadingIndicator";
 
 const CATEGORIES = [
   { value: "", label: "All" },
@@ -123,7 +123,7 @@ export default function AuditLogsPage() {
         setLoaded(true);
       }
     } catch {
-      // ignore
+      setLoaded(true);
     }
   }, [page, category, dateFilter]);
 
@@ -168,7 +168,7 @@ export default function AuditLogsPage() {
                 className="h-8 px-2 text-xs rounded-lg border border-border bg-background text-foreground outline-none focus:ring-1 focus:ring-ring"
               />
               <Select
-                selectSize="sm"
+                size="sm"
                 options={CATEGORIES}
                 value={category}
                 onChange={(val) => { setCategory(val); setPage(1); }}
@@ -177,7 +177,7 @@ export default function AuditLogsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <LoadingIndicator visible={!loaded} className="pb-4" />
+          {!loaded && <Indicator variant="linear" className="pb-4" />}
 
           <AnimatePresence mode="wait">
             {!loaded ? (

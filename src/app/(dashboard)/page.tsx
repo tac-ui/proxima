@@ -19,22 +19,7 @@ import {
 } from "@tac-ui/web";
 import { Layers, Globe, FolderGit2, BarChart3, ArrowRight } from "@tac-ui/icon";
 import type { StackListItem, RepositoryInfo, HostAnalyticsSummary, ProxyHost } from "@/types";
-
-const statusVariantMap: Record<string, "success" | "destructive" | "warning" | "info" | "secondary"> = {
-  running: "success",
-  exited: "destructive",
-  created: "warning",
-  partial: "warning",
-  unknown: "secondary",
-};
-
-const statusLabelMap: Record<string, string> = {
-  running: "Running",
-  exited: "Exited",
-  created: "Created",
-  partial: "Partial",
-  unknown: "Unknown",
-};
+import { statusVariantMap, statusLabelMap } from "@/lib/stack-constants";
 
 const staggerContainer = {
   hidden: {},

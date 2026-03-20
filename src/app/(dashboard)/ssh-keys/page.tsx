@@ -43,8 +43,10 @@ export default function SshKeysPage() {
         setSshKeys(res.data);
         setSshKeysLoaded(true);
       }
-    } catch {}
-  }, []);
+    } catch {
+      toast("Failed to load SSH keys", { variant: "error" });
+    }
+  }, [toast]);
 
   useEffect(() => {
     if (isManager) loadSshKeys();

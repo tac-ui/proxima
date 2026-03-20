@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronUp } from "@tac-ui/icon";
+import { StatusDot } from "@tac-ui/web";
 
 const MAX_OUTPUT_CHARS = 50_000;
 
@@ -126,10 +127,10 @@ export function ScriptLogViewer({
       >
         <div className="flex items-center gap-2 min-w-0">
           {!exited && !disconnected && (
-            <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse shrink-0" />
+            <StatusDot status="success" size="sm" pulse />
           )}
           {disconnected && !exited && (
-            <span className="w-1.5 h-1.5 rounded-full bg-warning shrink-0" />
+            <StatusDot status="warning" size="sm" />
           )}
           <span className="text-xs font-medium text-muted-foreground truncate">{title}</span>
           {exited && exitCode !== undefined && (

@@ -63,6 +63,7 @@ export default function ProjectsPage() {
   // SSH Keys
   const [sshKeys, setSshKeys] = useState<SshKeyInfo[]>([]);
   const [selectedSshKeyId, setSelectedSshKeyId] = useState<number | null>(null);
+  const selectedSshKeyIdRef = useRef<number | null>(null);
 
   // Pull state
   const [pullingAll, setPullingAll] = useState(false);
@@ -83,8 +84,10 @@ export default function ProjectsPage() {
     api.getSshKeys().then((res) => {
       if (res.ok && res.data) {
         setSshKeys(res.data);
-        if (res.data.length > 0 && selectedSshKeyId === null) {
-          setSelectedSshKeyId(res.data[res.data.length - 1].id);
+        if (res.data.length > 0 && selectedSshKeyIdRef.current === null) {
+          const id = res.data[res.data.length - 1].id;
+          setSelectedSshKeyId(id);
+          selectedSshKeyIdRef.current = id;
         }
       }
     });
@@ -179,15 +182,14 @@ export default function ProjectsPage() {
 
   const handlePullAll = async () => {
     setPullingAll(true);
-    let successCount = 0;
-    let failCount = 0;
-    for (const repo of repos) {
-      const res = await api.pullRepo(repo.id);
-      if (res.ok) successCount++; else failCount++;
-    }
+    const results = await Promise.allSettled(
+      repos.map((r) => api.pullRepo(r.id))
+    );
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed > 0) toast(`${failed} repo(s) failed to pull`, { variant: "warning" });
+    else toast("All repos pulled", { variant: "success" });
+    fetchRepos();
     setPullingAll(false);
-    if (failCount === 0) toast(`All ${successCount} projects updated`, { variant: "success" });
-    else toast(`${successCount} updated, ${failCount} failed`, { variant: "error" });
   };
 
   // Parse GitHub URL for branch
@@ -221,9 +223,9 @@ export default function ProjectsPage() {
               <Button
                 size="sm"
                 variant="secondary"
-                leftIcon={<RefreshCw size={14} className={pullingAll ? "animate-spin" : ""} />}
+                leftIcon={pullingAll ? undefined : <RefreshCw size={14} />}
                 onClick={handlePullAll}
-                disabled={pullingAll}
+                loading={pullingAll}
               >
                 {pullingAll ? "Pulling..." : "Pull All"}
               </Button>
@@ -320,7 +322,11 @@ export default function ProjectsPage() {
                       ...sshKeys.map((k) => ({ value: String(k.id), label: k.alias })),
                     ]}
                     value={selectedSshKeyId ? String(selectedSshKeyId) : ""}
-                    onChange={(v: string) => setSelectedSshKeyId(v ? Number(v) : null)}
+                    onChange={(v: string) => {
+                      const id = v ? Number(v) : null;
+                      setSelectedSshKeyId(id);
+                      selectedSshKeyIdRef.current = id;
+                    }}
                     className="w-full"
                   />
                 ) : (

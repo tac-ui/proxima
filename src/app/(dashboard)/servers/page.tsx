@@ -21,11 +21,11 @@ import {
   Button,
   SegmentController,
   Tooltip,
+  Indicator,
   pageEntrance,
 } from "@tac-ui/web";
 import { Server, Search, RefreshCw, Terminal, AlertTriangle, Star } from "@tac-ui/icon";
 import { CopyButton } from "@/components/shared/CopyButton";
-import { LoadingIndicator } from "@/components/shared/LoadingIndicator";
 import type { DiscoveredServiceWithManaged, ListeningProcessWithManaged, MountInfo } from "@/types";
 
 type TabValue = "containers" | "processes";
@@ -36,7 +36,7 @@ const tabOptions = [
 ];
 
 export default function ServersPage() {
-  const { connected } = useApiContext();
+  const { connected, subscribe } = useApiContext();
   const [tab, setTab] = useState<TabValue>("containers");
 
   // Docker status
@@ -145,7 +145,23 @@ export default function ServersPage() {
     setLoadingProcesses(true);
     const res = await api.getListeningPorts();
     if (res.ok && res.data) {
-      setProcesses(res.data);
+      // Auto-register unmanaged processes
+      const unmanaged = res.data.filter((p) => !p.managed && p.port > 0);
+      const registered = await Promise.all(
+        unmanaged.map(async (p) => {
+          const identifier = `${p.name}:${p.port}`;
+          const addRes = await api.addManagedService("process", identifier);
+          if (addRes.ok && addRes.data) {
+            return { pid: p.pid, port: p.port, managedId: addRes.data.id };
+          }
+          return null;
+        }),
+      );
+      const regMap = new Map(registered.filter(Boolean).map((r) => [`${r!.pid}:${r!.port}`, r!.managedId]));
+      setProcesses(res.data.map((p) => {
+        const mid = regMap.get(`${p.pid}:${p.port}`);
+        return mid ? { ...p, managed: true, managedId: mid } : p;
+      }));
     }
     setLoadingProcesses(false);
   }, []);
@@ -157,6 +173,14 @@ export default function ServersPage() {
   useEffect(() => {
     if (connected) fetchProcesses();
   }, [connected, fetchProcesses]);
+
+  // Subscribe to real-time container updates via SSE
+  useEffect(() => {
+    const unsub = subscribe("discoveredServices", () => {
+      fetchServices();
+    });
+    return unsub;
+  }, [subscribe, fetchServices]);
 
   const handleRefresh = () => {
     if (tab === "containers") fetchServices();
@@ -207,7 +231,7 @@ export default function ServersPage() {
         />
         <div className="flex-1 min-w-[200px] max-w-96">
           <Input
-            inputSize="sm"
+            size="sm"
             placeholder={tab === "containers" ? "Search services..." : "Search processes..."}
             value={search}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
@@ -226,7 +250,7 @@ export default function ServersPage() {
         </Button>
       </div>
 
-      <LoadingIndicator visible={dockerConnected === null || loading} />
+      {(dockerConnected === null || loading) && <Indicator variant="linear" />}
 
       {tab === "containers" ? (
         /* Containers tab */
@@ -265,8 +289,8 @@ export default function ServersPage() {
                   variant="secondary"
                   size="sm"
                   onClick={checkDocker}
-                  disabled={dockerChecking}
-                  leftIcon={<RefreshCw size={14} className={dockerChecking ? "animate-spin" : ""} />}
+                  loading={dockerChecking}
+                  leftIcon={dockerChecking ? undefined : <RefreshCw size={14} />}
                 >
                   {dockerChecking ? "Checking..." : "Retry"}
                 </Button>
@@ -338,9 +362,10 @@ export default function ServersPage() {
                         {sortedServices.map((svc) => (
                           <TableRow key={svc.containerName} className="group">
                             <TableCell className="pl-4 pr-0">
-                              <Tooltip content={svc.managed ? "Managed" : "Add to managed"} placement="top">
+                              <Tooltip content={svc.managed ? "Tracked — shown in Routes" : "Track this service"} placement="top">
                                 <button
                                   onClick={() => toggleContainerManaged(svc)}
+                                  aria-label={svc.managed ? "Remove from managed" : "Add to managed"}
                                   className="p-1 rounded hover:bg-muted transition-colors"
                                 >
                                   <Star
@@ -470,9 +495,10 @@ export default function ServersPage() {
                     {filteredProcesses.map((p) => (
                       <TableRow key={`${p.pid}:${p.port}`}>
                         <TableCell className="pl-4 pr-0">
-                          <Tooltip content={p.managed ? "Managed" : "Add to managed"} placement="top">
+                          <Tooltip content={p.managed ? "Tracked — shown in Routes" : "Track this port"} placement="top">
                             <button
                               onClick={() => toggleProcessManaged(p)}
+                              aria-label={p.managed ? "Remove from managed" : "Add to managed"}
                               className="p-1 rounded hover:bg-muted transition-colors"
                             >
                               <Star

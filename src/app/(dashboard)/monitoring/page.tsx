@@ -47,7 +47,14 @@ function UsageBar({ percent, label }: { percent: number; label: string }) {
         <span className="text-muted-foreground">{label}</span>
         <span className="font-mono font-semibold">{percent.toFixed(1)}%</span>
       </div>
-      <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
+      <div
+        className="h-2.5 w-full rounded-full bg-muted overflow-hidden"
+        role="progressbar"
+        aria-valuenow={Math.round(percent)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={label}
+      >
         <div
           className={`h-full rounded-full transition-all duration-500 ${color}`}
           style={{ width: `${Math.min(percent, 100)}%` }}
@@ -144,8 +151,8 @@ export default function MonitoringPage() {
           variant="secondary"
           size="sm"
           onClick={() => { fetchMetrics(true); fetchHistory(); }}
-          disabled={refreshing}
-          leftIcon={<RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />}
+          loading={refreshing}
+          leftIcon={refreshing ? undefined : <RefreshCw size={14} />}
         >
           Refresh
         </Button>

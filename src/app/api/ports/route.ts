@@ -18,9 +18,19 @@ function detectListeningProcesses(): ListeningProcess[] {
     if (procs.length > 0) return procs;
   } catch { /* fall through */ }
 
-  // Try ss
+  // Try ss with process info
   try {
     const output = execSync("ss -tlnp", {
+      encoding: "utf-8",
+      timeout: 5000,
+    });
+    const procs = parseSs(output);
+    if (procs.length > 0) return procs;
+  } catch { /* fall through */ }
+
+  // Try ss without -p (doesn't need privileges)
+  try {
+    const output = execSync("ss -tln", {
       encoding: "utf-8",
       timeout: 5000,
     });

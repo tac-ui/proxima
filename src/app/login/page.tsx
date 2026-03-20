@@ -12,6 +12,7 @@ import {
   Alert,
   AlertDescription,
   Indicator,
+  StatusDot,
 } from "@tac-ui/web";
 import { TacLogo } from "@tac-ui/icon";
 import { useBranding } from "@/contexts/BrandingContext";
@@ -158,7 +159,7 @@ export default function LoginPage() {
 
           {!connected && (
             <div className="mt-4 flex items-center gap-2.5 text-sm text-muted-foreground">
-              <span className="w-2 h-2 rounded-full bg-error animate-pulse" />
+              <StatusDot status="error" pulse />
               Connecting to server...
             </div>
           )}
