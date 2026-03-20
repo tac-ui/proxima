@@ -67,7 +67,7 @@ function parseLsof(output: string): ListeningProcess[] {
 function parseSs(output: string): ListeningProcess[] {
   const lines = output.trim().split("\n").slice(1); // skip header
   const processes: ListeningProcess[] = [];
-  const seen = new Set<string>();
+  const seen = new Set<number>();
 
   for (const line of lines) {
     // State  Recv-Q  Send-Q  Local Address:Port  Peer Address:Port  Process
@@ -82,7 +82,11 @@ function parseSs(output: string): ListeningProcess[] {
     const port = parseInt(localAddr.slice(colonIdx + 1), 10);
     if (isNaN(port) || port === 0) continue;
 
-    // Extract PID and process name from the "users:" field
+    // Deduplicate by port
+    if (seen.has(port)) continue;
+    seen.add(port);
+
+    // Extract PID and process name from the "users:" field (may be empty)
     let pid = 0;
     let name = "unknown";
     const processField = parts.slice(5).join(" ");
@@ -91,9 +95,12 @@ function parseSs(output: string): ListeningProcess[] {
     if (pidMatch) pid = parseInt(pidMatch[1], 10);
     if (nameMatch) name = nameMatch[1];
 
-    const key = `${pid}:${port}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    // Try to resolve name from /proc if ss didn't provide it
+    if (name === "unknown" && pid > 0) {
+      try {
+        name = readFileSync(`/proc/${pid}/comm`, "utf-8").trim();
+      } catch { /* ignore */ }
+    }
 
     processes.push({ pid, name, user: "", port, address, protocol: "TCP" });
   }
@@ -121,14 +128,15 @@ function parseProcNet(): ListeningProcess[] {
 
         const localAddrHex = fields[1];
         const [addrHex, portHex] = localAddrHex.split(":");
-        const port = parseInt(portHex, 10);
+        const port = parseInt(portHex, 16);
         if (isNaN(port) || port === 0) continue;
 
         const address = hexToIp(addrHex);
         const inode = fields[9];
         const pidInfo = inodeToPid.get(inode);
 
-        const key = `${pidInfo?.pid ?? 0}:${port}`;
+        // Deduplicate by port
+        const key = `${port}`;
         if (seen.has(key)) continue;
         seen.add(key);
 
@@ -153,7 +161,13 @@ function hexToIp(hex: string): string {
     const n = parseInt(hex, 16);
     return `${n & 0xff}.${(n >> 8) & 0xff}.${(n >> 16) & 0xff}.${(n >> 24) & 0xff}`;
   }
-  return "::"; // IPv6 simplified
+  if (hex.length === 32) {
+    // IPv6: check if all zeros (::)
+    if (hex === "00000000000000000000000000000000") return "::";
+    if (hex === "00000000000000000000000001000000") return "::1";
+    return "::"; // simplify other IPv6
+  }
+  return "*";
 }
 
 function buildInodeToPidMap(): Map<string, { pid: number; name: string }> {

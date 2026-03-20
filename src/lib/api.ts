@@ -104,6 +104,7 @@ export const api = {
 
   // Ports
   getListeningPorts: () => request<ListeningProcessWithManaged[]>("GET", "/api/ports"),
+  checkPorts: (ports: { host?: string; port: number }[]) => request<{ results: Record<number, boolean> }>("POST", "/api/ports/check", { ports }),
 
   // Managed Services
   getManagedServices: () => request<ManagedService[]>("GET", "/api/managed-services"),

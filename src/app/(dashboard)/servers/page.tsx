@@ -61,6 +61,8 @@ export default function ServersPage() {
   // Containers state
   const [services, setServices] = useState<DiscoveredServiceWithManaged[]>([]);
   const [loadingServices, setLoadingServices] = useState(true);
+  const [portStatus, setPortStatus] = useState<Record<number, boolean>>({});
+  const [checkingPorts, setCheckingPorts] = useState(false);
 
   // Processes state
   const [processes, setProcesses] = useState<ListeningProcessWithManaged[]>([]);
@@ -115,14 +117,29 @@ export default function ServersPage() {
 
   const [search, setSearch] = useState("");
 
+  const checkPortStatus = useCallback(async (svcs: DiscoveredServiceWithManaged[]) => {
+    const allPorts = svcs
+      .flatMap((s) => s.ports)
+      .filter((p, i, arr) => arr.findIndex((x) => x.hostPort === p.hostPort) === i)
+      .map((p) => ({ port: p.hostPort }));
+    if (allPorts.length === 0) return;
+    setCheckingPorts(true);
+    const res = await api.checkPorts(allPorts);
+    if (res.ok && res.data) {
+      setPortStatus(res.data.results);
+    }
+    setCheckingPorts(false);
+  }, []);
+
   const fetchServices = useCallback(async () => {
     setLoadingServices(true);
     const res = await api.discoverServices();
     if (res.ok && res.data) {
       setServices(res.data);
+      checkPortStatus(res.data);
     }
     setLoadingServices(false);
-  }, []);
+  }, [checkPortStatus]);
 
   const fetchProcesses = useCallback(async () => {
     setLoadingProcesses(true);
@@ -303,7 +320,7 @@ export default function ServersPage() {
             >
               <Card>
                 <CardContent className="p-0">
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto overflow-y-visible">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -362,14 +379,22 @@ export default function ServersPage() {
                             </TableCell>
                             <TableCell>
                               {svc.ports.length > 0 ? (
-                                <div className="flex flex-wrap gap-1">
+                                <div className="flex flex-wrap gap-1.5">
                                   {svc.ports
                                     .filter((p, i, arr) => arr.findIndex((x) => x.hostPort === p.hostPort && x.containerPort === p.containerPort) === i)
-                                    .map((p) => (
-                                    <Chip key={`${p.hostPort}:${p.containerPort}`} variant="filter">
-                                      {p.hostPort}:{p.containerPort}
-                                    </Chip>
-                                  ))}
+                                    .map((p) => {
+                                      const status = portStatus[p.hostPort];
+                                      const isUp = status === true;
+                                      const isDown = status === false;
+                                      return (
+                                        <Tooltip key={`${p.hostPort}:${p.containerPort}`} content={isUp ? "Port reachable" : isDown ? "Port not reachable" : "Checking..."} placement="top">
+                                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-mono border transition-colors ${isUp ? "border-success/30 bg-success/10 text-success" : isDown ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-border bg-surface text-muted-foreground"}`}>
+                                            <span className={`w-1.5 h-1.5 rounded-full ${isUp ? "bg-success" : isDown ? "bg-destructive" : "bg-muted-foreground animate-pulse"}`} />
+                                            {p.hostPort}:{p.containerPort}
+                                          </span>
+                                        </Tooltip>
+                                      );
+                                    })}
                                 </div>
                               ) : (
                                 <span className="text-xs text-muted-foreground">-</span>

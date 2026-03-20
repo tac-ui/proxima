@@ -2,10 +2,9 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Badge, Button, Card, CardContent, CardFooter, Chip } from "@tac-ui/web";
-import { ChevronRight, BarChart3, Cloud, ArrowRight } from "@tac-ui/icon";
+import { Badge, Button, Card, CardContent } from "@tac-ui/web";
+import { ExternalLink, Cloud, ArrowRight, Trash2, Edit, BarChart3 } from "@tac-ui/icon";
 import { useConfirm } from "@/hooks/useConfirm";
-import { CopyButton } from "@/components/shared/CopyButton";
 import type { ProxyHost } from "@/types";
 
 interface RouteCardProps {
@@ -19,7 +18,9 @@ export function RouteCard({ host, tunnelActive, onDelete, isManager }: RouteCard
   const [deleting, setDeleting] = useState(false);
   const confirm = useConfirm();
 
-  const handleDelete = async () => {
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (!onDelete) return;
     const ok = await confirm({
       title: "Delete Route",
@@ -37,81 +38,98 @@ export function RouteCard({ host, tunnelActive, onDelete, isManager }: RouteCard
   };
 
   const target = `${host.forwardScheme}://${host.forwardHost}:${host.forwardPort}`;
+  const primaryDomain = host.domainNames[0] ?? "";
+  const extraDomains = host.domainNames.slice(1);
 
   return (
-    <Card interactive>
-      <CardContent>
-        {/* Domains */}
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap gap-1 mb-1">
-              {host.domainNames.map((d) => (
-                <Chip key={d} variant="filter">
-                  <span className="font-mono">{d}</span>
-                  <CopyButton value={d} label="domain" />
-                </Chip>
-              ))}
+    <Link href={`/routes/${host.id}/edit`} className="block group">
+      <Card className="h-full transition-all duration-200 group-hover:border-point/30 group-hover:shadow-md">
+        <CardContent className="p-5">
+          {/* Header: Status + Features */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1.5">
+              <Badge variant={host.enabled ? "success" : "destructive"}>
+                {host.enabled ? "Online" : "Offline"}
+              </Badge>
+              {tunnelActive && (
+                <Badge variant="secondary">
+                  <Cloud size={10} className="mr-1" />
+                  Tunnel
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              {host.allowWebsocketUpgrade && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">WS</span>}
+              {host.cachingEnabled && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Cache</span>}
+              {host.http2Support && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">H2</span>}
             </div>
           </div>
-          <Badge variant={host.enabled ? "success" : "destructive"}>
-            {host.enabled ? "Online" : "Offline"}
-          </Badge>
-        </div>
 
-        {/* Target / Traffic flow */}
-        <div className="flex items-center gap-1.5 mb-4 text-xs text-muted-foreground flex-wrap">
-          {tunnelActive ? (
-            <>
-              <Cloud size={12} className="text-point shrink-0" />
-              <span className="text-point font-medium">CF</span>
-              <ArrowRight size={10} className="text-muted-foreground/50 shrink-0" />
-              <span className="font-mono truncate">{target}</span>
-            </>
-          ) : (
-            <>
-              <ChevronRight size={14} className="shrink-0" />
-              <span className="font-mono truncate">{target}</span>
-            </>
+          {/* Primary Domain */}
+          <div className="mb-1">
+            <a
+              href={`https://${primaryDomain}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold hover:text-point transition-colors"
+            >
+              {primaryDomain}
+              <ExternalLink size={12} className="text-muted-foreground" />
+            </a>
+          </div>
+
+          {/* Extra domains */}
+          {extraDomains.length > 0 && (
+            <div className="flex flex-wrap gap-1 mb-2">
+              {extraDomains.map((d) => (
+                <a
+                  key={d}
+                  href={`https://${d}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-[11px] font-mono text-muted-foreground hover:text-point transition-colors"
+                >
+                  {d}
+                </a>
+              ))}
+            </div>
           )}
-          <CopyButton value={target} label="forward target" />
-        </div>
 
-        {/* Features */}
-        <div className="flex flex-wrap gap-2 mb-4">
-          {tunnelActive && (
-            <Chip variant="filter" leftIcon={<Cloud size={10} />}>Tunnel</Chip>
-          )}
-          {host.allowWebsocketUpgrade && <Chip variant="filter">WS</Chip>}
-          {host.http2Support && <Chip variant="filter">HTTP/2</Chip>}
-          {host.cachingEnabled && <Chip variant="filter">Cache</Chip>}
-        </div>
-      </CardContent>
+          {/* Origin */}
+          <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-border/50">
+            <ArrowRight size={12} className="text-muted-foreground/50 shrink-0" />
+            <span className="font-mono text-xs text-muted-foreground truncate">{target}</span>
+          </div>
 
-      {/* Actions */}
-      <CardFooter>
-        <div className="flex gap-2">
-          <Link href={`/analytics?hostId=${host.id}`}>
-            <Button variant="ghost" size="sm">
-              <BarChart3 size={14} />
-            </Button>
-          </Link>
+          {/* Actions */}
           {isManager !== false && (
-            <>
-              <Link href={`/routes/${host.id}/edit`}>
-                <Button variant="secondary" size="sm">Edit</Button>
+            <div className="flex items-center gap-1 mt-3 pt-3 border-t border-border/50">
+              <Link href={`/analytics?hostId=${host.id}`} onClick={(e) => e.stopPropagation()}>
+                <Button variant="ghost" size="sm" iconOnly title="Analytics">
+                  <BarChart3 size={13} />
+                </Button>
+              </Link>
+              <Link href={`/routes/${host.id}/edit`} onClick={(e) => e.stopPropagation()}>
+                <Button variant="ghost" size="sm" iconOnly title="Edit">
+                  <Edit size={13} />
+                </Button>
               </Link>
               <Button
-                variant="destructive"
+                variant="ghost"
                 size="sm"
+                iconOnly
+                title="Delete"
                 disabled={deleting}
                 onClick={handleDelete}
               >
-                {deleting ? "Deleting..." : "Delete"}
+                <Trash2 size={13} className="text-destructive" />
               </Button>
-            </>
+            </div>
           )}
-        </div>
-      </CardFooter>
-    </Card>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }

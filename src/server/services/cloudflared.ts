@@ -115,7 +115,7 @@ export async function pushTunnelIngress(token: string, apiToken: string): Promis
 // Container lifecycle
 // ---------------------------------------------------------------------------
 
-/** Check if the running cloudflared container is on the expected network. */
+/** Check if the running cloudflared container is also connected to Proxima's network. */
 export async function checkAndFixNetwork(): Promise<void> {
   try {
     const container = docker.getContainer(CONTAINER_NAME);
@@ -123,17 +123,17 @@ export async function checkAndFixNetwork(): Promise<void> {
     if (!info.State?.Running) return;
 
     const proximaInfo = await getProximaContainerInfo();
-    if (!proximaInfo) return;
+    if (!proximaInfo || proximaInfo.network === "host") return;
 
     const currentNetworks = Object.keys(info.NetworkSettings?.Networks ?? {});
     if (!currentNetworks.includes(proximaInfo.network)) {
-      logger.info("cloudflared", `Network mismatch: cloudflared on [${currentNetworks.join(",")}], expected ${proximaInfo.network}. Recreating...`);
-      // Get token from tunnel settings to restart
-      const { getTunnelSettings } = await import("../services/cloudflare");
-      const tunnel = getTunnelSettings();
-      if (tunnel.enabled && tunnel.tunnelToken) {
-        await stopCloudflared();
-        await startCloudflared(tunnel.tunnelToken);
+      // Just connect to the missing network — no need to recreate
+      try {
+        const network = docker.getNetwork(proximaInfo.network);
+        await network.connect({ Container: info.Id });
+        logger.info("cloudflared", `Connected to missing network: ${proximaInfo.network}`);
+      } catch (err) {
+        logger.warn("cloudflared", `Failed to connect to ${proximaInfo.network}: ${err}`);
       }
     }
   } catch {
@@ -235,23 +235,33 @@ export async function startCloudflared(token: string): Promise<void> {
   await ensureImage();
   await removeExisting();
 
-  // Try to join the same Docker network as the Proxima container
-  const proximaInfo = await getProximaContainerInfo();
-  const networkMode = proximaInfo?.network ?? "host";
-
+  // Start on host network (for outbound Cloudflare connectivity), then also join Proxima's network
   const container = await docker.createContainer({
     name: CONTAINER_NAME,
     Image: IMAGE,
     Cmd: ["tunnel", "--no-autoupdate", "run"],
     Env: [`TUNNEL_TOKEN=${token}`],
     HostConfig: {
-      NetworkMode: networkMode,
+      NetworkMode: "host",
       RestartPolicy: { Name: "on-failure", MaximumRetryCount: 3 },
     },
   });
 
   await container.start();
-  logger.info("cloudflared", `Container started (network: ${networkMode})`);
+
+  // Also connect to Proxima's Docker network so cloudflared can reach containers by name
+  const proximaInfo = await getProximaContainerInfo();
+  if (proximaInfo?.network && proximaInfo.network !== "host") {
+    try {
+      const network = docker.getNetwork(proximaInfo.network);
+      await network.connect({ Container: container.id });
+      logger.info("cloudflared", `Also connected to network: ${proximaInfo.network}`);
+    } catch (err) {
+      logger.warn("cloudflared", `Failed to connect to ${proximaInfo.network}: ${err}`);
+    }
+  }
+
+  logger.info("cloudflared", "Container started (host + proxima network)");
 
   // Push ingress rules via API
   try {
