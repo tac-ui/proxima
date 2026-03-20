@@ -59,7 +59,6 @@ export default function CloudflarePage() {
   const [verifyingZone, setVerifyingZone] = useState(false);
   const [fetchingZones, setFetchingZones] = useState(false);
   const [cfLoaded, setCfLoaded] = useState(false);
-  const [cfSaving, setCfSaving] = useState(false);
   const [showTunToken, setShowTunToken] = useState(false);
   const [showApiToken, setShowApiToken] = useState(false);
   const [showRunningLogs, setShowRunningLogs] = useState(false);
@@ -151,28 +150,31 @@ export default function CloudflarePage() {
     }
   };
 
-  const handleSaveCloudflare = async () => {
-    setCfSaving(true);
+  /** Auto-save zones settings */
+  const saveZones = async (zones: CloudflareZone[], defaultZone: string) => {
     try {
       const cfRes = await api.updateCloudflareSettings({
         apiToken: cfApiToken,
-        zones: cfZones,
+        zones,
         autoSync: cfAutoSync,
-        defaultZone: cfDefaultZone,
+        defaultZone,
       });
       if (cfRes.ok && cfRes.data) {
         setCfApiToken(cfRes.data.apiToken);
         setCfZones(cfRes.data.zones ?? []);
         setCfDefaultZone(cfRes.data.defaultZone ?? "");
-        toast("Analytics settings saved", { variant: "success" });
       } else {
         toast(cfRes.error ?? "Failed to save", { variant: "error" });
       }
     } catch {
-      toast("Failed to save analytics settings", { variant: "error" });
-    } finally {
-      setCfSaving(false);
+      toast("Failed to save zones", { variant: "error" });
     }
+  };
+
+  const handleSetDefaultZone = (zoneName: string) => {
+    const newDefault = cfDefaultZone === zoneName ? "" : zoneName;
+    setCfDefaultZone(newDefault);
+    saveZones(cfZones, newDefault);
   };
 
   const handleAddZone = async () => {
@@ -182,13 +184,14 @@ export default function CloudflarePage() {
       const res = await api.testCloudflareZone(newZoneId.trim(), cfApiToken);
       if (res.ok && res.data && res.data.valid) {
         const zone: CloudflareZone = { zoneId: newZoneId.trim(), zoneName: res.data.zoneName ?? "" };
-        // Avoid duplicates
         if (cfZones.some(z => z.zoneId === zone.zoneId)) {
           toast("Zone already added", { variant: "error" });
         } else {
-          setCfZones(prev => [...prev, zone]);
+          const newZones = [...cfZones, zone];
+          setCfZones(newZones);
           setNewZoneId("");
           toast(`Zone "${zone.zoneName}" added`, { variant: "success" });
+          saveZones(newZones, cfDefaultZone);
         }
       } else {
         toast(res.data?.error ?? res.error ?? "Invalid Zone ID", { variant: "error" });
@@ -201,7 +204,12 @@ export default function CloudflarePage() {
   };
 
   const handleRemoveZone = (zoneId: string) => {
-    setCfZones(prev => prev.filter(z => z.zoneId !== zoneId));
+    const removed = cfZones.find(z => z.zoneId === zoneId);
+    const newZones = cfZones.filter(z => z.zoneId !== zoneId);
+    setCfZones(newZones);
+    const newDefault = removed && cfDefaultZone === removed.zoneName ? "" : cfDefaultZone;
+    if (newDefault !== cfDefaultZone) setCfDefaultZone(newDefault);
+    saveZones(newZones, newDefault);
   };
 
   const handleFetchZones = async () => {
@@ -215,8 +223,10 @@ export default function CloudflarePage() {
         if (newZones.length === 0) {
           toast(cfZones.length > 0 ? "No new zones found" : "No zones found for this API token", { variant: "info" });
         } else {
-          setCfZones(prev => [...prev, ...newZones]);
+          const allZones = [...cfZones, ...newZones];
+          setCfZones(allZones);
           toast(`Added ${newZones.length} zone(s)`, { variant: "success" });
+          saveZones(allZones, cfDefaultZone);
         }
       } else {
         toast(res.error ?? "Failed to fetch zones", { variant: "error" });
@@ -513,7 +523,7 @@ export default function CloudflarePage() {
                         <div className="flex items-center gap-1 shrink-0 ml-2">
                           <button
                             type="button"
-                            onClick={() => setCfDefaultZone(isDefault ? "" : zone.zoneName)}
+                            onClick={() => handleSetDefaultZone(zone.zoneName)}
                             className={`transition-colors p-1 rounded ${isDefault ? "text-point" : "text-muted-foreground/40 hover:text-point"}`}
                             title={isDefault ? "Remove as default" : "Set as default domain"}
                           >
@@ -521,10 +531,7 @@ export default function CloudflarePage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              handleRemoveZone(zone.zoneId);
-                              if (isDefault) setCfDefaultZone("");
-                            }}
+                            onClick={() => handleRemoveZone(zone.zoneId)}
                             className="text-muted-foreground hover:text-error transition-colors p-1 rounded"
                           >
                             <Trash2 size={14} />
@@ -559,16 +566,6 @@ export default function CloudflarePage() {
               </div>
             </div>
 
-            <div className="flex justify-end">
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={cfSaving || !cfLoaded}
-                onClick={handleSaveCloudflare}
-              >
-                {cfSaving ? "Saving..." : "Save"}
-              </Button>
-            </div>
           </div>
         </CardContent>
       </Card>

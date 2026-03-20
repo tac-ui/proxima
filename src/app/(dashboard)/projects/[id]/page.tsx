@@ -1134,65 +1134,6 @@ export default function ProjectDetailPage() {
                       </div>
                     </div>
 
-                    {/* Webhook Scripts */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Scripts</p>
-                        {isManager && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            leftIcon={<Plus size={12} />}
-                            onClick={() => {
-                              setEditingScript({ name: "", content: "", preCommand: "", command: "" });
-                              setActiveTab("scripts");
-                            }}
-                          >
-                            New Script
-                          </Button>
-                        )}
-                      </div>
-                      {repo.scripts.length === 0 ? (
-                        <p className="text-xs text-muted-foreground py-4 text-center">No scripts yet. Create a script to use with webhooks.</p>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {repo.scripts.map((script) => {
-                            const slug = script.filename.replace(/\.sh$/, "");
-                            const enabled = script.hookEnabled !== false;
-                            return (
-                              <div key={script.filename} className={`flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border transition-colors ${enabled ? "border-border bg-surface" : "border-border/50 bg-surface/50 opacity-60"}`}>
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <FileCode2 size={14} className={enabled ? "text-point shrink-0" : "text-muted-foreground shrink-0"} />
-                                  <div className="min-w-0">
-                                    <p className="text-xs font-medium truncate">{script.name}</p>
-                                    <p className="text-[10px] text-muted-foreground font-mono truncate">/api/hook/{repo.name}/{slug}</p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <CopyButton
-                                    value={`${typeof window !== "undefined" ? window.location.origin : ""}/api/hook/${repo.name}/${slug}`}
-                                    label="webhook URL"
-                                  />
-                                  {isManager && (
-                                    <button
-                                      onClick={() => {
-                                        api.toggleScriptHook(repoId, slug, !enabled).then((res) => { if (res.ok) fetchRepo(); });
-                                      }}
-                                      title={enabled ? "Disable webhook" : "Enable webhook"}
-                                      aria-label="Toggle webhook"
-                                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${enabled ? "bg-point" : "bg-muted"}`}
-                                    >
-                                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${enabled ? "translate-x-[18px]" : "translate-x-[3px]"}`} />
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
                     {/* Webhook Logs */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
@@ -1267,6 +1208,77 @@ export default function ProjectDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Webhook Scripts Card */}
+          {hookEnabled && (
+            <Card className="mt-4">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileCode2 size={14} />
+                    <p className="text-sm font-semibold">Webhook Scripts</p>
+                  </div>
+                  {isManager && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      leftIcon={<Plus size={12} />}
+                      onClick={() => {
+                        setEditingScript({ name: "", content: "", preCommand: "", command: "" });
+                        setActiveTab("scripts");
+                      }}
+                    >
+                      New Script
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {repo.scripts.length === 0 ? (
+                  <div className="py-6 text-center space-y-2">
+                    <FileCode2 size={18} className="text-muted-foreground mx-auto" />
+                    <p className="text-xs text-muted-foreground">No scripts yet. Create a script to use with webhooks.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {repo.scripts.map((script) => {
+                      const slug = script.filename.replace(/\.sh$/, "");
+                      const enabled = script.hookEnabled !== false;
+                      return (
+                        <div key={script.filename} className={`flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border transition-colors ${enabled ? "border-border bg-surface" : "border-border/50 bg-surface/50 opacity-60"}`}>
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <FileCode2 size={14} className={enabled ? "text-point shrink-0" : "text-muted-foreground shrink-0"} />
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium truncate">{script.name}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono truncate">/api/hook/{repo.name}/{slug}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <CopyButton
+                              value={`${typeof window !== "undefined" ? window.location.origin : ""}/api/hook/${repo.name}/${slug}`}
+                              label="webhook URL"
+                            />
+                            {isManager && (
+                              <button
+                                onClick={() => {
+                                  api.toggleScriptHook(repoId, slug, !enabled).then((res) => { if (res.ok) fetchRepo(); });
+                                }}
+                                title={enabled ? "Disable webhook" : "Enable webhook"}
+                                aria-label="Toggle webhook"
+                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${enabled ? "bg-point" : "bg-muted"}`}
+                              >
+                                <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${enabled ? "translate-x-[18px]" : "translate-x-[3px]"}`} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabContent>
 
         {/* Git Tab */}
