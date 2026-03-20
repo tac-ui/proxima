@@ -9,7 +9,7 @@ import { broadcast } from "./src/app/api/_lib/event-bus";
 import { handleTerminalConnection } from "./src/app/api/_lib/terminal-ws";
 import { logger } from "./src/server/lib/logger";
 import { getTunnelSettings } from "./src/server/services/cloudflare";
-import { getCloudflaredStatus, startCloudflared } from "./src/server/services/cloudflared";
+import { getCloudflaredStatus, startCloudflared, checkAndFixNetwork } from "./src/server/services/cloudflared";
 import { syncAutoManaged } from "./src/server/services/managed-service";
 
 const dev = process.env.NODE_ENV !== "production";
@@ -29,6 +29,9 @@ async function main() {
       if (cfdStatus.state !== "running") {
         await startCloudflared(tunnel.tunnelToken);
         logger.info("server", "Cloudflared container auto-started");
+      } else {
+        // Fix network mismatch if cloudflared is running on wrong network
+        await checkAndFixNetwork();
       }
     }
   } catch (err) {

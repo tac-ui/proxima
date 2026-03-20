@@ -115,6 +115,32 @@ export async function pushTunnelIngress(token: string, apiToken: string): Promis
 // Container lifecycle
 // ---------------------------------------------------------------------------
 
+/** Check if the running cloudflared container is on the expected network. */
+export async function checkAndFixNetwork(): Promise<void> {
+  try {
+    const container = docker.getContainer(CONTAINER_NAME);
+    const info = await container.inspect();
+    if (!info.State?.Running) return;
+
+    const proximaInfo = await getProximaContainerInfo();
+    if (!proximaInfo) return;
+
+    const currentNetworks = Object.keys(info.NetworkSettings?.Networks ?? {});
+    if (!currentNetworks.includes(proximaInfo.network)) {
+      logger.info("cloudflared", `Network mismatch: cloudflared on [${currentNetworks.join(",")}], expected ${proximaInfo.network}. Recreating...`);
+      // Get token from tunnel settings to restart
+      const { getTunnelSettings } = await import("../services/cloudflare");
+      const tunnel = getTunnelSettings();
+      if (tunnel.enabled && tunnel.tunnelToken) {
+        await stopCloudflared();
+        await startCloudflared(tunnel.tunnelToken);
+      }
+    }
+  } catch {
+    // ignore — best-effort check
+  }
+}
+
 export async function getCloudflaredStatus(): Promise<CloudflaredStatus> {
   try {
     const container = docker.getContainer(CONTAINER_NAME);
