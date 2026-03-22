@@ -54,18 +54,21 @@ export async function PUT(
 
     const existing = repo.domainConnection ? JSON.parse(repo.domainConnection) as DomainConnection : null;
 
+    const proxyWarnings: string[] = [];
+
     if (domainConnection) {
       // Create or update proxy host
       if (existing?.proxyHostId) {
         // Update existing proxy host
         try {
-          await updateProxyHost(existing.proxyHostId, {
+          const result = await updateProxyHost(existing.proxyHostId, {
             domainNames: [domainConnection.domain],
             forwardScheme: domainConnection.forwardScheme,
             forwardHost: domainConnection.forwardHost,
             forwardPort: domainConnection.forwardPort,
           });
           domainConnection.proxyHostId = existing.proxyHostId;
+          if (result._warnings?.length) proxyWarnings.push(...result._warnings);
         } catch {
           // Proxy host may have been deleted externally, create new
           const result = await createProxyHost({
@@ -77,6 +80,7 @@ export async function PUT(
             meta: { repoId, type: "domain-connection" },
           });
           domainConnection.proxyHostId = result.id;
+          if (result._warnings?.length) proxyWarnings.push(...result._warnings);
         }
       } else {
         // Create new proxy host
@@ -89,6 +93,7 @@ export async function PUT(
           meta: { repoId, type: "domain-connection" },
         });
         domainConnection.proxyHostId = result.id;
+        if (result._warnings?.length) proxyWarnings.push(...result._warnings);
       }
 
       db.update(schema.repositories)
@@ -108,7 +113,8 @@ export async function PUT(
 
     const updated = db.select().from(schema.repositories).where(eq(schema.repositories.id, repoId)).get();
     logAudit({ userId: auth.userId, username: auth.username, action: "update", category: "repo", targetType: "repo", targetName: repo.name, ipAddress: getClientIp(req) });
-    return ok(toRepoInfo(updated!));
+    const repoInfo = toRepoInfo(updated!);
+    return ok(proxyWarnings.length ? { ...repoInfo, warnings: proxyWarnings } : repoInfo);
   } catch (err) {
     return errorResponse(err);
   }

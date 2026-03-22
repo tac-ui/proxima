@@ -224,8 +224,14 @@ export default function ProjectDetailPage() {
       forwardScheme: "http",
     });
     if (res.ok && res.data) {
-      setRepo(res.data);
-      toast(`Domain ${domain} connected`, { variant: "success" });
+      const data = res.data as RepositoryInfo & { warnings?: string[] };
+      setRepo(data);
+      if (data.warnings?.length) {
+        for (const w of data.warnings) toast(w, { variant: "warning" });
+        toast(`Domain ${domain} connected, but sync had issues`, { variant: "warning" });
+      } else {
+        toast(`Domain ${domain} connected`, { variant: "success" });
+      }
     } else {
       toast(res.error ?? "Failed to save domain", { variant: "error" });
     }

@@ -20,9 +20,9 @@
 - **Docker Stack Management** — Deploy, start, stop, restart, and delete Docker Compose stacks. Edit Compose YAML and `.env` files in-browser. Real-time container status, logs, and web terminal access.
 - **Reverse Proxy (Cloudflare Tunnel)** — Route domains to internal services via Cloudflare Tunnel. Automatic DNS CNAME management and Tunnel ingress sync. SSL is terminated at Cloudflare Edge — no local certificate management needed.
 - **Analytics** — Traffic metrics powered by Cloudflare GraphQL Analytics API. View requests, bandwidth, cache hit rate, and country-level traffic.
-- **Git Clone & Deploy** — Clone repositories via HTTPS or SSH, auto-detect `docker-compose` files, and deploy as stacks with one click. Manage SSH keys and run custom scripts per repository.
+- **Git Projects & Run Scripts** — Clone repositories via HTTPS or SSH, register custom run scripts, and connect domains directly to running services. Perfect for dev/staging environments.
 - **Web Terminal** — Full interactive shell sessions in the browser. Tab-based multi-session support with xterm.js and WebSocket PTY.
-- **Network Discovery** — Automatically discover running Docker containers and their internal IPs/ports. Auto-suggest proxy targets when creating routes.
+- **Server Discovery** — Automatically discover running Docker containers and host processes. Set aliases for processes, track services, and auto-suggest proxy targets.
 - **User Management** — Role-based access control (Admin / Manager / Viewer). JWT authentication with setup wizard on first run.
 - **Audit Logs** — Track all user activity with category and date filtering. Auto-cleanup after 90 days. Admin-only access.
 - **Command Palette** — Quick page navigation with `Cmd+K` / `Ctrl+K`.
@@ -47,22 +47,15 @@ services:
     image: jeonhui/proxima:latest
     container_name: proxima
     restart: unless-stopped
-    pid: host  # optional: enables host process discovery
+    pid: host
+    network_mode: host
     environment:
       - PUID=1000  # host user ID (run: id -u)
       - PGID=1000  # host group ID (run: id -g)
-    ports:
-      - "20222:20222"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - pxm-data:/data
       - pxm-stacks:/data/stacks
-    networks:
-      - pxm-network
-
-networks:
-  pxm-network:
-    name: pxm-network
 
 volumes:
   pxm-data:
@@ -79,7 +72,9 @@ docker compose up -d
 
 4. The setup wizard will guide you through creating the first admin account.
 
-> **Using an existing reverse proxy?** Only expose port `20222` and point your proxy to `localhost:20222`.
+> **Note:** `network_mode: host` is recommended. Proxima and Cloudflare Tunnel share the host network, so `localhost` routing works directly. No port mapping needed — port `20222` is exposed on the host automatically.
+>
+> **Firewall:** If your server uses iptables or a cloud security group, make sure port `20222` is open for inbound TCP traffic.
 
 ---
 
@@ -98,18 +93,49 @@ Navigate to **Stacks** to manage Docker Compose stacks.
 
 Navigate to **Routes** to configure reverse proxy hosts via Cloudflare Tunnel.
 
-1. Go to **Settings > Cloudflare** and configure your API token, Zone ID, and Tunnel token
-2. Create proxy hosts with domain names pointing to internal services
+1. Go to **Settings > Cloudflare** and configure your API token, zones, and Tunnel token
+2. Create routes with domain names pointing to internal services
 3. DNS CNAME records and Tunnel ingress rules are synced automatically
+
+> **Important:** Manage all tunnel routes through Proxima only. Adding routes directly in the Cloudflare dashboard will be overwritten when Proxima syncs.
+
+#### Cloudflare API Token Permissions
+
+| Resource | Permission |
+|----------|-----------|
+| Zone - DNS | **Edit** |
+| Zone - Zone | **Read** |
+| Zone - Analytics | Read (optional, for dashboard analytics) |
+| Account - Cloudflare Tunnel | **Edit** |
+
+Zone Resources must be set to the target zone(s) or "All zones".
 
 ### Projects
 
-Navigate to **Projects** to clone Git repositories and deploy them.
+Navigate to **Projects** to clone Git repositories and run services.
 
 - Clone via HTTPS or SSH (manage SSH keys under **SSH Keys**)
-- Auto-detect `docker-compose` files in cloned repos
-- Deploy detected Compose files as stacks with one click
-- Register and run custom scripts per repository
+- Register custom **run scripts** (shell scripts) per repository
+- Run scripts start services inside the Proxima container (e.g., `npx next dev -p 3000`)
+- Connect a domain via the **Domain** tab — specify port only, host is automatically `localhost`
+- The connected domain appears in the project header
+
+#### Domain Connection (Projects)
+
+1. Open a project and go to the **Domain** tab
+2. Enter a subdomain (or leave empty to use the project name) and select a zone
+3. Enter the port your service runs on (e.g., `3000`)
+4. Click **Connect Domain** — DNS and tunnel ingress are configured automatically
+5. Optionally check **Use root domain** to use the zone directly (e.g., `example.com`)
+
+### Servers
+
+Navigate to **Servers** to view running containers and host processes.
+
+- **Containers** tab — all Docker containers with ports, networks, volumes
+- **Processes** tab — TCP listening processes on the host
+- Star (track) services to show them in Route form's service picker
+- Set **aliases** for tracked processes to easily identify them when creating routes
 
 ### Terminal
 
@@ -118,17 +144,21 @@ Navigate to **Terminal** for standalone shell sessions.
 - Create multiple terminal tabs
 - Full interactive shell with xterm.js
 
+> **Note:** Host shell access requires **Admin** role.
+
 ### Settings
 
 - **Appearance** — Switch between light, dark, and system themes
 - **Branding** — Customize app name, logo, favicon, and Open Graph metadata
-- **Cloudflare** — Configure API credentials and Tunnel settings
+- **Cloudflare** — Configure API credentials, zones, and Tunnel settings
+- **Users** — Manage users and roles (Admin only)
+- **Audit Logs** — View all activity logs (Admin only)
 
 ### User Roles
 
 | Role | Permissions |
 |------|-------------|
-| **Admin** | Full access. Manage users, view audit logs, all settings. |
+| **Admin** | Full access. Manage users, host shell, view audit logs, all settings. |
 | **Manager** | Manage stacks, routes, projects, terminals, and branding. |
 | **Viewer** | Read-only access to stacks, routes, and projects. |
 
@@ -141,6 +171,7 @@ Navigate to **Terminal** for standalone shell sessions.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PXM_PORT` | `20222` | Server port |
+| `PXM_HOSTNAME` | `0.0.0.0` | Server bind address |
 | `PXM_DATA_DIR` | `/data` | Data root directory |
 | `PXM_STACKS_DIR` | `/data/stacks` | Stack files storage path |
 | `PUID` | *(auto-detect)* | Run as this user ID. If unset, detects from `/data` mount owner. |

@@ -1,6 +1,6 @@
 {
   "name": "proxima",
-  "version": "1.3.4",
+  "version": "1.3.5",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,7 +13,7 @@
     "@tac-ui/icon": "^1.0.3",
     "@tac-ui/shared": "^1.0.3",
     "@tac-ui/tokens": "^1.0.3",
-    "@tac-ui/web": "^1.1.2",
+    "@tac-ui/web": "^1.1.3",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "bcryptjs": "^2.4.3",

@@ -20,9 +20,9 @@
 - **Docker 스택 관리** — Docker Compose 스택 배포, 시작, 중지, 재시작, 삭제. 브라우저에서 Compose YAML과 `.env` 파일 편집. 실시간 컨테이너 상태, 로그, 웹 터미널 접속.
 - **리버스 프록시 (Cloudflare Tunnel)** — Cloudflare Tunnel을 통한 도메인 라우팅. DNS CNAME 자동 관리 및 Tunnel Ingress 자동 동기화. SSL은 Cloudflare Edge에서 종료 — 로컬 인증서 관리 불필요.
 - **Analytics** — Cloudflare GraphQL Analytics API 기반 트래픽 분석. 요청 수, 대역폭, 캐시 히트율, 국가별 트래픽 조회.
-- **Git 클론 & 배포** — HTTPS 또는 SSH로 저장소 클론, `docker-compose` 파일 자동 탐지, 원클릭 스택 배포. SSH 키 관리 및 저장소별 커스텀 스크립트 실행.
+- **Git 프로젝트 & Run Script** — HTTPS 또는 SSH로 저장소 클론, 커스텀 실행 스크립트 등록, 실행 중인 서비스에 도메인 직접 연결. 개발/스테이징 환경에 적합.
 - **웹 터미널** — 브라우저에서 인터랙티브 쉘 세션. 탭 기반 멀티 세션 지원 (xterm.js + WebSocket PTY).
-- **네트워크 디스커버리** — 실행 중인 Docker 컨테이너와 내부 IP/포트 자동 탐지. 프록시 타겟 자동 제안.
+- **서버 디스커버리** — 실행 중인 Docker 컨테이너와 호스트 프로세스 자동 탐지. 프로세스 별칭 설정, 서비스 추적, 프록시 타겟 자동 제안.
 - **사용자 관리** — 역할 기반 접근 제어 (Admin / Manager / Viewer). JWT 인증. 최초 실행 시 설정 마법사.
 - **감사 로그** — 모든 사용자 활동 추적, 카테고리/날짜 필터링. 90일 자동 정리. Admin 전용.
 - **커맨드 팔레트** — `Cmd+K` / `Ctrl+K`로 빠른 페이지 검색 및 이동.
@@ -47,22 +47,15 @@ services:
     image: jeonhui/proxima:latest
     container_name: proxima
     restart: unless-stopped
-    pid: host  # 선택: 호스트 프로세스 탐지 활성화
+    pid: host
+    network_mode: host
     environment:
       - PUID=1000  # 호스트 사용자 ID (확인: id -u)
       - PGID=1000  # 호스트 그룹 ID (확인: id -g)
-    ports:
-      - "20222:20222"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - pxm-data:/data
       - pxm-stacks:/data/stacks
-    networks:
-      - pxm-network
-
-networks:
-  pxm-network:
-    name: pxm-network
 
 volumes:
   pxm-data:
@@ -79,7 +72,9 @@ docker compose up -d
 
 4. 설정 마법사가 표시되면 첫 번째 관리자 계정을 생성합니다.
 
-> **기존 리버스 프록시를 사용 중인 경우**, 포트 `20222`만 열고 기존 프록시에서 `localhost:20222`로 포워딩하세요.
+> **참고:** `network_mode: host`를 권장합니다. Proxima와 Cloudflare Tunnel이 호스트 네트워크를 공유하여 `localhost` 라우팅이 바로 동작합니다. 포트 매핑 불필요 — 포트 `20222`가 호스트에 자동으로 노출됩니다.
+>
+> **방화벽:** iptables 또는 클라우드 보안 그룹을 사용하는 경우, 포트 `20222` TCP 인바운드를 허용해야 합니다.
 
 ---
 
@@ -98,18 +93,49 @@ docker compose up -d
 
 **Routes** 메뉴에서 Cloudflare Tunnel 기반 리버스 프록시를 설정합니다.
 
-1. **Settings > Cloudflare**에서 API 토큰, Zone ID, Tunnel 토큰 설정
-2. 도메인과 내부 서비스를 연결하는 프록시 호스트 생성
+1. **Settings > Cloudflare**에서 API 토큰, Zone, Tunnel 토큰 설정
+2. 도메인과 내부 서비스를 연결하는 라우트 생성
 3. DNS CNAME 레코드와 Tunnel Ingress 규칙이 자동 동기화
+
+> **중요:** 모든 터널 라우트는 Proxima에서만 관리하세요. Cloudflare 대시보드에서 직접 추가한 라우트는 Proxima 동기화 시 덮어쓰기됩니다.
+
+#### Cloudflare API 토큰 권한
+
+| 리소스 | 권한 |
+|--------|------|
+| Zone - DNS | **편집** |
+| Zone - Zone | **읽기** |
+| Zone - Analytics | 읽기 (선택, 대시보드 분석용) |
+| Account - Cloudflare Tunnel | **편집** |
+
+Zone Resources는 대상 zone 또는 "모든 영역"으로 설정해야 합니다.
 
 ### 프로젝트
 
-**Projects** 메뉴에서 Git 저장소를 클론하고 배포합니다.
+**Projects** 메뉴에서 Git 저장소를 클론하고 서비스를 실행합니다.
 
 - HTTPS 또는 SSH로 클론 (SSH 키는 **SSH Keys**에서 관리)
-- 클론된 저장소에서 `docker-compose` 파일 자동 탐지
-- 탐지된 Compose 파일을 원클릭으로 스택 배포
-- 저장소별 커스텀 스크립트 등록 및 실행
+- 저장소별 커스텀 **실행 스크립트** (쉘 스크립트) 등록
+- 실행 스크립트로 Proxima 컨테이너 내부에서 서비스 시작 (예: `npx next dev -p 3000`)
+- **Domain** 탭에서 도메인 연결 — 포트만 입력, 호스트는 자동으로 `localhost`
+- 연결된 도메인이 프로젝트 헤더에 표시
+
+#### 도메인 연결 (프로젝트)
+
+1. 프로젝트를 열고 **Domain** 탭으로 이동
+2. 서브도메인 입력 (비워두면 프로젝트 이름 사용) 후 Zone 선택
+3. 서비스가 실행되는 포트 입력 (예: `3000`)
+4. **Connect Domain** 클릭 — DNS와 터널 인그레스가 자동 설정
+5. 필요 시 **Use root domain** 체크로 zone 도메인 직접 사용 (예: `example.com`)
+
+### 서버
+
+**Servers** 메뉴에서 실행 중인 컨테이너와 호스트 프로세스를 확인합니다.
+
+- **Containers** 탭 — 모든 Docker 컨테이너와 포트, 네트워크, 볼륨 정보
+- **Processes** 탭 — 호스트의 TCP 리스닝 프로세스
+- 별표(추적)로 서비스를 표시하면 라우트 생성 시 서비스 검색에 노출
+- 추적된 프로세스에 **별칭** 설정 — 라우트 생성 시 쉽게 식별 가능
 
 ### 터미널
 
@@ -118,17 +144,21 @@ docker compose up -d
 - 여러 터미널 탭 생성 가능
 - xterm.js 기반 인터랙티브 쉘
 
+> **참고:** 호스트 쉘 접근은 **Admin** 역할이 필요합니다.
+
 ### 설정
 
 - **Appearance** — 라이트, 다크, 시스템 테마 전환
 - **Branding** — 앱 이름, 로고, 파비콘, Open Graph 메타데이터 커스터마이징
-- **Cloudflare** — API 자격 증명 및 Tunnel 설정
+- **Cloudflare** — API 자격 증명, Zone, Tunnel 설정
+- **Users** — 사용자 및 역할 관리 (Admin 전용)
+- **Audit Logs** — 전체 활동 로그 조회 (Admin 전용)
 
 ### 사용자 역할
 
 | 역할 | 권한 |
 |------|------|
-| **Admin** | 전체 접근. 사용자 관리, 감사 로그, 모든 설정. |
+| **Admin** | 전체 접근. 사용자 관리, 호스트 쉘, 감사 로그, 모든 설정. |
 | **Manager** | 스택, 라우트, 프로젝트, 터미널, 브랜딩 관리. |
 | **Viewer** | 스택, 라우트, 프로젝트 읽기 전용. |
 
@@ -141,6 +171,7 @@ docker compose up -d
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
 | `PXM_PORT` | `20222` | 서버 포트 |
+| `PXM_HOSTNAME` | `0.0.0.0` | 서버 바인드 주소 |
 | `PXM_DATA_DIR` | `/data` | 데이터 루트 디렉토리 |
 | `PXM_STACKS_DIR` | `/data/stacks` | 스택 파일 저장 경로 |
 | `PUID` | *(자동 감지)* | 이 사용자 ID로 실행. 미설정 시 `/data` 마운트 소유자에서 감지. |
