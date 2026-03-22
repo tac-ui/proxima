@@ -127,19 +127,6 @@ export default function ServersPage() {
 
   const [search, setSearch] = useState("");
 
-  const checkPortStatus = useCallback(async (svcs: DiscoveredServiceWithManaged[]) => {
-    const allPorts = svcs
-      .flatMap((s) => s.ports)
-      .filter((p, i, arr) => arr.findIndex((x) => x.hostPort === p.hostPort) === i)
-      .map((p) => ({ port: p.hostPort }));
-    if (allPorts.length === 0) return;
-    setCheckingPorts(true);
-    const res = await api.checkPorts(allPorts);
-    if (res.ok && res.data) {
-      setPortStatus(res.data.results);
-    }
-    setCheckingPorts(false);
-  }, []);
 
   const fetchServices = useCallback(async (silent = false) => {
     if (!silent) setLoadingServices(true);
@@ -174,28 +161,7 @@ export default function ServersPage() {
     try {
       const res = await api.getListeningPorts();
       if (res.ok && res.data) {
-        // Auto-register unmanaged processes
-        const unmanaged = res.data.filter((p) => !p.managed && p.port > 0);
-        try {
-          const registered = await Promise.all(
-            unmanaged.map(async (p) => {
-              const identifier = `${p.name}:${p.port}`;
-              const addRes = await api.addManagedService("process", identifier);
-              if (addRes.ok && addRes.data) {
-                return { pid: p.pid, port: p.port, managedId: addRes.data.id };
-              }
-              return null;
-            }),
-          );
-          const regMap = new Map(registered.filter(Boolean).map((r) => [`${r!.pid}:${r!.port}`, r!.managedId]));
-          setProcesses(res.data.map((p) => {
-            const mid = regMap.get(`${p.pid}:${p.port}`);
-            return mid ? { ...p, managed: true, managedId: mid } : p;
-          }));
-        } catch (err) {
-          toast(err instanceof Error ? err.message : "Failed to register processes", { variant: "error" });
-          setProcesses(res.data);
-        }
+        setProcesses(res.data);
       } else {
         toast(res.error ?? "Failed to load processes", { variant: "error" });
       }

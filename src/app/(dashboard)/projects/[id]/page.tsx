@@ -22,6 +22,7 @@ import {
   useToast,
   pageEntrance,
   Switch,
+  Select,
   StatusDot,
 } from "@tac-ui/web";
 import {
@@ -135,7 +136,7 @@ export default function ProjectDetailPage() {
   const [webhookLogsLoading, setWebhookLogsLoading] = useState(false);
 
   // Domain connection
-  const [domainForm, setDomainForm] = useState({ subdomain: "", host: "127.0.0.1", port: "3000", scheme: "http" as "http" | "https", useRootDomain: false });
+  const [domainForm, setDomainForm] = useState({ subdomain: "", port: "3000", useRootDomain: false });
   const [domainSaving, setDomainSaving] = useState(false);
   const [cfZones, setCfZones] = useState<CloudflareZone[]>([]);
   const [selectedZone, setSelectedZone] = useState("");
@@ -218,9 +219,9 @@ export default function ProjectDetailPage() {
     setDomainSaving(true);
     const res = await api.updateRepoDomain(repo.id, {
       domain,
-      forwardHost: domainForm.host,
+      forwardHost: "localhost",
       forwardPort: Number(domainForm.port),
-      forwardScheme: domainForm.scheme,
+      forwardScheme: "http",
     });
     if (res.ok && res.data) {
       setRepo(res.data);
@@ -784,56 +785,42 @@ export default function ProjectDetailPage() {
                           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDomainForm((f) => ({ ...f, subdomain: e.target.value }))}
                           placeholder={repo.name}
                         />
-                        <p className="text-xs text-muted-foreground mt-1">Defaults to project name if empty</p>
                       </div>
                       <span className="flex items-center h-[var(--input-md-height)] text-sm text-muted-foreground pb-px">.</span>
                     </>
                   )}
                   <div className={domainForm.useRootDomain ? "flex-1" : ""}>
                     <label className="text-xs font-medium mb-1 block">Zone</label>
-                    <select
+                    <Select
+                      options={cfZones.map((z) => ({ value: z.zoneName, label: z.zoneName }))}
                       value={selectedZone}
-                      onChange={(e) => setSelectedZone(e.target.value)}
-                      className="h-[var(--input-md-height)] px-3 rounded-lg border border-border bg-surface text-sm"
-                    >
-                      {cfZones.map((z) => (
-                        <option key={z.zoneId} value={z.zoneName}>{z.zoneName}</option>
-                      ))}
-                    </select>
+                      onChange={(v: string) => setSelectedZone(v)}
+                    />
                   </div>
                 </div>
-                <label className="flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={domainForm.useRootDomain}
-                    onChange={(e) => setDomainForm((f) => ({ ...f, useRootDomain: e.target.checked }))}
-                    className="rounded border-border"
-                  />
-                  <span className="text-muted-foreground">Use root domain (without subdomain)</span>
-                </label>
+                {!domainForm.useRootDomain && (
+                  <p className="text-xs text-muted-foreground">Defaults to project name if empty</p>
+                )}
+                <Switch
+                  label="Use root domain (without subdomain)"
+                  checked={domainForm.useRootDomain}
+                  onChange={(v) => setDomainForm((f) => ({ ...f, useRootDomain: v }))}
+                />
                 <p className="text-xs text-muted-foreground">
                   {domainForm.useRootDomain ? selectedZone : `${domainForm.subdomain || repo.name}.${selectedZone}`}
                 </p>
-                <div className="flex items-end gap-2">
-                  <div className="flex-1">
-                    <label className="text-xs font-medium mb-1 block">Forward Host</label>
-                    <Input
-                      value={domainForm.host}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDomainForm((f) => ({ ...f, host: e.target.value }))}
-                      placeholder="127.0.0.1"
-                    />
-                  </div>
-                  <div className="w-24">
-                    <label className="text-xs font-medium mb-1 block">Port</label>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="65535"
-                      value={domainForm.port}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDomainForm((f) => ({ ...f, port: e.target.value }))}
-                      placeholder="3000"
-                    />
-                  </div>
+                <div>
+                  <label className="text-xs font-medium mb-1 block">Port</label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="65535"
+                    value={domainForm.port}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDomainForm((f) => ({ ...f, port: e.target.value }))}
+                    placeholder="3000"
+                    className="w-32"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">localhost:{domainForm.port || "3000"}</p>
                 </div>
                 <Button size="sm" onClick={handleSaveDomain} loading={domainSaving}>
                   Connect Domain

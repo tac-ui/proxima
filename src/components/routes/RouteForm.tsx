@@ -7,7 +7,6 @@ import {
   Button,
   Input,
   Select,
-  Switch,
   Combobox,
 } from "@tac-ui/web";
 import { Cloud, ArrowRight, Lock, Server } from "@tac-ui/icon";
@@ -28,17 +27,18 @@ export function RouteForm({
 }: RouteFormProps) {
   const { connected } = useApiContext();
   const [domain, setDomain] = useState<string>(initial?.domainNames?.[0] ?? "");
-  const [domainInput, setDomainInput] = useState("");
   const [scheme, setScheme] = useState<"http" | "https">(initial?.forwardScheme ?? "http");
   const [forwardHost, setForwardHost] = useState(initial?.forwardHost ?? "");
   const [forwardPort, setForwardPort] = useState(String(initial?.forwardPort ?? "80"));
-  const [wsUpgrade, setWsUpgrade] = useState(initial?.allowWebsocketUpgrade ?? true);
-  const [caching, setCaching] = useState(initial?.cachingEnabled ?? false);
-  const [blockExploits, setBlockExploits] = useState(initial?.blockExploits ?? false);
+  const wsUpgrade = initial?.allowWebsocketUpgrade ?? true;
+  const caching = initial?.cachingEnabled ?? false;
+  const blockExploits = initial?.blockExploits ?? false;
   const [discoveredServices, setDiscoveredServices] = useState<DiscoveredServiceWithManaged[]>([]);
   const [listeningPorts, setListeningPorts] = useState<ListeningProcessWithManaged[]>([]);
   const [managedServices, setManagedServices] = useState<ManagedService[]>([]);
-  const [targetValue, setTargetValue] = useState("");
+  const [targetValue, setTargetValue] = useState(
+    initial?.forwardHost ? `manual:${initial.forwardHost}:${initial.forwardPort ?? 80}` : ""
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [tunnelActive, setTunnelActive] = useState(false);
   const [cfdState, setCfdState] = useState<CloudflaredStatus["state"] | null>(null);
@@ -73,6 +73,15 @@ export function RouteForm({
           : data.zones[0].zoneName;
         setSelectedZone(defaultZ);
         setDomainMode("zone");
+        // Pre-fill subdomain from existing domain when editing
+        const existingDomain = initial?.domainNames?.[0];
+        if (existingDomain) {
+          const matchingZone = data.zones.find((z) => existingDomain.endsWith(`.${z.zoneName}`));
+          if (matchingZone) {
+            setSelectedZone(matchingZone.zoneName);
+            setSubdomainInput(existingDomain.slice(0, -(matchingZone.zoneName.length + 1)));
+          }
+        }
       }
     }).catch(() => {});
   }, [connected]);
@@ -83,7 +92,7 @@ export function RouteForm({
       const sub = subdomainInput.trim();
       return sub ? `${sub}.${selectedZone}` : "";
     }
-    return domainInput.trim() || domain;
+    return domain;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -91,7 +100,6 @@ export function RouteForm({
     // Use current input or existing domain
     const finalDomain = resolveDomain() || domain;
     setDomain(finalDomain);
-    setDomainInput("");
     setSubdomainInput("");
     const errs: Record<string, string> = {};
     if (!finalDomain) errs.domains = "Domain is required";
@@ -294,15 +302,6 @@ export function RouteForm({
         </div>
       </div>
 
-      {/* Options */}
-      <div className="border-t border-border pt-6">
-        <p className="text-sm font-medium mb-3">Options</p>
-        <div className="space-y-3">
-          <Switch label="Block Common Exploits" checked={blockExploits} onChange={setBlockExploits} />
-          <Switch label="WebSocket Support" checked={wsUpgrade} onChange={setWsUpgrade} />
-          <Switch label="Caching Enabled" checked={caching} onChange={setCaching} />
-        </div>
-      </div>
 
       <Button type="submit" disabled={submitting} className="w-full justify-center">
         {submitting ? "Saving..." : submitLabel}
