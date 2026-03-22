@@ -115,6 +115,7 @@ Zone Resources must be set to the target zone(s) or "All zones".
 Navigate to **Projects** to clone Git repositories and run services.
 
 - Clone via HTTPS or SSH (manage SSH keys under **SSH Keys**)
+- **Import existing repos** — click **Import** to register git repositories already in `/data/stacks/` (e.g., cloned via terminal)
 - Register custom **run scripts** (shell scripts) per repository
 - Run scripts start services inside the Proxima container (e.g., `npx next dev -p 3000`)
 - Connect a domain via the **Domain** tab — specify port only, host is automatically `localhost`
@@ -184,6 +185,24 @@ Navigate to **Terminal** for standalone shell sessions.
 | `/var/run/docker.sock` | Docker socket (required for container management) |
 | `/data` | All configuration and database files |
 | `/data/stacks` | Docker Compose stack files |
+| `/data/init.d/` | User init scripts (`.sh` files, run on container start as proxima user) |
+
+### Init Scripts
+
+Place `.sh` files in `/data/init.d/` to run custom setup on container start. Scripts run as the proxima user with bash.
+
+Example — install Claude Code CLI:
+```bash
+mkdir -p /path/to/data/init.d
+cat > /path/to/data/init.d/01-claude.sh << 'EOF'
+#!/bin/bash
+grep -q '.local/bin' "$HOME/.bashrc" 2>/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+export PATH="$HOME/.local/bin:$PATH"
+if ! command -v claude >/dev/null 2>&1; then
+  curl -fsSL https://claude.ai/install.sh | /bin/bash
+fi
+EOF
+```
 
 ---
 
