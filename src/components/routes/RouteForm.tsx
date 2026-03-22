@@ -148,9 +148,10 @@ export function RouteForm({
     }
     for (const proc of filteredProcesses) {
       const addr = proc.address === "*" || proc.address === "0.0.0.0" || proc.address === "::" ? "127.0.0.1" : proc.address;
+      const displayName = proc.alias || proc.name;
       opts.push({
         value: `host:${addr}:${proc.port}`,
-        label: `[Host] ${proc.name} — :${proc.port}`,
+        label: `[Host] ${displayName} — :${proc.port}`,
       });
     }
     // Deduplicate by value

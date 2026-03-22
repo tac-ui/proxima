@@ -274,6 +274,16 @@ function migrateSchema(sqlite: Database.Database): void {
     logger.error("db", `Script file migration failed: ${err}`);
   }
 
+  // v10 → v11: add alias column to managed_services
+  try {
+    sqlite.exec(`ALTER TABLE managed_services ADD COLUMN alias TEXT`);
+    logger.info("db", "Migration: added alias column to managed_services table");
+  } catch (err) {
+    if (err instanceof Error && !err.message.includes("duplicate column")) {
+      throw err;
+    }
+  }
+
   // v9 → v10: add domain_connection column to repositories
   try {
     sqlite.exec(`ALTER TABLE repositories ADD COLUMN domain_connection TEXT`);

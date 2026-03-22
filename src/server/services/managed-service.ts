@@ -28,6 +28,11 @@ export function addManaged(type: ManagedServiceType, identifier: string, autoMan
     .run();
 }
 
+export function updateManaged(id: number, data: { alias?: string | null }) {
+  const db = getDb();
+  return db.update(managedServices).set(data).where(eq(managedServices.id, id)).run();
+}
+
 export function removeManaged(id: number) {
   const db = getDb();
   return db.delete(managedServices).where(eq(managedServices.id, id)).run();

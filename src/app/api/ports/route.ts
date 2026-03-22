@@ -210,13 +210,13 @@ export async function GET(req: NextRequest) {
     const managedMap = new Map(
       managed
         .filter((m) => m.type === "process")
-        .map((m) => [m.identifier, m.id])
+        .map((m) => [m.identifier, { id: m.id, alias: m.alias }])
     );
 
     const result: ListeningProcessWithManaged[] = processes.map((p) => {
       const id = processIdentifier(p.name, p.port);
-      const managedId = managedMap.get(id);
-      return { ...p, managed: managedId !== undefined, managedId };
+      const entry = managedMap.get(id);
+      return { ...p, managed: entry !== undefined, managedId: entry?.id, alias: entry?.alias };
     });
 
     return ok(result);

@@ -111,6 +111,7 @@ export const api = {
   // Managed Services
   getManagedServices: () => request<ManagedService[]>("GET", "/api/managed-services"),
   addManagedService: (type: ManagedServiceType, identifier: string) => request<ManagedService>("POST", "/api/managed-services", { type, identifier }),
+  updateManagedService: (id: number, data: { alias?: string | null }) => request("PATCH", `/api/managed-services/${id}`, data),
   removeManagedService: (id: number) => request("DELETE", `/api/managed-services/${id}`),
   suggestProxy: (stackName: string) => request("GET", `/api/discovery/suggest/${encodeURIComponent(stackName)}`),
 

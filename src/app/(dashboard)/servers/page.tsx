@@ -491,6 +491,7 @@ export default function ServersPage() {
                     <TableRow>
                       <TableHead className="w-10 pl-4 pr-0"></TableHead>
                       <TableHead className="min-w-[120px]">Process</TableHead>
+                      <TableHead className="min-w-[100px]">Alias</TableHead>
                       <TableHead className="min-w-[70px]">PID</TableHead>
                       <TableHead className="min-w-[80px]">Port</TableHead>
                       <TableHead className="min-w-[120px]">Address</TableHead>
@@ -517,6 +518,29 @@ export default function ServersPage() {
                         </TableCell>
                         <TableCell>
                           <span className="font-medium text-sm whitespace-nowrap">{p.name}</span>
+                        </TableCell>
+                        <TableCell>
+                          {p.managed && p.managedId ? (
+                            <input
+                              className="w-full bg-transparent text-xs border-b border-transparent hover:border-border focus:border-point focus:outline-none py-0.5 placeholder:text-muted-foreground/50"
+                              defaultValue={p.alias ?? ""}
+                              placeholder="Set alias..."
+                              onBlur={(e) => {
+                                const val = e.target.value.trim() || null;
+                                if (val !== (p.alias ?? null)) {
+                                  api.updateManagedService(p.managedId!, { alias: val });
+                                  setProcesses((prev) =>
+                                    prev.map((proc) =>
+                                      proc.pid === p.pid && proc.port === p.port ? { ...proc, alias: val } : proc
+                                    )
+                                  );
+                                }
+                              }}
+                              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                            />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <span className="font-mono text-xs text-muted-foreground">{p.pid}</span>

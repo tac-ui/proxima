@@ -123,6 +123,7 @@ export interface ManagedService {
   id: number;
   type: ManagedServiceType;
   identifier: string;
+  alias?: string | null;
   autoManaged: boolean;
 }
 
@@ -134,6 +135,7 @@ export interface DiscoveredServiceWithManaged extends DiscoveredService {
 export interface ListeningProcessWithManaged extends ListeningProcess {
   managed: boolean;
   managedId?: number;
+  alias?: string | null;
 }
 
 // === Socket Event Types ===

@@ -1,7 +1,25 @@
 import { type NextRequest } from "next/server";
 import { requireManager, errorResponse, ok } from "../../_lib/auth";
 import { ensureDb } from "../../_lib/db";
-import { removeManaged } from "@server/services/managed-service";
+import { removeManaged, updateManaged } from "@server/services/managed-service";
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    ensureDb();
+    requireManager(req);
+    const { id } = await params;
+    const numericId = parseInt(id, 10);
+    if (isNaN(numericId)) return ok(null);
+    const body = await req.json() as { alias?: string | null };
+    updateManaged(numericId, { alias: body.alias ?? null });
+    return ok();
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
 
 export async function DELETE(
   req: NextRequest,

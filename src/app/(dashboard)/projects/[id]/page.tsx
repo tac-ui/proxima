@@ -743,95 +743,21 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* Domain Connection */}
-      {isManager && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-point/15 flex items-center justify-center">
-                <Globe size={18} className="text-point" />
-              </div>
-              <div>
-                <h2 className="text-sm font-semibold">Domain Connection</h2>
-                <p className="text-xs text-muted-foreground">Connect a domain to route traffic to this project</p>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {repo.domainConnection ? (
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <a href={`https://${repo.domainConnection.domain}`} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-point hover:underline inline-flex items-center gap-1">
-                    {repo.domainConnection.domain}
-                    <ExternalLink size={12} />
-                  </a>
-                  <p className="text-xs text-muted-foreground font-mono">
-                    → {repo.domainConnection.forwardScheme}://{repo.domainConnection.forwardHost}:{repo.domainConnection.forwardPort}
-                  </p>
-                </div>
-                <Button variant="destructive" size="sm" onClick={handleRemoveDomain} loading={domainSaving}>
-                  Disconnect
-                </Button>
-              </div>
-            ) : cfZones.length > 0 ? (
-              <div className="space-y-3">
-                <div className="flex items-end gap-2">
-                  {!domainForm.useRootDomain && (
-                    <>
-                      <div className="flex-1">
-                        <label className="text-xs font-medium mb-1 block">Subdomain</label>
-                        <Input
-                          value={domainForm.subdomain}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDomainForm((f) => ({ ...f, subdomain: e.target.value }))}
-                          placeholder={repo.name}
-                        />
-                      </div>
-                      <span className="flex items-center h-[var(--input-md-height)] text-sm text-muted-foreground pb-px">.</span>
-                    </>
-                  )}
-                  <div className={domainForm.useRootDomain ? "flex-1" : ""}>
-                    <label className="text-xs font-medium mb-1 block">Zone</label>
-                    <Select
-                      options={cfZones.map((z) => ({ value: z.zoneName, label: z.zoneName }))}
-                      value={selectedZone}
-                      onChange={(v: string) => setSelectedZone(v)}
-                    />
-                  </div>
-                </div>
-                {!domainForm.useRootDomain && (
-                  <p className="text-xs text-muted-foreground">Defaults to project name if empty</p>
-                )}
-                <Switch
-                  label="Use root domain (without subdomain)"
-                  checked={domainForm.useRootDomain}
-                  onChange={(v) => setDomainForm((f) => ({ ...f, useRootDomain: v }))}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {domainForm.useRootDomain ? selectedZone : `${domainForm.subdomain || repo.name}.${selectedZone}`}
-                </p>
-                <div>
-                  <label className="text-xs font-medium mb-1 block">Port</label>
-                  <Input
-                    type="number"
-                    min="1"
-                    max="65535"
-                    value={domainForm.port}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDomainForm((f) => ({ ...f, port: e.target.value }))}
-                    placeholder="3000"
-                    className="w-32"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">localhost:{domainForm.port || "3000"}</p>
-                </div>
-                <Button size="sm" onClick={handleSaveDomain} loading={domainSaving}>
-                  Connect Domain
-                </Button>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">Configure Cloudflare zones in Settings to enable domain connection.</p>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      {/* Domain display under header */}
+      <div className="h-6 flex items-center">
+        {repo.domainConnection ? (
+          <a href={`https://${repo.domainConnection.domain}`} target="_blank" rel="noopener noreferrer" className="text-sm text-point hover:underline inline-flex items-center gap-1.5">
+            <Globe size={14} />
+            {repo.domainConnection.domain}
+            <ExternalLink size={12} />
+          </a>
+        ) : (
+          <span className="text-sm text-muted-foreground/50 inline-flex items-center gap-1.5">
+            <Globe size={14} />
+            No domain connected
+          </span>
+        )}
+      </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} variant="underline">
@@ -851,6 +777,7 @@ export default function ProjectDetailPage() {
               {hookEnabled && <StatusDot status="success" size="sm" />}
             </span>
           </TabTrigger>
+          {isManager && <TabTrigger value="domain">Domain</TabTrigger>}
           <TabTrigger value="git">Git</TabTrigger>
         </TabsList>
 
@@ -1435,6 +1362,93 @@ export default function ProjectDetailPage() {
             </Card>
           )}
         </TabContent>
+
+        {/* Domain Tab */}
+        {isManager && (
+          <TabContent value="domain">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Globe size={14} />
+                  <p className="text-sm font-semibold">Domain Connection</p>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {repo.domainConnection ? (
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <a href={`https://${repo.domainConnection.domain}`} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-point hover:underline inline-flex items-center gap-1">
+                        {repo.domainConnection.domain}
+                        <ExternalLink size={12} />
+                      </a>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        → {repo.domainConnection.forwardScheme}://{repo.domainConnection.forwardHost}:{repo.domainConnection.forwardPort}
+                      </p>
+                    </div>
+                    <Button variant="destructive" size="sm" onClick={handleRemoveDomain} loading={domainSaving}>
+                      Disconnect
+                    </Button>
+                  </div>
+                ) : cfZones.length > 0 ? (
+                  <div className="space-y-3">
+                    <div className="flex items-end gap-2">
+                      {!domainForm.useRootDomain && (
+                        <>
+                          <div className="min-w-0">
+                            <label className="text-xs font-medium mb-1 block">Subdomain</label>
+                            <Input
+                              value={domainForm.subdomain}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDomainForm((f) => ({ ...f, subdomain: e.target.value }))}
+                              placeholder={repo.name}
+                            />
+                          </div>
+                          <span className="flex items-center h-[var(--input-md-height)] text-sm text-muted-foreground pb-px">.</span>
+                        </>
+                      )}
+                      <div className={domainForm.useRootDomain ? "flex-1" : "min-w-[180px]"}>
+                        <label className="text-xs font-medium mb-1 block">Zone</label>
+                        <Select
+                          options={cfZones.map((z) => ({ value: z.zoneName, label: z.zoneName }))}
+                          value={selectedZone}
+                          onChange={(v: string) => setSelectedZone(v)}
+                        />
+                      </div>
+                    </div>
+                    {!domainForm.useRootDomain && (
+                      <p className="text-xs text-muted-foreground">Defaults to project name if empty</p>
+                    )}
+                    <Switch
+                      label="Use root domain (without subdomain)"
+                      checked={domainForm.useRootDomain}
+                      onChange={(v) => setDomainForm((f) => ({ ...f, useRootDomain: v }))}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {domainForm.useRootDomain ? selectedZone : `${domainForm.subdomain || repo.name}.${selectedZone}`}
+                    </p>
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Port</label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="65535"
+                        value={domainForm.port}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDomainForm((f) => ({ ...f, port: e.target.value }))}
+                        placeholder="3000"
+                        className="w-32"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">localhost:{domainForm.port || "3000"}</p>
+                    </div>
+                    <Button size="sm" onClick={handleSaveDomain} loading={domainSaving}>
+                      Connect Domain
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Configure Cloudflare zones in Settings to enable domain connection.</p>
+                )}
+              </CardContent>
+            </Card>
+          </TabContent>
+        )}
 
         {/* Git Tab */}
         <TabContent value="git">

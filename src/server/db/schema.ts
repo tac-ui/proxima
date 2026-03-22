@@ -95,6 +95,7 @@ export const managedServices = sqliteTable("managed_services", {
     id: integer("id").primaryKey({autoIncrement: true}),
     type: text("type").notNull(),              // "container" | "process"
     identifier: text("identifier").notNull(),  // "stackName/serviceName" | "processName:port"
+    alias: text("alias"),
     autoManaged: integer("auto_managed", {mode: "boolean"}).notNull().default(false),
     createdAt: text("created_at")
         .notNull()
