@@ -668,6 +668,18 @@ export default function ProjectDetailPage() {
                 <Badge variant="success">{runningCount} running</Badge>
               )}
             </div>
+            {repo.domainConnection ? (
+              <a href={`https://${repo.domainConnection.domain}`} target="_blank" rel="noopener noreferrer" className="text-xs text-point hover:underline inline-flex items-center gap-1">
+                <Globe size={12} />
+                {repo.domainConnection.domain}
+                <ExternalLink size={10} />
+              </a>
+            ) : (
+              <span className="text-xs text-muted-foreground/40 inline-flex items-center gap-1">
+                <Globe size={12} />
+                No domain connected
+              </span>
+            )}
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <div className="relative" ref={branchDropdownRef}>
                 <button
@@ -741,22 +753,6 @@ export default function ProjectDetailPage() {
             </>
           )}
         </div>
-      </div>
-
-      {/* Domain display under header */}
-      <div className="h-6 flex items-center">
-        {repo.domainConnection ? (
-          <a href={`https://${repo.domainConnection.domain}`} target="_blank" rel="noopener noreferrer" className="text-sm text-point hover:underline inline-flex items-center gap-1.5">
-            <Globe size={14} />
-            {repo.domainConnection.domain}
-            <ExternalLink size={12} />
-          </a>
-        ) : (
-          <span className="text-sm text-muted-foreground/50 inline-flex items-center gap-1.5">
-            <Globe size={14} />
-            No domain connected
-          </span>
-        )}
       </div>
 
       {/* Tabs */}
