@@ -17,7 +17,9 @@ TARGET_GID="${TARGET_GID:-0}"
 if [ -n "$TARGET_UID" ] && [ "$TARGET_UID" != "0" ]; then
   echo "Matching UID:GID to $TARGET_UID:$TARGET_GID"
   addgroup -g "$TARGET_GID" -S proxima 2>/dev/null || true
-  adduser -u "$TARGET_UID" -G proxima -S -D -H proxima 2>/dev/null || true
+  adduser -u "$TARGET_UID" -G proxima -S -D -h /home/proxima proxima 2>/dev/null || true
+  mkdir -p /home/proxima
+  chown "$TARGET_UID:$TARGET_GID" /home/proxima 2>/dev/null || true
 
   # Grant access to Docker socket
   if [ -S /var/run/docker.sock ]; then
