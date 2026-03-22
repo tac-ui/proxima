@@ -37,7 +37,7 @@ if [ -n "$TARGET_UID" ] && [ "$TARGET_UID" != "0" ]; then
     for script in /data/init.d/*.sh; do
       [ -f "$script" ] || continue
       echo "Running init script: $(basename "$script")"
-      su-exec proxima bash "$script" || echo "Warning: $(basename "$script") failed"
+      su-exec proxima /bin/bash "$script" || echo "Warning: $(basename "$script") failed"
     done
   fi
 

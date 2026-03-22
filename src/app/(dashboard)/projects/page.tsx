@@ -65,6 +65,12 @@ export default function ProjectsPage() {
   const [selectedSshKeyId, setSelectedSshKeyId] = useState<number | null>(null);
   const selectedSshKeyIdRef = useRef<number | null>(null);
 
+  // Import state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [unregistered, setUnregistered] = useState<{ name: string; repoUrl: string; branch: string }[]>([]);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importing, setImporting] = useState<string | null>(null);
+
   // Pull state
   const [pullingAll, setPullingAll] = useState(false);
 
@@ -79,6 +85,27 @@ export default function ProjectsPage() {
       setLoading(false);
     });
   }, []);
+
+  const openImportModal = useCallback(async () => {
+    setShowImportModal(true);
+    setImportLoading(true);
+    const res = await api.getUnregisteredRepos();
+    if (res.ok && res.data) setUnregistered(res.data);
+    setImportLoading(false);
+  }, []);
+
+  const handleImport = useCallback(async (name: string) => {
+    setImporting(name);
+    const res = await api.importRepo(name);
+    if (res.ok && res.data) {
+      toast(`Imported ${name}`, { variant: "success" });
+      setUnregistered((prev) => prev.filter((r) => r.name !== name));
+      fetchRepos();
+    } else {
+      toast(res.error ?? "Failed to import", { variant: "error" });
+    }
+    setImporting(null);
+  }, [fetchRepos, toast]);
 
   const fetchSshKeys = useCallback(() => {
     api.getSshKeys().then((res) => {
@@ -232,6 +259,13 @@ export default function ProjectsPage() {
             )}
             <Button
               size="sm"
+              variant="secondary"
+              onClick={openImportModal}
+            >
+              Import
+            </Button>
+            <Button
+              size="sm"
               leftIcon={<Plus size={14} />}
               onClick={() => setShowCloneForm(true)}
             >
@@ -360,6 +394,50 @@ export default function ProjectsPage() {
             <Button disabled={cloning || !connected} onClick={handleClone}>
               {cloning ? "Cloning..." : "Clone"}
             </Button>
+          </ModalFooter>
+        </Modal>,
+        document.body,
+      )}
+
+      {/* Import Modal */}
+      {typeof document !== "undefined" && createPortal(
+        <Modal open={showImportModal} onClose={() => setShowImportModal(false)} size="md">
+          <ModalHeader>
+            <ModalTitle>Import Project</ModalTitle>
+            <ModalDescription>Register existing git repositories from /data/stacks/</ModalDescription>
+          </ModalHeader>
+          <div className="px-6 pb-2">
+            {importLoading ? (
+              <div className="space-y-3 py-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} height={48} />
+                ))}
+              </div>
+            ) : unregistered.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">No unregistered git repositories found</p>
+            ) : (
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                {unregistered.map((repo) => (
+                  <div key={repo.name} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-surface-hover transition-colors">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{repo.name}</p>
+                      <p className="text-xs text-muted-foreground font-mono truncate">{repo.repoUrl || "No remote"} · {repo.branch}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => handleImport(repo.name)}
+                      loading={importing === repo.name}
+                      disabled={importing !== null}
+                    >
+                      Import
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <ModalFooter>
+            <Button variant="secondary" onClick={() => setShowImportModal(false)}>Close</Button>
           </ModalFooter>
         </Modal>,
         document.body,

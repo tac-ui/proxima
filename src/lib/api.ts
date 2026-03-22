@@ -71,6 +71,8 @@ export const api = {
   cloneRepo: (req: GitCloneRequest) => request<{ path: string; composeFiles: string[] }>("POST", "/api/git/clone", req),
 
   // Repos
+  getUnregisteredRepos: () => request<{ name: string; repoUrl: string; branch: string }[]>("GET", "/api/repos/import"),
+  importRepo: (name: string) => request<RepositoryInfo>("POST", "/api/repos/import", { name }),
   getRepos: () => request<RepositoryInfo[]>("GET", "/api/repos"),
   getRepo: (id: number | string) => request<RepositoryInfo>("GET", `/api/repos/${encodeURIComponent(id)}`),
   updateRepoDomain: (id: number, domainConnection: import("@/types").DomainConnection | null) =>
