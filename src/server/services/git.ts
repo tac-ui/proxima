@@ -59,7 +59,18 @@ export class GitService {
     }
 
     logger.info("git", `Cloning ${request.repoUrl} -> ${targetPath}`);
-    await git.clone(cloneUrl, targetPath, cloneArgs);
+    try {
+      await git.clone(cloneUrl, targetPath, cloneArgs);
+    } catch (err) {
+      // Retry without --branch if the branch doesn't exist (e.g., empty repo)
+      if (err instanceof Error && err.message.includes("not found in upstream")) {
+        logger.info("git", `Branch not found, retrying clone without --branch`);
+        const fallbackArgs = cloneArgs.filter((a, i, arr) => a !== "--branch" && arr[i - 1] !== "--branch");
+        await git.clone(cloneUrl, targetPath, fallbackArgs);
+      } else {
+        throw err;
+      }
+    }
     logger.info("git", `Clone complete: ${targetPath}`);
 
     const composeFiles = this.detectComposeFiles(targetPath);
