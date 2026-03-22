@@ -4,18 +4,11 @@ services:
     container_name: proxima
     restart: unless-stopped
     pid: host
-    ports:
-      - "20222:20222"
+    network_mode: host
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - pxm-data:/data
       - pxm-stacks:/data/stacks
-    networks:
-      - pxm-network
-
-networks:
-  pxm-network:
-    name: pxm-network
 
 volumes:
   pxm-data:

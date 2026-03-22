@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { promises as fsAsync } from "node:fs";
 import path from "node:path";
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import yaml from "yaml";
 import { logger } from "../lib/logger";
@@ -22,6 +22,30 @@ import type { StackStatus, ContainerInfo, MountInfo } from "@/types";
 import type { AppSocket } from "./terminal";
 
 const execFileAsync = promisify(execFile);
+
+// ---------------------------------------------------------------------------
+// Resolve docker binary path once at startup
+// ---------------------------------------------------------------------------
+function resolveDockerBin(): string {
+  // Common locations for docker CLI on macOS and Linux
+  const candidates = [
+    "/usr/local/bin/docker",
+    "/usr/bin/docker",
+    "/opt/homebrew/bin/docker",
+  ];
+  try {
+    const result = execFileSync("which", ["docker"], { encoding: "utf-8" }).trim();
+    if (result) return result;
+  } catch {
+    // fall through to candidates
+  }
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return "docker";
+}
+
+const DOCKER_BIN = resolveDockerBin();
 
 // ---------------------------------------------------------------------------
 // Accepted compose file names (same as Dockge)
@@ -290,7 +314,7 @@ export class Stack {
     const exitCode = await Terminal.exec(
       socket,
       terminalName,
-      "docker",
+      DOCKER_BIN,
       this.getComposeOptions("up", "-d", "--remove-orphans"),
       this.path,
     );
@@ -305,7 +329,7 @@ export class Stack {
     const exitCode = await Terminal.exec(
       socket,
       terminalName,
-      "docker",
+      DOCKER_BIN,
       this.getComposeOptions("up", "-d", "--remove-orphans"),
       this.path,
     );
@@ -320,7 +344,7 @@ export class Stack {
     const exitCode = await Terminal.exec(
       socket,
       terminalName,
-      "docker",
+      DOCKER_BIN,
       this.getComposeOptions("stop"),
       this.path,
     );
@@ -335,7 +359,7 @@ export class Stack {
     const exitCode = await Terminal.exec(
       socket,
       terminalName,
-      "docker",
+      DOCKER_BIN,
       this.getComposeOptions("restart"),
       this.path,
     );
@@ -350,7 +374,7 @@ export class Stack {
     const exitCode = await Terminal.exec(
       socket,
       terminalName,
-      "docker",
+      DOCKER_BIN,
       this.getComposeOptions("down"),
       this.path,
     );
@@ -365,7 +389,7 @@ export class Stack {
     const exitCode = await Terminal.exec(
       socket,
       terminalName,
-      "docker",
+      DOCKER_BIN,
       this.getComposeOptions("down", "--remove-orphans"),
       this.path,
     );
@@ -382,7 +406,7 @@ export class Stack {
   async ps(): Promise<ContainerInfo[]> {
     try {
       const { stdout } = await execFileAsync(
-        "docker",
+        DOCKER_BIN,
         [...this.getComposeOptions("ps", "--format", "json")],
         { cwd: this.path },
       );
@@ -432,7 +456,7 @@ export class Stack {
     const result = new Map<string, { state: string; ports: string[] }>();
     try {
       const { stdout } = await execFileAsync(
-        "docker",
+        DOCKER_BIN,
         [...this.getComposeOptions("ps", "--format", "json")],
         { cwd: this.path },
       );
@@ -469,7 +493,7 @@ export class Stack {
     const terminalName = getCombinedTerminalName(this.name);
     const terminal = Terminal.getOrCreateTerminal(
       terminalName,
-      "docker",
+      DOCKER_BIN,
       this.getComposeOptions("logs", "-f", "--tail", "100"),
       this.path,
     );
@@ -501,7 +525,7 @@ export class Stack {
     if (!terminal) {
       terminal = new InteractiveTerminal(
         terminalName,
-        "docker",
+        DOCKER_BIN,
         this.getComposeOptions("exec", serviceName, shell),
         this.path,
       );
@@ -586,7 +610,7 @@ export class Stack {
 
     // Overlay live status from docker compose ls
     try {
-      const { stdout } = await execFileAsync("docker", [
+      const { stdout } = await execFileAsync(DOCKER_BIN, [
         "compose",
         "ls",
         "--all",
@@ -623,7 +647,7 @@ export class Stack {
   static async getStatusList(): Promise<Map<string, StackStatus>> {
     const statusList = new Map<string, StackStatus>();
     try {
-      const { stdout } = await execFileAsync("docker", [
+      const { stdout } = await execFileAsync(DOCKER_BIN, [
         "compose",
         "ls",
         "--all",

@@ -23,6 +23,7 @@ import {
   Tooltip,
   Indicator,
   pageEntrance,
+  useToast,
 } from "@tac-ui/web";
 import { Server, Search, RefreshCw, Terminal, AlertTriangle, Star } from "@tac-ui/icon";
 import { CopyButton } from "@/components/shared/CopyButton";
@@ -37,6 +38,7 @@ const tabOptions = [
 
 export default function ServersPage() {
   const { connected, subscribe } = useApiContext();
+  const { toast } = useToast();
   const [tab, setTab] = useState<TabValue>("containers");
 
   // Docker status
@@ -78,6 +80,8 @@ export default function ServersPage() {
             s.containerName === svc.containerName ? { ...s, managed: false, managedId: undefined } : s
           )
         );
+      } else {
+        toast("Failed to update", { variant: "error" });
       }
     } else {
       const identifier = `${svc.stackName}/${svc.serviceName}`;
@@ -88,9 +92,11 @@ export default function ServersPage() {
             s.containerName === svc.containerName ? { ...s, managed: true, managedId: res.data!.id } : s
           )
         );
+      } else {
+        toast("Failed to update", { variant: "error" });
       }
     }
-  }, []);
+  }, [toast]);
 
   const toggleProcessManaged = useCallback(async (proc: ListeningProcessWithManaged) => {
     if (proc.managed && proc.managedId != null) {
@@ -101,6 +107,8 @@ export default function ServersPage() {
             p.pid === proc.pid && p.port === proc.port ? { ...p, managed: false, managedId: undefined } : p
           )
         );
+      } else {
+        toast("Failed to update", { variant: "error" });
       }
     } else {
       const identifier = `${proc.name}:${proc.port}`;
@@ -111,9 +119,11 @@ export default function ServersPage() {
             p.pid === proc.pid && p.port === proc.port ? { ...p, managed: true, managedId: res.data!.id } : p
           )
         );
+      } else {
+        toast("Failed to update", { variant: "error" });
       }
     }
-  }, []);
+  }, [toast]);
 
   const [search, setSearch] = useState("");
 
@@ -131,52 +141,69 @@ export default function ServersPage() {
     setCheckingPorts(false);
   }, []);
 
-  const fetchServices = useCallback(async () => {
-    setLoadingServices(true);
-    const res = await api.discoverServices();
-    if (res.ok && res.data) {
-      setServices(res.data);
-      // Inline port check to avoid dependency cycle
-      const allPorts = res.data
-        .flatMap((s) => s.ports)
-        .filter((p, i, arr) => arr.findIndex((x) => x.hostPort === p.hostPort) === i)
-        .map((p) => ({ port: p.hostPort }));
-      if (allPorts.length > 0) {
-        setCheckingPorts(true);
-        const portRes = await api.checkPorts(allPorts);
-        if (portRes.ok && portRes.data) {
-          setPortStatus(portRes.data.results);
+  const fetchServices = useCallback(async (silent = false) => {
+    if (!silent) setLoadingServices(true);
+    try {
+      const res = await api.discoverServices();
+      if (res.ok && res.data) {
+        setServices(res.data);
+        // Inline port check to avoid dependency cycle
+        const allPorts = res.data
+          .flatMap((s) => s.ports)
+          .filter((p, i, arr) => arr.findIndex((x) => x.hostPort === p.hostPort) === i)
+          .map((p) => ({ port: p.hostPort }));
+        if (allPorts.length > 0) {
+          if (!silent) setCheckingPorts(true);
+          const portRes = await api.checkPorts(allPorts);
+          if (portRes.ok && portRes.data) {
+            setPortStatus(portRes.data.results);
+          }
+          if (!silent) setCheckingPorts(false);
         }
-        setCheckingPorts(false);
+      } else {
+        if (!silent) toast(res.error ?? "Failed to load services", { variant: "error" });
       }
+    } catch (err) {
+      if (!silent) toast(err instanceof Error ? err.message : "Failed to load services", { variant: "error" });
     }
-    setLoadingServices(false);
-  }, []);
+    if (!silent) setLoadingServices(false);
+  }, [toast]);
 
   const fetchProcesses = useCallback(async () => {
     setLoadingProcesses(true);
-    const res = await api.getListeningPorts();
-    if (res.ok && res.data) {
-      // Auto-register unmanaged processes
-      const unmanaged = res.data.filter((p) => !p.managed && p.port > 0);
-      const registered = await Promise.all(
-        unmanaged.map(async (p) => {
-          const identifier = `${p.name}:${p.port}`;
-          const addRes = await api.addManagedService("process", identifier);
-          if (addRes.ok && addRes.data) {
-            return { pid: p.pid, port: p.port, managedId: addRes.data.id };
-          }
-          return null;
-        }),
-      );
-      const regMap = new Map(registered.filter(Boolean).map((r) => [`${r!.pid}:${r!.port}`, r!.managedId]));
-      setProcesses(res.data.map((p) => {
-        const mid = regMap.get(`${p.pid}:${p.port}`);
-        return mid ? { ...p, managed: true, managedId: mid } : p;
-      }));
+    try {
+      const res = await api.getListeningPorts();
+      if (res.ok && res.data) {
+        // Auto-register unmanaged processes
+        const unmanaged = res.data.filter((p) => !p.managed && p.port > 0);
+        try {
+          const registered = await Promise.all(
+            unmanaged.map(async (p) => {
+              const identifier = `${p.name}:${p.port}`;
+              const addRes = await api.addManagedService("process", identifier);
+              if (addRes.ok && addRes.data) {
+                return { pid: p.pid, port: p.port, managedId: addRes.data.id };
+              }
+              return null;
+            }),
+          );
+          const regMap = new Map(registered.filter(Boolean).map((r) => [`${r!.pid}:${r!.port}`, r!.managedId]));
+          setProcesses(res.data.map((p) => {
+            const mid = regMap.get(`${p.pid}:${p.port}`);
+            return mid ? { ...p, managed: true, managedId: mid } : p;
+          }));
+        } catch (err) {
+          toast(err instanceof Error ? err.message : "Failed to register processes", { variant: "error" });
+          setProcesses(res.data);
+        }
+      } else {
+        toast(res.error ?? "Failed to load processes", { variant: "error" });
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to load processes", { variant: "error" });
     }
     setLoadingProcesses(false);
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     if (connected) fetchServices();
@@ -191,7 +218,7 @@ export default function ServersPage() {
   fetchServicesRef.current = fetchServices;
   useEffect(() => {
     const unsub = subscribe("discoveredServices", () => {
-      fetchServicesRef.current();
+      fetchServicesRef.current(true);
     });
     return unsub;
   }, [subscribe]);

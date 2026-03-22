@@ -196,6 +196,9 @@ export class Terminal {
         const parts = error.message.split(" ");
         const exitCode = Number(parts[parts.length - 1]) || 1;
         this.onExitHandler({ exitCode });
+        // For spawn failures (e.g. ENOENT), remove from map immediately so
+        // subsequent operations are not blocked by the 30-second grace period.
+        this.removeFromMap();
       }
     }
   }

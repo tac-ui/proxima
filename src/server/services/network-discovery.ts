@@ -177,24 +177,29 @@ export class NetworkDiscovery {
         retryDelay = 1000;
 
         stream.on("data", (chunk: Buffer) => {
-          try {
-            const raw = JSON.parse(chunk.toString()) as {
-              Type?: string;
-              Action?: string;
-              Actor?: { Attributes?: Record<string, string> };
-            };
+          const lines = chunk.toString().split("\n");
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            try {
+              const raw = JSON.parse(trimmed) as {
+                Type?: string;
+                Action?: string;
+                Actor?: { Attributes?: Record<string, string> };
+              };
 
-            if (raw.Type !== "container") return;
-            const action = raw.Action ?? "";
-            if (!WATCHED_ACTIONS.has(action)) return;
+              if (raw.Type !== "container") continue;
+              const action = raw.Action ?? "";
+              if (!WATCHED_ACTIONS.has(action)) continue;
 
-            const containerName =
-              raw.Actor?.Attributes?.name ?? raw.Actor?.Attributes?.["com.docker.compose.service"] ?? "";
+              const containerName =
+                raw.Actor?.Attributes?.name ?? raw.Actor?.Attributes?.["com.docker.compose.service"] ?? "";
 
-            logger.debug("network-discovery", `Docker event: ${action} -> ${containerName}`);
-            onEvent({ action, containerName });
-          } catch {
-            // Ignore malformed event data
+              logger.debug("network-discovery", `Docker event: ${action} -> ${containerName}`);
+              onEvent({ action, containerName });
+            } catch {
+              // Ignore malformed event data
+            }
           }
         });
 

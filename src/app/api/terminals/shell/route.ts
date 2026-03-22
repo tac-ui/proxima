@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { requireManager, errorResponse, ok } from "../../_lib/auth";
+import { requireAdmin, errorResponse, ok } from "../../_lib/auth";
 import { ensureDb } from "../../_lib/db";
 import { InteractiveTerminal, Terminal } from "@server/services/terminal";
 import fs from "fs";
@@ -14,7 +14,7 @@ function detectShell(): string {
 export async function POST(req: NextRequest) {
   try {
     ensureDb();
-    const auth = requireManager(req);
+    const auth = requireAdmin(req);
 
     const shellCount = Terminal.getAllTerminals().filter((t) =>
       t.name.startsWith("shell-"),

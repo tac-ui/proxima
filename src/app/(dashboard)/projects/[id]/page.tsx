@@ -135,7 +135,7 @@ export default function ProjectDetailPage() {
   const [webhookLogsLoading, setWebhookLogsLoading] = useState(false);
 
   // Domain connection
-  const [domainForm, setDomainForm] = useState({ subdomain: "", host: "127.0.0.1", port: "3000", scheme: "http" as "http" | "https" });
+  const [domainForm, setDomainForm] = useState({ subdomain: "", host: "127.0.0.1", port: "3000", scheme: "http" as "http" | "https", useRootDomain: false });
   const [domainSaving, setDomainSaving] = useState(false);
   const [cfZones, setCfZones] = useState<CloudflareZone[]>([]);
   const [selectedZone, setSelectedZone] = useState("");
@@ -153,6 +153,15 @@ export default function ProjectDetailPage() {
         setRepo(res.data);
         setHookEnabled(res.data.hookEnabled);
         setHookApiKey(res.data.hookApiKey);
+        // Fetch commits only after repo is confirmed to exist
+        const id = res.data.id;
+        if (id > 0) {
+          setCommitsRefreshing(true);
+          api.getRepoCommits(id, 20).then((cr) => {
+            if (cr.ok && cr.data) setCommits(cr.data.commits);
+            setCommitsRefreshing(false);
+          });
+        }
       } else {
         toast(res.error ?? "Failed to load project", { variant: "error" });
       }
@@ -161,6 +170,7 @@ export default function ProjectDetailPage() {
   }, [repoParam, toast]);
 
   const fetchCommits = useCallback(() => {
+    if (repoId <= 0) return;
     setCommitsRefreshing(true);
     api.getRepoCommits(repoId, 20).then((res) => {
       if (res.ok && res.data) setCommits(res.data.commits);
@@ -182,7 +192,6 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     if (connected) {
       fetchRepo();
-      fetchCommits();
       api.getCloudflareSettings().then((res) => {
         const data = res.data;
         if (res.ok && data?.zones?.length) {
@@ -194,13 +203,18 @@ export default function ProjectDetailPage() {
         }
       }).catch(() => {});
     }
-  }, [connected, fetchRepo, fetchCommits]);
+  }, [connected, fetchRepo]);
 
   const handleSaveDomain = async () => {
     if (!repo || !selectedZone) return;
-    const sub = domainForm.subdomain.trim();
-    if (!sub) { toast("Subdomain is required", { variant: "error" }); return; }
-    const domain = `${sub}.${selectedZone}`;
+    const portNum = Number(domainForm.port);
+    if (!domainForm.port || isNaN(portNum) || !Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+      toast("Port must be a valid number between 1 and 65535", { variant: "error" });
+      return;
+    }
+    const domain = domainForm.useRootDomain
+      ? selectedZone
+      : `${domainForm.subdomain.trim() || repo.name}.${selectedZone}`;
     setDomainSaving(true);
     const res = await api.updateRepoDomain(repo.id, {
       domain,
@@ -761,16 +775,21 @@ export default function ProjectDetailPage() {
             ) : cfZones.length > 0 ? (
               <div className="space-y-3">
                 <div className="flex items-end gap-2">
-                  <div className="flex-1">
-                    <label className="text-xs font-medium mb-1 block">Subdomain</label>
-                    <Input
-                      value={domainForm.subdomain}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDomainForm((f) => ({ ...f, subdomain: e.target.value }))}
-                      placeholder={repo.name}
-                    />
-                  </div>
-                  <span className="flex items-center h-[var(--input-md-height)] text-sm text-muted-foreground pb-px">.</span>
-                  <div>
+                  {!domainForm.useRootDomain && (
+                    <>
+                      <div className="flex-1">
+                        <label className="text-xs font-medium mb-1 block">Subdomain</label>
+                        <Input
+                          value={domainForm.subdomain}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDomainForm((f) => ({ ...f, subdomain: e.target.value }))}
+                          placeholder={repo.name}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">Defaults to project name if empty</p>
+                      </div>
+                      <span className="flex items-center h-[var(--input-md-height)] text-sm text-muted-foreground pb-px">.</span>
+                    </>
+                  )}
+                  <div className={domainForm.useRootDomain ? "flex-1" : ""}>
                     <label className="text-xs font-medium mb-1 block">Zone</label>
                     <select
                       value={selectedZone}
@@ -783,6 +802,18 @@ export default function ProjectDetailPage() {
                     </select>
                   </div>
                 </div>
+                <label className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={domainForm.useRootDomain}
+                    onChange={(e) => setDomainForm((f) => ({ ...f, useRootDomain: e.target.checked }))}
+                    className="rounded border-border"
+                  />
+                  <span className="text-muted-foreground">Use root domain (without subdomain)</span>
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {domainForm.useRootDomain ? selectedZone : `${domainForm.subdomain || repo.name}.${selectedZone}`}
+                </p>
                 <div className="flex items-end gap-2">
                   <div className="flex-1">
                     <label className="text-xs font-medium mb-1 block">Forward Host</label>
@@ -795,6 +826,9 @@ export default function ProjectDetailPage() {
                   <div className="w-24">
                     <label className="text-xs font-medium mb-1 block">Port</label>
                     <Input
+                      type="number"
+                      min="1"
+                      max="65535"
                       value={domainForm.port}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDomainForm((f) => ({ ...f, port: e.target.value }))}
                       placeholder="3000"

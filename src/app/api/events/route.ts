@@ -17,6 +17,8 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  let userRole: string;
+
   try {
     ensureDb();
     const payload = verifyToken(token);
@@ -29,12 +31,16 @@ export async function GET(req: NextRequest) {
         headers: { "Content-Type": "application/json" },
       });
     }
+
+    userRole = user.role;
   } catch {
     return new Response(JSON.stringify({ ok: false, error: "Invalid or expired token" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
     });
   }
+
+  const VIEWER_BLOCKED_EVENTS = new Set(["discoveredServices", "gitProgress"]);
 
   const encoder = new TextEncoder();
 
@@ -46,6 +52,10 @@ export async function GET(req: NextRequest) {
       );
 
       const handler = (event: SSEEvent) => {
+        // Filter sensitive events for viewer-role users
+        if (userRole === "viewer" && VIEWER_BLOCKED_EVENTS.has(event.type)) {
+          return;
+        }
         try {
           controller.enqueue(
             encoder.encode(`event: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`)
