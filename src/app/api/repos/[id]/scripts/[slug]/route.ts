@@ -49,7 +49,7 @@ export async function PUT(
     const repoId = parseInt(id, 10);
     if (isNaN(repoId)) throw new Error("Invalid repository id");
 
-    const body = await req.json() as { content?: string; name?: string; hookEnabled?: boolean };
+    const body = await req.json() as { content?: string; name?: string; hookEnabled?: boolean; autoStart?: boolean };
 
     const db = getDb();
     const repo = db.select().from(schema.repositories).where(eq(schema.repositories.id, repoId)).get();
@@ -58,7 +58,7 @@ export async function PUT(
     const filename = slug.endsWith(".sh") ? slug : `${slug}.sh`;
     ScriptService.validateFilename(filename);
 
-    const scripts = parseJson(repo.scripts) as { name: string; filename: string; hookEnabled?: boolean }[];
+    const scripts = parseJson(repo.scripts) as { name: string; filename: string; hookEnabled?: boolean; autoStart?: boolean }[];
     const scriptIndex = scripts.findIndex((s) => s.filename === filename);
     if (scriptIndex === -1) throw new Error("Script not found");
 
@@ -81,6 +81,12 @@ export async function PUT(
       dbDirty = true;
     }
 
+    // Update autoStart
+    if (body.autoStart !== undefined) {
+      scripts[scriptIndex].autoStart = body.autoStart;
+      dbDirty = true;
+    }
+
     if (dbDirty) {
       db.update(schema.repositories)
         .set({ scripts: JSON.stringify(scripts) })
@@ -90,7 +96,7 @@ export async function PUT(
 
     const content = ScriptService.read(repo.name, filename);
     logger.info("repo", `Updated script "${scripts[scriptIndex].name}" (${filename}) in repo ${repo.name}`);
-    return ok({ name: scripts[scriptIndex].name, filename, content, hookEnabled: scripts[scriptIndex].hookEnabled });
+    return ok({ name: scripts[scriptIndex].name, filename, content, hookEnabled: scripts[scriptIndex].hookEnabled, autoStart: scripts[scriptIndex].autoStart });
   } catch (err) {
     return errorResponse(err);
   }

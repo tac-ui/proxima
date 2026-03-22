@@ -8,6 +8,7 @@ import {
   Input,
   Select,
   Combobox,
+  Switch,
 } from "@tac-ui/web";
 import { Cloud, ArrowRight, Lock, Server } from "@tac-ui/icon";
 import type { ProxyHost, DiscoveredServiceWithManaged, ListeningProcessWithManaged, CloudflaredStatus, ManagedService, CloudflareZone } from "@/types";
@@ -28,7 +29,7 @@ export function RouteForm({
   const { connected } = useApiContext();
   const [domain, setDomain] = useState<string>(initial?.domainNames?.[0] ?? "");
   const [scheme, setScheme] = useState<"http" | "https">(initial?.forwardScheme ?? "http");
-  const [forwardHost, setForwardHost] = useState(initial?.forwardHost ?? "");
+  const [forwardHost, setForwardHost] = useState(initial?.forwardHost ?? "localhost");
   const [forwardPort, setForwardPort] = useState(String(initial?.forwardPort ?? "80"));
   const wsUpgrade = initial?.allowWebsocketUpgrade ?? true;
   const caching = initial?.cachingEnabled ?? false;
@@ -46,6 +47,7 @@ export function RouteForm({
   const [domainMode, setDomainMode] = useState<"manual" | "zone">("manual");
   const [selectedZone, setSelectedZone] = useState("");
   const [subdomainInput, setSubdomainInput] = useState("");
+  const [useRootDomain, setUseRootDomain] = useState(false);
 
   useEffect(() => {
     if (!connected) return;
@@ -89,6 +91,7 @@ export function RouteForm({
   /** Resolve the final domain string from current inputs */
   const resolveDomain = (): string => {
     if (domainMode === "zone" && selectedZone) {
+      if (useRootDomain) return selectedZone;
       const sub = subdomainInput.trim();
       return sub ? `${sub}.${selectedZone}` : "";
     }
@@ -100,7 +103,6 @@ export function RouteForm({
     // Use current input or existing domain
     const finalDomain = resolveDomain() || domain;
     setDomain(finalDomain);
-    setSubdomainInput("");
     const errs: Record<string, string> = {};
     if (!finalDomain) errs.domains = "Domain is required";
     if (!forwardHost.trim()) errs.forwardHost = "Forward host is required";
@@ -209,37 +211,53 @@ export function RouteForm({
             <button
               type="button"
               className="text-xs text-point hover:underline"
-              onClick={() => setDomainMode((m) => m === "manual" ? "zone" : "manual")}
+              onClick={() => setDomainMode((m) => {
+                if (m === "zone" && !domain && subdomainInput && selectedZone) {
+                  setDomain(`${subdomainInput}.${selectedZone}`);
+                }
+                return m === "manual" ? "zone" : "manual";
+              })}
             >
               {domainMode === "manual" ? "Select from zones" : "Enter manually"}
             </button>
           )}
         </div>
         {domainMode === "zone" && cfZones.length > 0 ? (
-          <div className="flex items-end gap-2">
-            <Input
-              value={subdomainInput}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                setSubdomainInput(e.target.value);
-                const sub = e.target.value.trim();
-                if (selectedZone && sub) {
-                  setDomain(`${sub}.${selectedZone}`);
-                }
-              }}
-              placeholder="subdomain"
-              className="flex-1"
-              error={!!errors.domains}
-            />
-            <span className="flex items-center h-[var(--input-md-height)] text-sm text-muted-foreground pb-px">.</span>
-            <Select
-              options={cfZones.map((z) => ({ value: z.zoneName, label: z.zoneName }))}
-              value={selectedZone}
-              onChange={(v: string) => {
-                setSelectedZone(v);
-                const sub = subdomainInput.trim();
-                if (sub) setDomain(`${sub}.${v}`);
-              }}
-              className="!h-[var(--input-md-height)]"
+          <div className="space-y-3">
+            <div className="flex items-end gap-2">
+              {!useRootDomain && (
+                <>
+                  <Input
+                    value={subdomainInput}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setSubdomainInput(e.target.value);
+                      const sub = e.target.value.trim();
+                      if (selectedZone && sub) {
+                        setDomain(`${sub}.${selectedZone}`);
+                      }
+                    }}
+                    placeholder="subdomain"
+                    className="flex-1"
+                    error={!!errors.domains}
+                  />
+                  <span className="flex items-center h-[var(--input-md-height)] text-sm text-muted-foreground pb-px">.</span>
+                </>
+              )}
+              <Select
+                options={cfZones.map((z) => ({ value: z.zoneName, label: z.zoneName }))}
+                value={selectedZone}
+                onChange={(v: string) => {
+                  setSelectedZone(v);
+                  const sub = subdomainInput.trim();
+                  if (sub) setDomain(`${sub}.${v}`);
+                }}
+                className={`!h-[var(--input-md-height)] ${useRootDomain ? "flex-1" : ""}`}
+              />
+            </div>
+            <Switch
+              label="Use root domain (without subdomain)"
+              checked={useRootDomain}
+              onChange={setUseRootDomain}
             />
           </div>
         ) : (
@@ -250,9 +268,9 @@ export function RouteForm({
             error={!!errors.domains}
           />
         )}
-        {domain && (
+        {(domain || (domainMode === "zone" && useRootDomain && selectedZone)) && (
           <p className="text-xs text-muted-foreground">
-            {domain}
+            {domainMode === "zone" ? (useRootDomain ? selectedZone : (subdomainInput ? `${subdomainInput}.${selectedZone}` : domain)) : domain}
           </p>
         )}
         {errors.domains && <p className="text-xs text-error">{errors.domains}</p>}
@@ -288,7 +306,7 @@ export function RouteForm({
           <Input
             value={forwardHost}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForwardHost(e.target.value)}
-            placeholder="192.168.1.100 or container-name"
+            placeholder="localhost"
             error={!!errors.forwardHost}
             errorMessage={errors.forwardHost}
           />

@@ -77,8 +77,12 @@ export const api = {
   getRepo: (id: number | string) => request<RepositoryInfo>("GET", `/api/repos/${encodeURIComponent(id)}`),
   updateRepoDomain: (id: number, domainConnection: import("@/types").DomainConnection | null) =>
     request<RepositoryInfo>("PUT", `/api/repos/${id}`, { domainConnection }),
+  removeDomain: (id: number, domain: string) =>
+    request<RepositoryInfo>("PUT", `/api/repos/${id}`, { removeDomain: domain }),
   deleteRepo: (id: number) => request("DELETE", `/api/repos/${id}`),
   pullRepo: (id: number) => request<{ message: string }>("POST", `/api/repos/${id}/pull`),
+  restoreRepo: (id: number) => request<{ message: string }>("POST", `/api/repos/${id}/restore`),
+  getRepoStatus: (id: number) => request<{ dirty: boolean; changes: string | null }>("GET", `/api/repos/${id}/status`),
   getRepoEnv: (id: number, filePath: string = ".env") => request<{ content: string }>("GET", `/api/repos/${id}/env?path=${encodeURIComponent(filePath)}`),
   updateRepoEnv: (id: number, content: string, filePath: string = ".env") => request("PUT", `/api/repos/${id}/env`, { content, path: filePath }),
   getRepoEnvFiles: (id: number) => request<{ envFiles: { name: string; path: string }[] }>("GET", `/api/repos/${id}/env-files`),
@@ -92,6 +96,7 @@ export const api = {
   getRepoScript: (id: number, slug: string) => request<{ name: string; filename: string; content: string }>("GET", `/api/repos/${id}/scripts/${slug}`),
   updateRepoScript: (id: number, slug: string, content: string, name?: string) => request<{ name: string; filename: string; content: string; hookEnabled?: boolean }>("PUT", `/api/repos/${id}/scripts/${slug}`, { content, ...(name ? { name } : {}) }),
   toggleScriptHook: (id: number, slug: string, hookEnabled: boolean) => request<{ name: string; filename: string; content: string; hookEnabled?: boolean }>("PUT", `/api/repos/${id}/scripts/${slug}`, { hookEnabled }),
+  toggleScriptAutoStart: (id: number, slug: string, autoStart: boolean) => request<{ name: string; filename: string; content: string; autoStart?: boolean }>("PUT", `/api/repos/${id}/scripts/${slug}`, { autoStart }),
   deleteRepoScript: (id: number, slug: string) => request("DELETE", `/api/repos/${id}/scripts/${slug}`),
   runRepoScript: (id: number, slug: string) => request<{ terminalId: string }>("POST", `/api/repos/${id}/scripts/${slug}/run`),
   getRepoCommits: (id: number, limit: number = 10) => request<{ commits: { hash: string; shortHash: string; message: string; author: string; date: string }[] }>("GET", `/api/repos/${id}/commits?limit=${limit}`),

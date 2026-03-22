@@ -231,6 +231,7 @@ export interface RepoScript {
   name: string;
   filename: string;
   hookEnabled?: boolean;
+  autoStart?: boolean;
 }
 
 export interface RepoScriptDetail extends RepoScript {
@@ -261,6 +262,7 @@ export interface RepositoryInfo {
   hookEnabled: boolean;
   hookApiKey: string | null;
   domainConnection: DomainConnection | null;
+  domainConnections: DomainConnection[];
 }
 
 export interface WebhookLog {

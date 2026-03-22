@@ -57,6 +57,9 @@ export default function RoutesPage() {
     h.forwardHost.toLowerCase().includes(search.toLowerCase())
   );
 
+  const manualRoutes = filtered.filter((h) => h.meta?.type !== "domain-connection");
+  const projectRoutes = filtered.filter((h) => h.meta?.type === "domain-connection");
+
   return (
     <motion.div className="space-y-6" {...pageEntrance}>
       {/* Tunnel status banner */}
@@ -149,18 +152,42 @@ export default function RoutesPage() {
           />
         </motion.div>
       ) : (
-        <motion.div
-          className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 items-stretch"
-          variants={staggerContainer}
-          initial="hidden"
-          animate="visible"
-        >
-          {filtered.map((host) => (
-            <motion.div key={host.id} variants={cardItem} className="h-full">
-              <RouteCard host={host} tunnelActive={tunnelActive} onDelete={remove} isManager={isManager} />
-            </motion.div>
-          ))}
-        </motion.div>
+        <div className="space-y-6">
+          {manualRoutes.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Routes</p>
+              <motion.div
+                className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 items-stretch"
+                variants={staggerContainer}
+                initial="hidden"
+                animate="visible"
+              >
+                {manualRoutes.map((host) => (
+                  <motion.div key={host.id} variants={cardItem} className="h-full">
+                    <RouteCard host={host} tunnelActive={tunnelActive} onDelete={remove} isManager={isManager} />
+                  </motion.div>
+                ))}
+              </motion.div>
+            </div>
+          )}
+          {projectRoutes.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Project Domains</p>
+              <motion.div
+                className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 items-stretch"
+                variants={staggerContainer}
+                initial="hidden"
+                animate="visible"
+              >
+                {projectRoutes.map((host) => (
+                  <motion.div key={host.id} variants={cardItem} className="h-full">
+                    <RouteCard host={host} tunnelActive={tunnelActive} onDelete={remove} isManager={isManager} />
+                  </motion.div>
+                ))}
+              </motion.div>
+            </div>
+          )}
+        </div>
       )}
     </motion.div>
   );

@@ -50,66 +50,56 @@ export async function PUT(
     if (!repo) throw new Error("Repository not found");
 
     const body = await req.json();
-    const { domainConnection } = body as { domainConnection: DomainConnection | null };
+    const { domainConnection, removeDomain } = body as {
+      domainConnection?: DomainConnection | null;
+      removeDomain?: string; // domain string to remove
+    };
 
-    const existing = repo.domainConnection ? JSON.parse(repo.domainConnection) as DomainConnection : null;
+    // Parse existing connections (support both legacy single and array format)
+    let connections: DomainConnection[] = [];
+    if (repo.domainConnection) {
+      try {
+        const parsed = JSON.parse(repo.domainConnection);
+        connections = Array.isArray(parsed) ? parsed : [parsed];
+      } catch { /* ignore */ }
+    }
 
     const proxyWarnings: string[] = [];
 
-    if (domainConnection) {
-      // Create or update proxy host
-      if (existing?.proxyHostId) {
-        // Update existing proxy host
-        try {
-          const result = await updateProxyHost(existing.proxyHostId, {
-            domainNames: [domainConnection.domain],
-            forwardScheme: domainConnection.forwardScheme,
-            forwardHost: domainConnection.forwardHost,
-            forwardPort: domainConnection.forwardPort,
-          });
-          domainConnection.proxyHostId = existing.proxyHostId;
-          if (result._warnings?.length) proxyWarnings.push(...result._warnings);
-        } catch {
-          // Proxy host may have been deleted externally, create new
-          const result = await createProxyHost({
-            domainNames: [domainConnection.domain],
-            forwardScheme: domainConnection.forwardScheme,
-            forwardHost: domainConnection.forwardHost,
-            forwardPort: domainConnection.forwardPort,
-            enabled: true,
-            meta: { repoId, type: "domain-connection" },
-          });
-          domainConnection.proxyHostId = result.id;
-          if (result._warnings?.length) proxyWarnings.push(...result._warnings);
+    if (removeDomain) {
+      // Remove a specific domain connection
+      const toRemove = connections.find((c) => c.domain === removeDomain);
+      if (toRemove?.proxyHostId) {
+        try { await removeProxyHost(toRemove.proxyHostId); } catch { /* may already be deleted */ }
+      }
+      connections = connections.filter((c) => c.domain !== removeDomain);
+    } else if (domainConnection) {
+      // Add a new domain connection
+      const result = await createProxyHost({
+        domainNames: [domainConnection.domain],
+        forwardScheme: domainConnection.forwardScheme,
+        forwardHost: domainConnection.forwardHost,
+        forwardPort: domainConnection.forwardPort,
+        enabled: true,
+        meta: { repoId, type: "domain-connection" },
+      });
+      domainConnection.proxyHostId = result.id;
+      if (result._warnings?.length) proxyWarnings.push(...result._warnings);
+      connections.push(domainConnection);
+    } else if (domainConnection === null) {
+      // Remove all domain connections
+      for (const conn of connections) {
+        if (conn.proxyHostId) {
+          try { await removeProxyHost(conn.proxyHostId); } catch { /* may already be deleted */ }
         }
-      } else {
-        // Create new proxy host
-        const result = await createProxyHost({
-          domainNames: [domainConnection.domain],
-          forwardScheme: domainConnection.forwardScheme,
-          forwardHost: domainConnection.forwardHost,
-          forwardPort: domainConnection.forwardPort,
-          enabled: true,
-          meta: { repoId, type: "domain-connection" },
-        });
-        domainConnection.proxyHostId = result.id;
-        if (result._warnings?.length) proxyWarnings.push(...result._warnings);
       }
-
-      db.update(schema.repositories)
-        .set({ domainConnection: JSON.stringify(domainConnection) })
-        .where(eq(schema.repositories.id, repoId))
-        .run();
-    } else {
-      // Remove domain connection
-      if (existing?.proxyHostId) {
-        try { await removeProxyHost(existing.proxyHostId); } catch { /* may already be deleted */ }
-      }
-      db.update(schema.repositories)
-        .set({ domainConnection: null })
-        .where(eq(schema.repositories.id, repoId))
-        .run();
+      connections = [];
     }
+
+    db.update(schema.repositories)
+      .set({ domainConnection: connections.length > 0 ? JSON.stringify(connections) : null })
+      .where(eq(schema.repositories.id, repoId))
+      .run();
 
     const updated = db.select().from(schema.repositories).where(eq(schema.repositories.id, repoId)).get();
     logAudit({ userId: auth.userId, username: auth.username, action: "update", category: "repo", targetType: "repo", targetName: repo.name, ipAddress: getClientIp(req) });

@@ -43,6 +43,7 @@ import {
   Eye,
   EyeOff,
   Webhook,
+  Power,
 } from "@tac-ui/icon";
 import { CopyButton } from "@/components/shared/CopyButton";
 import dynamic from "next/dynamic";
@@ -120,6 +121,10 @@ export default function ProjectDetailPage() {
   const [suggestionsLoaded, setSuggestionsLoaded] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
+  // Git status (dirty check)
+  const [repoDirty, setRepoDirty] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+
   // Git commits
   const [commits, setCommits] = useState<{ hash: string; shortHash: string; message: string; author: string; date: string }[]>([]);
   const [commitsRefreshing, setCommitsRefreshing] = useState(false);
@@ -154,13 +159,16 @@ export default function ProjectDetailPage() {
         setRepo(res.data);
         setHookEnabled(res.data.hookEnabled);
         setHookApiKey(res.data.hookApiKey);
-        // Fetch commits only after repo is confirmed to exist
+        // Fetch commits and git status after repo is confirmed to exist
         const id = res.data.id;
         if (id > 0) {
           setCommitsRefreshing(true);
           api.getRepoCommits(id, 20).then((cr) => {
             if (cr.ok && cr.data) setCommits(cr.data.commits);
             setCommitsRefreshing(false);
+          });
+          api.getRepoStatus(id).then((sr) => {
+            if (sr.ok && sr.data) setRepoDirty(sr.data.dirty);
           });
         }
       } else {
@@ -333,6 +341,27 @@ export default function ProjectDetailPage() {
       }
     } else {
       toast(res.error ?? "Pull failed", { variant: "error" });
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!repo) return;
+    const yes = await confirm({
+      title: "Discard all changes",
+      message: "This will discard all uncommitted changes and remove untracked files. This cannot be undone.",
+      confirmLabel: "Discard All",
+      variant: "destructive",
+    });
+    if (!yes) return;
+    setRestoring(true);
+    const res = await api.restoreRepo(repoId);
+    setRestoring(false);
+    if (res.ok) {
+      toast("All changes discarded", { variant: "success" });
+      setRepoDirty(false);
+      fetchRepo();
+    } else {
+      toast(res.error ?? "Restore failed", { variant: "error" });
     }
   };
 
@@ -674,12 +703,16 @@ export default function ProjectDetailPage() {
                 <Badge variant="success">{runningCount} running</Badge>
               )}
             </div>
-            {repo.domainConnection ? (
-              <a href={`https://${repo.domainConnection.domain}`} target="_blank" rel="noopener noreferrer" className="text-xs text-point hover:underline inline-flex items-center gap-1">
-                <Globe size={12} />
-                {repo.domainConnection.domain}
-                <ExternalLink size={10} />
-              </a>
+            {repo.domainConnections.length > 0 ? (
+              <div className="flex items-center gap-3 flex-wrap">
+                {repo.domainConnections.map((conn) => (
+                  <a key={conn.domain} href={`https://${conn.domain}`} target="_blank" rel="noopener noreferrer" className="text-xs text-point hover:underline inline-flex items-center gap-1">
+                    <Globe size={12} />
+                    {conn.domain}
+                    <ExternalLink size={10} />
+                  </a>
+                ))}
+              </div>
             ) : (
               <span className="text-xs text-muted-foreground/40 inline-flex items-center gap-1">
                 <Globe size={12} />
@@ -739,6 +772,17 @@ export default function ProjectDetailPage() {
           )}
           {isManager && (
             <>
+              {repoDirty && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={handleRestore}
+                  loading={restoring}
+                  leftIcon={restoring ? undefined : <RotateCcw size={14} />}
+                >
+                  {restoring ? "Restoring..." : "Restore"}
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="secondary"
@@ -1007,6 +1051,20 @@ export default function ProjectDetailPage() {
                               </Button>
                             </>
                           ) : null}
+                          {!isRunning && isManager && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              iconOnly
+                              onClick={() => {
+                                api.toggleScriptAutoStart(repoId, slug, !script.autoStart).then((res) => { if (res.ok) fetchRepo(); });
+                              }}
+                              title={script.autoStart ? "Disable auto-start" : "Enable auto-start"}
+                              aria-label="Toggle auto-start"
+                            >
+                              <Power size={12} className={script.autoStart ? "text-success" : "text-muted-foreground"} />
+                            </Button>
+                          )}
                           {!isRunning && isManager && hookEnabled && (
                             <Button
                               size="sm"
@@ -1375,24 +1433,39 @@ export default function ProjectDetailPage() {
                   <p className="text-sm font-semibold">Domain Connection</p>
                 </div>
               </CardHeader>
-              <CardContent>
-                {repo.domainConnection ? (
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <a href={`https://${repo.domainConnection.domain}`} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-point hover:underline inline-flex items-center gap-1">
-                        {repo.domainConnection.domain}
-                        <ExternalLink size={12} />
-                      </a>
-                      <p className="text-xs text-muted-foreground font-mono">
-                        → {repo.domainConnection.forwardScheme}://{repo.domainConnection.forwardHost}:{repo.domainConnection.forwardPort}
-                      </p>
-                    </div>
-                    <Button variant="destructive" size="sm" onClick={handleRemoveDomain} loading={domainSaving}>
-                      Disconnect
-                    </Button>
+              <CardContent className="space-y-4">
+                {/* Existing connections */}
+                {repo.domainConnections.length > 0 && (
+                  <div className="space-y-2">
+                    {repo.domainConnections.map((conn) => (
+                      <div key={conn.domain} className="flex items-center justify-between p-3 rounded-lg border border-border">
+                        <div className="space-y-1 min-w-0">
+                          <a href={`https://${conn.domain}`} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-point hover:underline inline-flex items-center gap-1">
+                            {conn.domain}
+                            <ExternalLink size={12} />
+                          </a>
+                          <p className="text-xs text-muted-foreground font-mono">
+                            → {conn.forwardScheme}://{conn.forwardHost}:{conn.forwardPort}
+                          </p>
+                        </div>
+                        <Button variant="destructive" size="sm" onClick={async () => {
+                          setDomainSaving(true);
+                          const res = await api.removeDomain(repo.id, conn.domain);
+                          if (res.ok && res.data) { setRepo(res.data); toast(`Disconnected ${conn.domain}`, { variant: "success" }); }
+                          else { toast(res.error ?? "Failed to disconnect", { variant: "error" }); }
+                          setDomainSaving(false);
+                        }} loading={domainSaving}>
+                          Disconnect
+                        </Button>
+                      </div>
+                    ))}
                   </div>
-                ) : cfZones.length > 0 ? (
-                  <div className="space-y-3">
+                )}
+
+                {/* Add new connection form */}
+                {cfZones.length > 0 ? (
+                  <div className="space-y-3 border-t border-border pt-4">
+                    <p className="text-xs font-medium">Add Domain</p>
                     <div className="flex items-end gap-2">
                       {!domainForm.useRootDomain && (
                         <>

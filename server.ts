@@ -11,6 +11,7 @@ import { logger } from "./src/server/lib/logger";
 import { getTunnelSettings } from "./src/server/services/cloudflare";
 import { getCloudflaredStatus, startCloudflared, checkAndFixNetwork } from "./src/server/services/cloudflared";
 import { syncAutoManaged } from "./src/server/services/managed-service";
+import { autoStartScripts } from "./src/server/services/auto-start";
 
 const dev = process.env.NODE_ENV !== "production";
 
@@ -40,6 +41,9 @@ async function main() {
 
   // Sync auto-managed services (register stack containers)
   syncAutoManaged();
+
+  // Auto-start scripts marked with autoStart flag
+  autoStartScripts();
 
   // Start Docker event watcher for auto-discovery (debounced to avoid rapid re-renders)
   try {

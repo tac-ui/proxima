@@ -21,8 +21,18 @@ export function findSshKeyPath(): string | undefined {
 
 export function toRepoInfo(row: typeof schema.repositories.$inferSelect) {
   let domainConnection = null;
+  let domainConnections: unknown[] = [];
   if (row.domainConnection) {
-    try { domainConnection = JSON.parse(row.domainConnection); } catch { /* ignore */ }
+    try {
+      const parsed = JSON.parse(row.domainConnection);
+      if (Array.isArray(parsed)) {
+        domainConnections = parsed;
+        domainConnection = parsed[0] ?? null;
+      } else {
+        domainConnection = parsed;
+        domainConnections = [parsed];
+      }
+    } catch { /* ignore */ }
   }
   return {
     id: row.id,
@@ -35,5 +45,6 @@ export function toRepoInfo(row: typeof schema.repositories.$inferSelect) {
     hookEnabled: row.hookEnabled,
     hookApiKey: row.hookApiKey,
     domainConnection,
+    domainConnections,
   };
 }
