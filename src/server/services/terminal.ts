@@ -206,6 +206,14 @@ export class Terminal {
   protected onExitHandler = (res: { exitCode: number; signal?: number }): void => {
     logger.info("terminal", `${this._name} exited — code: ${res.exitCode}, signal: ${res.signal}`);
 
+    // Log last output on non-zero exit for debugging via docker logs
+    if (res.exitCode !== 0) {
+      const lastOutput = this.buffer.join("").trim().slice(-2000);
+      if (lastOutput) {
+        logger.warn("terminal", `${this._name} output (last 2000 chars):\n${lastOutput}`);
+      }
+    }
+
     this.exitInfo = res;
 
     for (const socket of Object.values(this.socketList)) {
@@ -222,9 +230,11 @@ export class Terminal {
     }
 
     // Keep terminal in map briefly so late-joining WS clients can retrieve buffer + exit info
+    // Extend grace period for failed scripts so users can inspect the output
+    const grace = res.exitCode !== 0 ? 5 * 60_000 : Terminal.EXIT_GRACE_MS;
     this._cleanupTimeout = setTimeout(() => {
       Terminal.terminalMap.delete(this._name);
-    }, Terminal.EXIT_GRACE_MS);
+    }, grace);
   };
 
   public onExit(callback: (exitCode: number) => void): void {

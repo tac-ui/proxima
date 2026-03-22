@@ -24,6 +24,7 @@ import {
   Switch,
   Select,
   StatusDot,
+  Tooltip,
 } from "@tac-ui/web";
 import {
   Trash2,
@@ -1031,12 +1032,16 @@ export default function ProjectDetailPage() {
                         <div className="flex gap-1 shrink-0">
                           {isRunning ? (
                             <>
-                              <Button size="sm" variant="ghost" iconOnly onClick={() => toggleTerminal(slug)} title="Toggle Terminal Output" aria-label="Toggle Terminal Output">
-                                {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                              </Button>
-                              <Button size="sm" variant="secondary" iconOnly onClick={() => handleRestartScript(slug)} disabled={isRestarting} title="Restart" aria-label="Restart">
-                                <RotateCcw size={12} />
-                              </Button>
+                              <Tooltip content={isExpanded ? "Hide output" : "Show output"} placement="top">
+                                <Button size="sm" variant="ghost" iconOnly onClick={() => toggleTerminal(slug)} aria-label="Toggle Terminal Output">
+                                  {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                </Button>
+                              </Tooltip>
+                              <Tooltip content="Restart" placement="top">
+                                <Button size="sm" variant="secondary" iconOnly onClick={() => handleRestartScript(slug)} disabled={isRestarting} aria-label="Restart">
+                                  <RotateCcw size={12} />
+                                </Button>
+                              </Tooltip>
                               <Button size="sm" variant="destructive" onClick={() => handleStopScript(slug)} leftIcon={<Square size={12} />}>
                                 Stop
                               </Button>
@@ -1046,47 +1051,53 @@ export default function ProjectDetailPage() {
                               <Button size="sm" onClick={() => handleRunScript(slug)} leftIcon={<Play size={12} />}>
                                 Run
                               </Button>
-                              <Button size="sm" variant="ghost" iconOnly onClick={() => handleEditScript(script)} title="Edit script" aria-label="Edit script">
-                                <FileCode2 size={12} />
-                              </Button>
+                              <Tooltip content="Edit script" placement="top">
+                                <Button size="sm" variant="ghost" iconOnly onClick={() => handleEditScript(script)} aria-label="Edit script">
+                                  <FileCode2 size={12} />
+                                </Button>
+                              </Tooltip>
                             </>
                           ) : null}
                           {!isRunning && isManager && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              iconOnly
-                              onClick={() => {
-                                api.toggleScriptAutoStart(repoId, slug, !script.autoStart).then((res) => { if (res.ok) fetchRepo(); });
-                              }}
-                              title={script.autoStart ? "Disable auto-start" : "Enable auto-start"}
-                              aria-label="Toggle auto-start"
-                            >
-                              <Power size={12} className={script.autoStart ? "text-success" : "text-muted-foreground"} />
-                            </Button>
+                            <Tooltip content={script.autoStart ? "Auto-start enabled" : "Enable auto-start"} placement="top">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                iconOnly
+                                onClick={() => {
+                                  api.toggleScriptAutoStart(repoId, slug, !script.autoStart).then((res) => { if (res.ok) fetchRepo(); });
+                                }}
+                                aria-label="Toggle auto-start"
+                              >
+                                <Power size={12} className={script.autoStart ? "text-success" : "text-muted-foreground"} />
+                              </Button>
+                            </Tooltip>
                           )}
                           {!isRunning && isManager && hookEnabled && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              iconOnly
-                              onClick={() => {
-                                api.toggleScriptHook(repoId, slug, !(script.hookEnabled !== false)).then((res) => { if (res.ok) fetchRepo(); });
-                              }}
-                              title={script.hookEnabled !== false ? "Disable webhook" : "Enable webhook"}
-                              aria-label="Toggle webhook"
-                            >
+                            <Tooltip content={script.hookEnabled !== false ? "Webhook enabled" : "Enable webhook"} placement="top">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                iconOnly
+                                onClick={() => {
+                                  api.toggleScriptHook(repoId, slug, !(script.hookEnabled !== false)).then((res) => { if (res.ok) fetchRepo(); });
+                                }}
+                                aria-label="Toggle webhook"
+                              >
                               <Webhook size={12} className={script.hookEnabled !== false ? "text-point" : "text-muted-foreground"} />
                             </Button>
+                            </Tooltip>
                           )}
                           {!isRunning && isManager && (
-                            <Button size="sm" variant="ghost" iconOnly onClick={async () => {
-                              const yes = await confirm({ title: "Delete script", message: `Delete "${script.name}" (${script.filename})?`, confirmLabel: "Delete", variant: "destructive" });
-                              if (!yes) return;
-                              api.deleteRepoScript(repoId, slug).then((res) => { if (res.ok) fetchRepo(); });
-                            }} title="Delete script" aria-label="Delete script">
-                              <Trash2 size={12} />
-                            </Button>
+                            <Tooltip content="Delete script" placement="top">
+                              <Button size="sm" variant="ghost" iconOnly onClick={async () => {
+                                const yes = await confirm({ title: "Delete script", message: `Delete "${script.name}" (${script.filename})?`, confirmLabel: "Delete", variant: "destructive" });
+                                if (!yes) return;
+                                api.deleteRepoScript(repoId, slug).then((res) => { if (res.ok) fetchRepo(); });
+                              }} aria-label="Delete script">
+                                <Trash2 size={12} />
+                              </Button>
+                            </Tooltip>
                           )}
                         </div>
                       </div>
