@@ -31,6 +31,16 @@ if [ -n "$TARGET_UID" ] && [ "$TARGET_UID" != "0" ]; then
   fi
 
   chown -R "$TARGET_UID:$TARGET_GID" /data 2>/dev/null || true
+
+  # Run user init scripts if /data/init.d/ exists
+  if [ -d /data/init.d ]; then
+    for script in /data/init.d/*.sh; do
+      [ -f "$script" ] || continue
+      echo "Running init script: $(basename "$script")"
+      su-exec proxima sh "$script" || echo "Warning: $(basename "$script") failed"
+    done
+  fi
+
   echo "Starting Proxima server on port $PXM_PORT as UID $TARGET_UID..."
   exec su-exec proxima npx tsx server.ts
 fi

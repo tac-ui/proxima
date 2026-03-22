@@ -13,6 +13,7 @@ RUN apk add --no-cache \
   su-exec \
   lsof \
   iproute2 \
+  curl \
   && npm install -g pnpm
 
 # ---- Dependencies ----
