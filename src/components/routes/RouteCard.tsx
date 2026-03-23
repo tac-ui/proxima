@@ -1,38 +1,29 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { Badge, Button, Card, CardContent, Tooltip } from "@tac-ui/web";
 import { ExternalLink, Cloud, ArrowRight, Trash2, Edit, BarChart3 } from "@tac-ui/icon";
 import { useConfirm } from "@/hooks/useConfirm";
 import type { ProxyHost } from "@/types";
 
+interface DomainCheckResult {
+  status: "up" | "down";
+  statusCode?: number;
+  responseTime: number;
+}
+
 interface RouteCardProps {
   host: ProxyHost;
   tunnelActive?: boolean;
   onDelete?: (id: number) => Promise<void>;
   isManager?: boolean;
+  domainStatus?: Record<string, DomainCheckResult>;
 }
 
-type DomainStatus = "checking" | "up" | "down";
-
-export function RouteCard({ host, tunnelActive, onDelete, isManager }: RouteCardProps) {
+export function RouteCard({ host, tunnelActive, onDelete, isManager, domainStatus = {} }: RouteCardProps) {
   const [deleting, setDeleting] = useState(false);
-  const [domainStatus, setDomainStatus] = useState<Record<string, DomainStatus>>({});
   const confirm = useConfirm();
-
-  useEffect(() => {
-    if (!host.enabled) return;
-    const init: Record<string, DomainStatus> = {};
-    for (const d of host.domainNames) init[d] = "checking";
-    setDomainStatus(init);
-
-    for (const domain of host.domainNames) {
-      fetch(`https://${domain}`, { method: "HEAD", mode: "no-cors", signal: AbortSignal.timeout(8000) })
-        .then(() => setDomainStatus((prev) => ({ ...prev, [domain]: "up" })))
-        .catch(() => setDomainStatus((prev) => ({ ...prev, [domain]: "down" })));
-    }
-  }, [host.domainNames, host.enabled]);
 
   const handleDelete = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -90,7 +81,7 @@ export function RouteCard({ host, tunnelActive, onDelete, isManager }: RouteCard
               onClick={(e) => e.stopPropagation()}
               className="inline-flex items-center gap-1.5 text-sm font-semibold hover:text-point transition-colors"
             >
-              <StatusDot status={domainStatus[primaryDomain]} />
+              <StatusDot result={domainStatus[`https://${primaryDomain}`]} />
               {primaryDomain}
               <ExternalLink size={12} className="text-muted-foreground" />
             </a>
@@ -108,7 +99,7 @@ export function RouteCard({ host, tunnelActive, onDelete, isManager }: RouteCard
                   onClick={(e) => e.stopPropagation()}
                   className="inline-flex items-center gap-1 text-[11px] font-mono text-muted-foreground hover:text-point transition-colors"
                 >
-                  <StatusDot status={domainStatus[d]} />
+                  <StatusDot result={domainStatus[`https://${d}`]} />
                   {d}
                 </a>
               ))}
@@ -152,9 +143,13 @@ export function RouteCard({ host, tunnelActive, onDelete, isManager }: RouteCard
   );
 }
 
-function StatusDot({ status }: { status?: DomainStatus }) {
-  const color = status === "up" ? "bg-success" : status === "down" ? "bg-destructive" : "bg-muted-foreground animate-pulse";
-  const label = status === "up" ? "Reachable" : status === "down" ? "Unreachable" : "Checking...";
+function StatusDot({ result }: { result?: DomainCheckResult }) {
+  const color = result?.status === "up" ? "bg-success" : result?.status === "down" ? "bg-destructive" : "bg-muted-foreground animate-pulse";
+  const label = result?.status === "up"
+    ? `${result.statusCode ?? "OK"} · ${result.responseTime}ms`
+    : result?.status === "down"
+      ? `Down${result.statusCode ? ` · ${result.statusCode}` : ""}`
+      : "Checking...";
   return (
     <Tooltip content={label} placement="top">
       <span className={`w-2 h-2 rounded-full shrink-0 ${color}`} />

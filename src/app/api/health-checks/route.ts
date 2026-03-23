@@ -38,6 +38,33 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function PUT(req: NextRequest) {
+  try {
+    ensureDb();
+    requireManager(req);
+    const body = await req.json() as { url: string; name?: string; newUrl?: string };
+    if (!body.url) throw new Error("URL is required");
+
+    const domains = getHealthCheckDomains();
+    const idx = domains.findIndex((d) => d.url === body.url);
+    if (idx === -1) throw new Error("Domain not found");
+
+    if (body.name !== undefined) domains[idx].name = body.name.trim();
+    if (body.newUrl) {
+      let newUrl = body.newUrl.trim();
+      if (!newUrl.startsWith("http://") && !newUrl.startsWith("https://")) {
+        newUrl = `https://${newUrl}`;
+      }
+      domains[idx].url = newUrl;
+    }
+
+    saveHealthCheckDomains(domains);
+    return ok(domains);
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   try {
     ensureDb();

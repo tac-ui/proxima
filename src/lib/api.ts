@@ -125,6 +125,7 @@ export const api = {
   // Health Checks
   getHealthCheckDomains: () => request<{ url: string; name: string; addedAt: string }[]>("GET", "/api/health-checks"),
   addHealthCheckDomain: (url: string, name: string) => request<{ url: string; name: string; addedAt: string }[]>("POST", "/api/health-checks", { url, name }),
+  updateHealthCheckDomain: (url: string, data: { name?: string; newUrl?: string }) => request<{ url: string; name: string; addedAt: string }[]>("PUT", "/api/health-checks", { url, ...data }),
   removeHealthCheckDomain: (url: string) => request<{ url: string; name: string; addedAt: string }[]>("DELETE", "/api/health-checks", { url }),
   checkHealthDomains: (urls: string[]) => request<{ url: string; status: "up" | "down"; statusCode?: number; responseTime: number; error?: string }[]>("POST", "/api/health-checks/check", { urls }),
 

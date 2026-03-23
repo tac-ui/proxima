@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRoutes } from "@/hooks/useRoutes";
@@ -35,6 +35,23 @@ export default function RoutesPage() {
   const [tunnelActive, setTunnelActive] = useState(false);
   const [tunnelChecked, setTunnelChecked] = useState(false);
   const [cfdState, setCfdState] = useState<CloudflaredStatus["state"] | null>(null);
+  const [domainStatus, setDomainStatus] = useState<Record<string, { status: "up" | "down"; statusCode?: number; responseTime: number }>>({});
+
+  const checkDomainStatus = useCallback((routes: typeof routeList) => {
+    const allDomains = routes.flatMap((h) => h.enabled ? h.domainNames.map((d) => `https://${d}`) : []);
+    if (allDomains.length === 0) return;
+    api.checkHealthDomains(allDomains).then((res) => {
+      if (res.ok && res.data) {
+        const map: Record<string, { status: "up" | "down"; statusCode?: number; responseTime: number }> = {};
+        for (const r of res.data) map[r.url] = r;
+        setDomainStatus(map);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!loading && routeList.length > 0) checkDomainStatus(routeList);
+  }, [loading, routeList, checkDomainStatus]);
 
   useEffect(() => {
     Promise.all([
@@ -164,7 +181,7 @@ export default function RoutesPage() {
               >
                 {manualRoutes.map((host) => (
                   <motion.div key={host.id} variants={cardItem} className="h-full">
-                    <RouteCard host={host} tunnelActive={tunnelActive} onDelete={remove} isManager={isManager} />
+                    <RouteCard host={host} tunnelActive={tunnelActive} onDelete={remove} isManager={isManager} domainStatus={domainStatus} />
                   </motion.div>
                 ))}
               </motion.div>
@@ -181,7 +198,7 @@ export default function RoutesPage() {
               >
                 {projectRoutes.map((host) => (
                   <motion.div key={host.id} variants={cardItem} className="h-full">
-                    <RouteCard host={host} tunnelActive={tunnelActive} onDelete={remove} isManager={isManager} />
+                    <RouteCard host={host} tunnelActive={tunnelActive} onDelete={remove} isManager={isManager} domainStatus={domainStatus} />
                   </motion.div>
                 ))}
               </motion.div>
