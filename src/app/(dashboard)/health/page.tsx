@@ -35,13 +35,6 @@ interface CheckResult {
   error?: string;
 }
 
-type ViewMode = "all" | "manual" | "auto";
-const viewOptions = [
-  { value: "all", label: "All" },
-  { value: "manual", label: "Manual" },
-  { value: "auto", label: "From Routes" },
-];
-
 export default function HealthPage() {
   const { toast } = useToast();
   const { isManager } = useAuth();
@@ -55,10 +48,11 @@ export default function HealthPage() {
   const [addUrl, setAddUrl] = useState("");
   const [addName, setAddName] = useState("");
   const [adding, setAdding] = useState(false);
+  const [addMode, setAddMode] = useState<"manual" | "routes">("manual");
+  const [selectedRouteDomains, setSelectedRouteDomains] = useState<Set<string>>(new Set());
   const [editingUrl, setEditingUrl] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editUrl, setEditUrl] = useState("");
-  const [viewMode, setViewMode] = useState<ViewMode>("all");
   const [routes, setRoutes] = useState<ProxyHost[]>([]);
 
   const fetchDomains = useCallback(async () => {
@@ -117,30 +111,6 @@ export default function HealthPage() {
     setAdding(false);
   };
 
-  const handleImportFromRoutes = async () => {
-    const existing = new Set(domains.map((d) => d.url));
-    const newDomains = routes
-      .filter((r) => r.enabled)
-      .flatMap((r) => r.domainNames)
-      .map((d) => `https://${d}`)
-      .filter((url) => !existing.has(url));
-
-    if (newDomains.length === 0) {
-      toast("All route domains are already added", { variant: "info" });
-      return;
-    }
-
-    let updated = domains;
-    for (const url of newDomains) {
-      const hostname = new URL(url).hostname;
-      const res = await api.addHealthCheckDomain(url, hostname);
-      if (res.ok && res.data) updated = res.data;
-    }
-    setDomains(updated);
-    toast(`Imported ${newDomains.length} domain(s)`, { variant: "success" });
-    runChecks(updated);
-  };
-
   const handleRemove = async (url: string, name: string) => {
     const yes = await confirm({
       title: "Remove domain",
@@ -185,10 +155,6 @@ export default function HealthPage() {
     setEditingUrl(null);
   };
 
-  const filtered = viewMode === "all" ? domains
-    : viewMode === "auto" ? domains.filter((d) => d.auto)
-    : domains.filter((d) => !d.auto);
-
   // Stats
   const upCount = Object.values(results).filter((r) => r.status === "up").length;
   const downCount = Object.values(results).filter((r) => r.status === "down").length;
@@ -216,57 +182,106 @@ export default function HealthPage() {
           >
             {checking ? "Checking..." : "Refresh"}
           </Button>
-          {isManager && routes.length > 0 && (
-            <Button size="sm" variant="secondary" onClick={handleImportFromRoutes}>
-              Import from Routes
-            </Button>
-          )}
           {isManager && (
-            <Button size="sm" leftIcon={<Plus size={14} />} onClick={() => setShowAdd(true)}>
+            <Button size="sm" leftIcon={<Plus size={14} />} onClick={() => { setShowAdd(true); setAddMode("manual"); }}>
               Add Domain
             </Button>
           )}
         </div>
       </div>
 
-      {/* Filter tabs */}
-      {domains.length > 0 && (
-        <SegmentController
-          size="sm"
-          options={viewOptions}
-          value={viewMode}
-          onChange={(v) => setViewMode(v as ViewMode)}
-        />
-      )}
-
       {/* Add form */}
       {showAdd && (
         <Card>
-          <CardContent className="flex items-end gap-3">
-            <div className="flex-1">
-              <label className="text-xs font-medium mb-1 block">URL</label>
-              <Input
-                value={addUrl}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddUrl(e.target.value)}
-                placeholder="https://example.com"
-                onKeyDown={(e: React.KeyboardEvent) => { if (e.key === "Enter") handleAdd(); }}
+          <CardContent className="space-y-4">
+            {routes.length > 0 && (
+              <SegmentController
+                size="sm"
+                options={[
+                  { value: "manual", label: "Enter manually" },
+                  { value: "routes", label: "Select from routes" },
+                ]}
+                value={addMode}
+                onChange={(v) => setAddMode(v as "manual" | "routes")}
               />
+            )}
+            {addMode === "manual" ? (
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <label className="text-xs font-medium mb-1 block">URL</label>
+                  <Input
+                    value={addUrl}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddUrl(e.target.value)}
+                    placeholder="https://example.com"
+                    onKeyDown={(e: React.KeyboardEvent) => { if (e.key === "Enter") handleAdd(); }}
+                  />
+                </div>
+                <div className="w-48">
+                  <label className="text-xs font-medium mb-1 block">Name (optional)</label>
+                  <Input
+                    value={addName}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddName(e.target.value)}
+                    placeholder="My Service"
+                    onKeyDown={(e: React.KeyboardEvent) => { if (e.key === "Enter") handleAdd(); }}
+                  />
+                </div>
+                <Button onClick={handleAdd} loading={adding} disabled={!addUrl.trim()}>
+                  Add
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
+                  {routes.filter((r) => r.enabled).flatMap((r) => r.domainNames).map((d) => {
+                    const url = `https://${d}`;
+                    const alreadyAdded = domains.some((dm) => dm.url === url);
+                    const selected = selectedRouteDomains.has(d);
+                    return (
+                      <label key={d} className={`flex items-center gap-3 p-2.5 rounded-lg border transition-colors cursor-pointer ${alreadyAdded ? "opacity-40 pointer-events-none border-border" : selected ? "border-point bg-point/5" : "border-border hover:bg-surface-hover"}`}>
+                        <input
+                          type="checkbox"
+                          checked={selected || alreadyAdded}
+                          disabled={alreadyAdded}
+                          onChange={() => setSelectedRouteDomains((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(d)) next.delete(d); else next.add(d);
+                            return next;
+                          })}
+                          className="rounded border-border"
+                        />
+                        <span className="text-sm font-mono">{d}</span>
+                        {alreadyAdded && <span className="text-[10px] text-muted-foreground">Already added</span>}
+                      </label>
+                    );
+                  })}
+                </div>
+                <Button
+                  onClick={async () => {
+                    if (selectedRouteDomains.size === 0) return;
+                    setAdding(true);
+                    let updated = domains;
+                    for (const d of selectedRouteDomains) {
+                      const res = await api.addHealthCheckDomain(`https://${d}`, d);
+                      if (res.ok && res.data) updated = res.data;
+                    }
+                    setDomains(updated);
+                    setSelectedRouteDomains(new Set());
+                    toast(`Added ${selectedRouteDomains.size} domain(s)`, { variant: "success" });
+                    runChecks(updated);
+                    setAdding(false);
+                  }}
+                  loading={adding}
+                  disabled={selectedRouteDomains.size === 0}
+                >
+                  Add Selected ({selectedRouteDomains.size})
+                </Button>
+              </div>
+            )}
+            <div className="flex justify-end">
+              <Button variant="secondary" size="sm" onClick={() => { setShowAdd(false); setSelectedRouteDomains(new Set()); }}>
+                Cancel
+              </Button>
             </div>
-            <div className="w-48">
-              <label className="text-xs font-medium mb-1 block">Name (optional)</label>
-              <Input
-                value={addName}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddName(e.target.value)}
-                placeholder="My Service"
-                onKeyDown={(e: React.KeyboardEvent) => { if (e.key === "Enter") handleAdd(); }}
-              />
-            </div>
-            <Button onClick={handleAdd} loading={adding} disabled={!addUrl.trim()}>
-              Add
-            </Button>
-            <Button variant="secondary" onClick={() => setShowAdd(false)}>
-              Cancel
-            </Button>
           </CardContent>
         </Card>
       )}
@@ -278,13 +293,13 @@ export default function HealthPage() {
             <Skeleton key={i} height={72} />
           ))}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : domains.length === 0 ? (
         <EmptyState
           icon={<HeartPulse size={32} className="text-muted-foreground" />}
-          title={viewMode !== "all" ? "No domains in this category" : "No domains monitored"}
-          description={viewMode !== "all" ? "Switch to All to see all domains." : "Add domains to monitor their availability."}
+          title="No domains monitored"
+          description="Add domains to monitor their availability."
           action={
-            isManager && viewMode === "all" ? (
+            isManager ? (
               <Button onClick={() => setShowAdd(true)} leftIcon={<Plus size={14} />}>
                 Add Domain
               </Button>
@@ -293,7 +308,7 @@ export default function HealthPage() {
         />
       ) : (
         <div className="space-y-2">
-          {filtered.map((domain) => {
+          {domains.map((domain) => {
             const result = results[domain.url];
             const isUp = result?.status === "up";
             const isDown = result?.status === "down";
@@ -340,10 +355,10 @@ export default function HealthPage() {
                             )}
                             {result?.statusCode !== undefined && (
                               <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                                result.statusCode < 300 ? "bg-success/10 text-success"
-                                : result.statusCode < 400 ? "bg-point/10 text-point"
-                                : result.statusCode < 500 ? "bg-warning/10 text-warning"
-                                : "bg-destructive/10 text-destructive"
+                                result.statusCode < 300 ? "bg-[var(--success-bg)] text-[var(--success-fg)]"
+                                : result.statusCode < 400 ? "bg-[var(--info-bg)] text-[var(--info-fg)]"
+                                : result.statusCode < 500 ? "bg-[var(--warning-bg)] text-[var(--warning-fg)]"
+                                : "bg-[var(--error-bg)] text-[var(--error-fg)]"
                               }`}>
                                 {result.statusCode}
                               </span>
