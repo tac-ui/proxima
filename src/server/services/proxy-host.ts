@@ -5,6 +5,7 @@ import { logger } from "../lib/logger";
 import { ValidationError } from "../lib/errors";
 import { syncCloudflaredConfig } from "./cloudflared";
 import { syncDomainsCreate, syncDomainsDelete } from "./cloudflare";
+import { autoRegisterDomains, autoRemoveDomains } from "./health-check";
 import type { ProxyLocation } from "@/types";
 
 // Shape of data coming from the socket (camelCase, JSON-stringified arrays)
@@ -133,6 +134,9 @@ export async function create(data: CreateProxyHostData): Promise<ProxyHostResult
     warnings.push(msg);
   }
 
+  // Auto-register in health checks
+  try { autoRegisterDomains(data.domainNames); } catch { /* non-critical */ }
+
   logger.info("proxy-host", `Created proxy host ${host.id}: ${data.domainNames.join(", ")}`);
   return Object.assign(host, { _warnings: warnings });
 }
@@ -235,6 +239,9 @@ export async function remove(id: number): Promise<void> {
   } catch (err) {
     logger.warn("proxy-host", `DNS cleanup failed: ${err}`);
   }
+
+  // Auto-remove from health checks
+  try { autoRemoveDomains(domains); } catch { /* non-critical */ }
 
   logger.info("proxy-host", `Deleted proxy host ${id}`);
 }

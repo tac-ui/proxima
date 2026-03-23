@@ -122,6 +122,12 @@ export const api = {
   removeManagedService: (id: number) => request("DELETE", `/api/managed-services/${id}`),
   suggestProxy: (stackName: string) => request("GET", `/api/discovery/suggest/${encodeURIComponent(stackName)}`),
 
+  // Health Checks
+  getHealthCheckDomains: () => request<{ url: string; name: string; addedAt: string }[]>("GET", "/api/health-checks"),
+  addHealthCheckDomain: (url: string, name: string) => request<{ url: string; name: string; addedAt: string }[]>("POST", "/api/health-checks", { url, name }),
+  removeHealthCheckDomain: (url: string) => request<{ url: string; name: string; addedAt: string }[]>("DELETE", "/api/health-checks", { url }),
+  checkHealthDomains: (urls: string[]) => request<{ url: string; status: "up" | "down"; statusCode?: number; responseTime: number; error?: string }[]>("POST", "/api/health-checks/check", { urls }),
+
   // GitHub
   getGithubStatus: () => request<{ connected: boolean; username?: string }>("GET", "/api/github/status"),
   disconnectGithub: () => request("POST", "/api/github/disconnect"),

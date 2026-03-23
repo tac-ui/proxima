@@ -23,6 +23,7 @@ import {
   KeyRound,
   ScrollText,
   Activity,
+  HeartPulse,
 } from "@tac-ui/icon";
 
 interface NavItem {
@@ -81,6 +82,7 @@ const navGroups: NavGroupDef[] = [
     icon: <Network size={16} />,
     items: [
       { href: "/routes", label: "Routes", icon: <Globe size={20} /> },
+      { href: "/health", label: "Health", icon: <HeartPulse size={20} /> },
       { href: "/analytics", label: "Analytics", icon: <BarChart3 size={20} /> },
     ],
   },
