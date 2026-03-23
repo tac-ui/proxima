@@ -44,7 +44,7 @@ import {
   Eye,
   EyeOff,
   Webhook,
-  Power,
+  Zap,
 } from "@tac-ui/icon";
 import { CopyButton } from "@/components/shared/CopyButton";
 import dynamic from "next/dynamic";
@@ -1019,6 +1019,7 @@ export default function ProjectDetailPage() {
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               <p className="text-sm font-medium">{script.name}</p>
+                              {script.autoStart && !isRunning && <Badge variant="warning"><Zap size={10} className="fill-current" /> Auto</Badge>}
                               {isRunning && <Badge variant="success">{isRestarting ? "Restarting" : "Running"}</Badge>}
                               {!isRunning && lastExitCode !== undefined && (
                                 <Badge variant={hasFailed ? "destructive" : "success"}>
@@ -1069,7 +1070,7 @@ export default function ProjectDetailPage() {
                                 }}
                                 aria-label="Toggle auto-start"
                               >
-                                <Power size={12} className={script.autoStart ? "text-success" : "text-muted-foreground"} />
+                                <Zap size={12} className={script.autoStart ? "text-warning fill-warning" : "text-muted-foreground"} />
                               </Button>
                             </Tooltip>
                           )}
