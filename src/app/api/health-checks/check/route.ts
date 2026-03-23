@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
           });
           return {
             url,
-            status: res.ok || res.status < 500 ? "up" : "down",
+            status: res.ok ? "up" : "down",
             statusCode: res.status,
             responseTime: Date.now() - start,
           };

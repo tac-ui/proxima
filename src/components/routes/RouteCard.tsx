@@ -55,9 +55,13 @@ export function RouteCard({ host, tunnelActive, onDelete, isManager, domainStatu
           {/* Header: Status + Features */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-1.5">
-              <Badge variant={host.enabled ? "success" : "destructive"}>
-                {host.enabled ? "Online" : "Offline"}
-              </Badge>
+              {(() => {
+                const primaryResult = domainStatus[`https://${primaryDomain}`];
+                if (!host.enabled) return <Badge variant="destructive">Disabled</Badge>;
+                if (!primaryResult) return <Badge variant="secondary">Checking...</Badge>;
+                if (primaryResult.status === "up") return <Badge variant="success">{primaryResult.statusCode ?? "Online"}</Badge>;
+                return <Badge variant="destructive">{primaryResult.statusCode ?? "Down"}</Badge>;
+              })()}
               {tunnelActive && (
                 <Badge variant="secondary">
                   <Cloud size={10} className="mr-1" />

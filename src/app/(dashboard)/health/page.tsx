@@ -14,14 +14,17 @@ import {
   Tooltip,
   useToast,
   pageEntrance,
+  SegmentController,
 } from "@tac-ui/web";
-import { Plus, RefreshCw, Trash2, HeartPulse, ExternalLink } from "@tac-ui/icon";
+import { Plus, RefreshCw, Trash2, HeartPulse, ExternalLink, Edit, Check, X } from "@tac-ui/icon";
 import { useConfirm } from "@/hooks/useConfirm";
+import type { ProxyHost } from "@/types";
 
 interface HealthDomain {
   url: string;
   name: string;
   addedAt: string;
+  auto?: boolean;
 }
 
 interface CheckResult {
@@ -31,6 +34,13 @@ interface CheckResult {
   responseTime: number;
   error?: string;
 }
+
+type ViewMode = "all" | "manual" | "auto";
+const viewOptions = [
+  { value: "all", label: "All" },
+  { value: "manual", label: "Manual" },
+  { value: "auto", label: "From Routes" },
+];
 
 export default function HealthPage() {
   const { toast } = useToast();
@@ -45,11 +55,21 @@ export default function HealthPage() {
   const [addUrl, setAddUrl] = useState("");
   const [addName, setAddName] = useState("");
   const [adding, setAdding] = useState(false);
+  const [editingUrl, setEditingUrl] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editUrl, setEditUrl] = useState("");
+  const [viewMode, setViewMode] = useState<ViewMode>("all");
+  const [routes, setRoutes] = useState<ProxyHost[]>([]);
 
   const fetchDomains = useCallback(async () => {
     const res = await api.getHealthCheckDomains();
     if (res.ok && res.data) setDomains(res.data);
     setLoading(false);
+  }, []);
+
+  const fetchRoutes = useCallback(async () => {
+    const res = await api.getRoutes();
+    if (res.ok && res.data) setRoutes(res.data);
   }, []);
 
   const runChecks = useCallback(async (domainList: HealthDomain[]) => {
@@ -65,8 +85,9 @@ export default function HealthPage() {
   }, []);
 
   useEffect(() => {
-    fetchDomains().then(() => {});
-  }, [fetchDomains]);
+    fetchDomains();
+    fetchRoutes();
+  }, [fetchDomains, fetchRoutes]);
 
   useEffect(() => {
     if (!loading && domains.length > 0) runChecks(domains);
@@ -96,6 +117,30 @@ export default function HealthPage() {
     setAdding(false);
   };
 
+  const handleImportFromRoutes = async () => {
+    const existing = new Set(domains.map((d) => d.url));
+    const newDomains = routes
+      .filter((r) => r.enabled)
+      .flatMap((r) => r.domainNames)
+      .map((d) => `https://${d}`)
+      .filter((url) => !existing.has(url));
+
+    if (newDomains.length === 0) {
+      toast("All route domains are already added", { variant: "info" });
+      return;
+    }
+
+    let updated = domains;
+    for (const url of newDomains) {
+      const hostname = new URL(url).hostname;
+      const res = await api.addHealthCheckDomain(url, hostname);
+      if (res.ok && res.data) updated = res.data;
+    }
+    setDomains(updated);
+    toast(`Imported ${newDomains.length} domain(s)`, { variant: "success" });
+    runChecks(updated);
+  };
+
   const handleRemove = async (url: string, name: string) => {
     const yes = await confirm({
       title: "Remove domain",
@@ -112,10 +157,54 @@ export default function HealthPage() {
     }
   };
 
+  const startEdit = (domain: HealthDomain) => {
+    setEditingUrl(domain.url);
+    setEditName(domain.name);
+    setEditUrl(domain.url);
+  };
+
+  const cancelEdit = () => {
+    setEditingUrl(null);
+  };
+
+  const saveEdit = async (originalUrl: string) => {
+    const data: { name?: string; newUrl?: string } = {};
+    const domain = domains.find((d) => d.url === originalUrl);
+    if (!domain) return;
+    if (editName.trim() && editName.trim() !== domain.name) data.name = editName.trim();
+    if (editUrl.trim() && editUrl.trim() !== domain.url) data.newUrl = editUrl.trim();
+    if (Object.keys(data).length === 0) { setEditingUrl(null); return; }
+
+    const res = await api.updateHealthCheckDomain(originalUrl, data);
+    if (res.ok && res.data) {
+      setDomains(res.data);
+      toast("Updated", { variant: "success" });
+    } else {
+      toast(res.error ?? "Failed to update", { variant: "error" });
+    }
+    setEditingUrl(null);
+  };
+
+  const filtered = viewMode === "all" ? domains
+    : viewMode === "auto" ? domains.filter((d) => d.auto)
+    : domains.filter((d) => !d.auto);
+
+  // Stats
+  const upCount = Object.values(results).filter((r) => r.status === "up").length;
+  const downCount = Object.values(results).filter((r) => r.status === "down").length;
+
   return (
     <motion.div className="space-y-6" {...pageEntrance}>
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <h1 className="text-xl font-bold">Health Check</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-xl font-bold">Health Check</h1>
+          {domains.length > 0 && !loading && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-success font-medium">{upCount} up</span>
+              {downCount > 0 && <span className="text-destructive font-medium">{downCount} down</span>}
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <Button
             size="sm"
@@ -127,6 +216,11 @@ export default function HealthPage() {
           >
             {checking ? "Checking..." : "Refresh"}
           </Button>
+          {isManager && routes.length > 0 && (
+            <Button size="sm" variant="secondary" onClick={handleImportFromRoutes}>
+              Import from Routes
+            </Button>
+          )}
           {isManager && (
             <Button size="sm" leftIcon={<Plus size={14} />} onClick={() => setShowAdd(true)}>
               Add Domain
@@ -134,6 +228,16 @@ export default function HealthPage() {
           )}
         </div>
       </div>
+
+      {/* Filter tabs */}
+      {domains.length > 0 && (
+        <SegmentController
+          size="sm"
+          options={viewOptions}
+          value={viewMode}
+          onChange={(v) => setViewMode(v as ViewMode)}
+        />
+      )}
 
       {/* Add form */}
       {showAdd && (
@@ -174,13 +278,13 @@ export default function HealthPage() {
             <Skeleton key={i} height={72} />
           ))}
         </div>
-      ) : domains.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={<HeartPulse size={32} className="text-muted-foreground" />}
-          title="No domains monitored"
-          description="Add domains to monitor their availability."
+          title={viewMode !== "all" ? "No domains in this category" : "No domains monitored"}
+          description={viewMode !== "all" ? "Switch to All to see all domains." : "Add domains to monitor their availability."}
           action={
-            isManager ? (
+            isManager && viewMode === "all" ? (
               <Button onClick={() => setShowAdd(true)} leftIcon={<Plus size={14} />}>
                 Add Domain
               </Button>
@@ -189,11 +293,11 @@ export default function HealthPage() {
         />
       ) : (
         <div className="space-y-2">
-          {domains.map((domain) => {
+          {filtered.map((domain) => {
             const result = results[domain.url];
             const isUp = result?.status === "up";
             const isDown = result?.status === "down";
-            const isChecking = checking && !result;
+            const isEditing = editingUrl === domain.url;
 
             return (
               <Card key={domain.url}>
@@ -204,57 +308,47 @@ export default function HealthPage() {
                       <div className={`w-3 h-3 rounded-full shrink-0 ${isUp ? "bg-success" : isDown ? "bg-destructive" : "bg-muted-foreground animate-pulse"}`} />
                     </Tooltip>
 
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        {isManager ? (
-                          <input
-                            className="text-sm font-medium bg-transparent border-b border-transparent hover:border-border focus:border-point focus:outline-none"
-                            defaultValue={domain.name}
-                            onBlur={(e) => {
-                              const val = e.target.value.trim();
-                              if (val && val !== domain.name) {
-                                api.updateHealthCheckDomain(domain.url, { name: val }).then((res) => {
-                                  if (res.ok && res.data) setDomains(res.data);
-                                });
-                              }
-                            }}
-                            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                    <div className="min-w-0 flex-1">
+                      {isEditing ? (
+                        <div className="space-y-2">
+                          <Input
+                            value={editName}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditName(e.target.value)}
+                            placeholder="Name"
+                            size="sm"
+                            onKeyDown={(e: React.KeyboardEvent) => { if (e.key === "Enter") saveEdit(domain.url); if (e.key === "Escape") cancelEdit(); }}
                           />
-                        ) : (
-                          <span className="text-sm font-medium">{domain.name}</span>
-                        )}
-                        {result && (
-                          <span className={`text-[11px] font-mono ${isUp ? "text-success" : "text-destructive"}`}>
-                            {result.responseTime}ms
-                          </span>
-                        )}
-                        {result?.statusCode && (
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                            result.statusCode < 300 ? "bg-success/10 text-success"
-                            : result.statusCode < 400 ? "bg-point/10 text-point"
-                            : result.statusCode < 500 ? "bg-warning/10 text-warning"
-                            : "bg-destructive/10 text-destructive"
-                          }`}>
-                            {result.statusCode}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {isManager ? (
-                          <input
-                            className="text-xs font-mono text-muted-foreground bg-transparent border-b border-transparent hover:border-border focus:border-point focus:outline-none w-full"
-                            defaultValue={domain.url}
-                            onBlur={(e) => {
-                              const val = e.target.value.trim();
-                              if (val && val !== domain.url) {
-                                api.updateHealthCheckDomain(domain.url, { newUrl: val }).then((res) => {
-                                  if (res.ok && res.data) setDomains(res.data);
-                                });
-                              }
-                            }}
-                            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                          <Input
+                            value={editUrl}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditUrl(e.target.value)}
+                            placeholder="https://example.com"
+                            size="sm"
+                            onKeyDown={(e: React.KeyboardEvent) => { if (e.key === "Enter") saveEdit(domain.url); if (e.key === "Escape") cancelEdit(); }}
                           />
-                        ) : (
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">{domain.name}</span>
+                            {domain.auto && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Auto</span>
+                            )}
+                            {result && (
+                              <span className={`text-[11px] font-mono ${isUp ? "text-success" : "text-destructive"}`}>
+                                {result.responseTime}ms
+                              </span>
+                            )}
+                            {result?.statusCode !== undefined && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                                result.statusCode < 300 ? "bg-success/10 text-success"
+                                : result.statusCode < 400 ? "bg-point/10 text-point"
+                                : result.statusCode < 500 ? "bg-warning/10 text-warning"
+                                : "bg-destructive/10 text-destructive"
+                              }`}>
+                                {result.statusCode}
+                              </span>
+                            )}
+                          </div>
                           <a
                             href={domain.url}
                             target="_blank"
@@ -264,20 +358,41 @@ export default function HealthPage() {
                             {domain.url}
                             <ExternalLink size={10} />
                           </a>
-                        )}
-                      </div>
+                        </>
+                      )}
                     </div>
                   </div>
 
                   {isManager && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      iconOnly
-                      onClick={() => handleRemove(domain.url, domain.name)}
-                    >
-                      <Trash2 size={14} className="text-destructive" />
-                    </Button>
+                    <div className="flex items-center gap-1 shrink-0 ml-2">
+                      {isEditing ? (
+                        <>
+                          <Tooltip content="Save" placement="top">
+                            <Button variant="ghost" size="sm" iconOnly onClick={() => saveEdit(domain.url)}>
+                              <Check size={14} className="text-success" />
+                            </Button>
+                          </Tooltip>
+                          <Tooltip content="Cancel" placement="top">
+                            <Button variant="ghost" size="sm" iconOnly onClick={cancelEdit}>
+                              <X size={14} />
+                            </Button>
+                          </Tooltip>
+                        </>
+                      ) : (
+                        <>
+                          <Tooltip content="Edit" placement="top">
+                            <Button variant="ghost" size="sm" iconOnly onClick={() => startEdit(domain)}>
+                              <Edit size={14} />
+                            </Button>
+                          </Tooltip>
+                          <Tooltip content="Remove" placement="top">
+                            <Button variant="ghost" size="sm" iconOnly onClick={() => handleRemove(domain.url, domain.name)}>
+                              <Trash2 size={14} className="text-destructive" />
+                            </Button>
+                          </Tooltip>
+                        </>
+                      )}
+                    </div>
                   )}
                 </CardContent>
               </Card>
