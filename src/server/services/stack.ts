@@ -307,9 +307,31 @@ export class Stack {
     }
   }
 
+  // ----- dockerode helpers (non-managed stacks) --------------------------
+
+  private async getProjectContainers(): Promise<Docker.ContainerInfo[]> {
+    const docker = new Docker();
+    return docker.listContainers({
+      all: true,
+      filters: { label: [`com.docker.compose.project=${this.name}`] },
+    });
+  }
+
+  private async getProjectNetworks(): Promise<Docker.NetworkInspectInfo[]> {
+    const docker = new Docker();
+    return docker.listNetworks({
+      filters: { label: [`com.docker.compose.project=${this.name}`] },
+    });
+  }
+
   // ----- docker operations -----------------------------------------------
 
   async deploy(socket?: AppSocket): Promise<number> {
+    if (!this.isManagedByProxima) {
+      throw new Error(
+        "Cannot deploy an external stack: compose file is not managed by Proxima.",
+      );
+    }
     const terminalName = getComposeTerminalName(this.name);
     const exitCode = await Terminal.exec(
       socket,
@@ -325,6 +347,19 @@ export class Stack {
   }
 
   async start(socket?: AppSocket): Promise<number> {
+    if (!this.isManagedByProxima) {
+      const docker = new Docker();
+      const containers = await this.getProjectContainers();
+      if (containers.length === 0) {
+        throw new Error(`No containers found for stack "${this.name}".`);
+      }
+      for (const info of containers) {
+        if (info.State !== "running") {
+          await docker.getContainer(info.Id).start();
+        }
+      }
+      return 0;
+    }
     const terminalName = getComposeTerminalName(this.name);
     const exitCode = await Terminal.exec(
       socket,
@@ -340,6 +375,19 @@ export class Stack {
   }
 
   async stop(socket?: AppSocket): Promise<number> {
+    if (!this.isManagedByProxima) {
+      const docker = new Docker();
+      const containers = await this.getProjectContainers();
+      if (containers.length === 0) {
+        throw new Error(`No containers found for stack "${this.name}".`);
+      }
+      for (const info of containers) {
+        if (info.State === "running") {
+          await docker.getContainer(info.Id).stop();
+        }
+      }
+      return 0;
+    }
     const terminalName = getComposeTerminalName(this.name);
     const exitCode = await Terminal.exec(
       socket,
@@ -355,6 +403,17 @@ export class Stack {
   }
 
   async restart(socket?: AppSocket): Promise<number> {
+    if (!this.isManagedByProxima) {
+      const docker = new Docker();
+      const containers = await this.getProjectContainers();
+      if (containers.length === 0) {
+        throw new Error(`No containers found for stack "${this.name}".`);
+      }
+      for (const info of containers) {
+        await docker.getContainer(info.Id).restart();
+      }
+      return 0;
+    }
     const terminalName = getComposeTerminalName(this.name);
     const exitCode = await Terminal.exec(
       socket,
@@ -370,6 +429,22 @@ export class Stack {
   }
 
   async down(socket: AppSocket): Promise<number> {
+    if (!this.isManagedByProxima) {
+      const docker = new Docker();
+      const containers = await this.getProjectContainers();
+      for (const info of containers) {
+        const c = docker.getContainer(info.Id);
+        if (info.State === "running") {
+          await c.stop();
+        }
+        await c.remove();
+      }
+      const networks = await this.getProjectNetworks();
+      for (const net of networks) {
+        await docker.getNetwork(net.Id).remove();
+      }
+      return 0;
+    }
     const terminalName = getComposeTerminalName(this.name);
     const exitCode = await Terminal.exec(
       socket,
@@ -385,6 +460,22 @@ export class Stack {
   }
 
   async delete(socket?: AppSocket): Promise<number> {
+    if (!this.isManagedByProxima) {
+      const docker = new Docker();
+      const containers = await this.getProjectContainers();
+      for (const info of containers) {
+        const c = docker.getContainer(info.Id);
+        if (info.State === "running") {
+          await c.stop();
+        }
+        await c.remove();
+      }
+      const networks = await this.getProjectNetworks();
+      for (const net of networks) {
+        await docker.getNetwork(net.Id).remove();
+      }
+      return 0;
+    }
     const terminalName = getComposeTerminalName(this.name);
     const exitCode = await Terminal.exec(
       socket,
@@ -404,6 +495,65 @@ export class Stack {
   // ----- status queries --------------------------------------------------
 
   async ps(): Promise<ContainerInfo[]> {
+    if (!this.isManagedByProxima) {
+      try {
+        const docker = new Docker();
+        const infos = await this.getProjectContainers();
+        const result: ContainerInfo[] = [];
+        for (const info of infos) {
+          try {
+            const inspected = await docker.getContainer(info.Id).inspect();
+            const rawMounts = (inspected.Mounts ?? []) as Array<{
+              Type?: string;
+              Source?: string;
+              Destination?: string;
+              Mode?: string;
+              RW?: boolean;
+            }>;
+            const mounts: MountInfo[] = rawMounts.map((m) => ({
+              type: m.Type ?? "bind",
+              source: m.Source ?? "",
+              destination: m.Destination ?? "",
+              mode: m.Mode ?? "",
+              rw: m.RW ?? true,
+            }));
+            const name = (info.Names?.[0] ?? "").replace(/^\//, "");
+            const service =
+              (info.Labels?.["com.docker.compose.service"] as string | undefined) ?? name;
+            const ports = (info.Ports ?? [])
+              .filter((p) => p.PublicPort)
+              .map((p) => ({
+                hostPort: p.PublicPort!,
+                containerPort: p.PrivatePort,
+                protocol: p.Type ?? "tcp",
+              }));
+            const networks = Object.entries(inspected.NetworkSettings?.Networks ?? {}).map(
+              ([netName, net]) => ({
+                name: netName,
+                ipAddress: (net as { IPAddress?: string }).IPAddress ?? "",
+                gateway: (net as { Gateway?: string }).Gateway ?? "",
+              }),
+            );
+            result.push({
+              name,
+              service,
+              state: info.State,
+              status: info.Status,
+              image: info.Image ?? "",
+              ports,
+              networks,
+              mounts,
+            });
+          } catch {
+            // container may have stopped between list and inspect
+          }
+        }
+        return result;
+      } catch {
+        return [];
+      }
+    }
+
     try {
       const { stdout } = await execFileAsync(
         DOCKER_BIN,
@@ -454,6 +604,25 @@ export class Stack {
     Map<string, { state: string; ports: string[] }>
   > {
     const result = new Map<string, { state: string; ports: string[] }>();
+
+    if (!this.isManagedByProxima) {
+      try {
+        const infos = await this.getProjectContainers();
+        for (const info of infos) {
+          const service =
+            (info.Labels?.["com.docker.compose.service"] as string | undefined) ??
+            (info.Names?.[0] ?? "").replace(/^\//, "");
+          const ports = (info.Ports ?? [])
+            .filter((p) => p.PublicPort)
+            .map((p) => `${p.IP ?? ""}:${p.PublicPort}->${p.PrivatePort}/${p.Type}`);
+          result.set(service, { state: info.State, ports });
+        }
+      } catch (e) {
+        logger.error("Stack.getServiceStatusList", e);
+      }
+      return result;
+    }
+
     try {
       const { stdout } = await execFileAsync(
         DOCKER_BIN,
