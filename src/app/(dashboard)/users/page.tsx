@@ -177,7 +177,7 @@ export default function UsersPage() {
                 const isSelf = u.id === user?.userId;
                 const isSA = u.role === "admin";
                 return (
-                  <div key={u.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                  <div key={u.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-3 border-b border-border last:border-0">
                     <div className="flex items-center gap-3">
                       <div>
                         <p className="text-sm font-medium">{u.username}</p>
@@ -190,7 +190,7 @@ export default function UsersPage() {
                       </Badge>
                     </div>
                     {!isSelf && !isSA && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         <Select
                           size="sm"
                           options={[

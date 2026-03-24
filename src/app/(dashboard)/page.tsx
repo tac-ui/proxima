@@ -50,8 +50,8 @@ function StatCard({ label, value, sub, icon, href, loading }: StatCardProps) {
   const content = (
     <div className="flex items-start justify-between">
       <div>
-        <p className="text-sm text-muted-foreground mb-1">{label}</p>
-        <div className="text-3xl font-bold min-h-[36px] flex items-center">
+        <p className="text-xs sm:text-sm text-muted-foreground mb-1">{label}</p>
+        <div className="text-2xl sm:text-3xl font-bold min-h-[36px] flex items-center">
           <AnimatePresence mode="wait">
             {loading ? (
               <motion.div key="skeleton" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
@@ -78,7 +78,7 @@ function StatCard({ label, value, sub, icon, href, loading }: StatCardProps) {
           </AnimatePresence>
         </div>
       </div>
-      <div className="w-12 h-12 rounded-xl bg-point/10 text-point flex items-center justify-center shrink-0">
+      <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-point/10 text-point flex items-center justify-center shrink-0">
         {icon}
       </div>
     </div>
@@ -170,7 +170,7 @@ export default function DashboardPage() {
     <motion.div className="space-y-6" {...pageEntrance}>
       {/* Stats row */}
       <motion.div
-        className="grid grid-cols-2 lg:grid-cols-4 gap-4"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
         variants={staggerContainer}
         initial="hidden"
         animate="visible"

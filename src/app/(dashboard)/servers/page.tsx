@@ -229,14 +229,14 @@ export default function ServersPage() {
     <motion.div className="space-y-6" {...pageEntrance}>
       <h1 className="text-xl font-bold">Servers</h1>
       {/* Top bar */}
-      <div className="flex items-center gap-4 flex-wrap">
+      <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
         <SegmentController
           size="sm"
           options={tabOptions}
           value={tab}
           onChange={(v) => { setTab(v as TabValue); setSearch(""); }}
         />
-        <div className="flex-1 min-w-[200px] max-w-96">
+        <div className="flex-1 min-w-[160px] sm:min-w-[200px] max-w-96">
           <Input
             size="sm"
             placeholder={tab === "containers" ? "Search services..." : "Search processes..."}

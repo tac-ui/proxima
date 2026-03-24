@@ -142,10 +142,10 @@ export default function MonitoringPage() {
   return (
     <motion.div className="space-y-6" {...pageEntrance}>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <Activity size={20} className="text-point" />
-          <h1 className="text-xl font-bold">System Monitoring</h1>
+          <h1 className="text-lg sm:text-xl font-bold">System Monitoring</h1>
         </div>
         <Button
           variant="secondary"
@@ -181,7 +181,7 @@ export default function MonitoringPage() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Model</span>
-                    <span className="font-mono text-xs text-right max-w-[60%] truncate" title={metrics.cpu.model}>
+                    <span className="font-mono text-xs text-right max-w-[40%] sm:max-w-[60%] truncate" title={metrics.cpu.model}>
                       {metrics.cpu.model}
                     </span>
                   </div>

@@ -4,6 +4,27 @@
 @import "@xterm/xterm/css/xterm.css";
 @config "../../tailwind.config.ts";
 
+/* iOS safe area support */
+html {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* Smooth momentum scrolling on iOS */
+main {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mobile touch improvements */
+@media (max-width: 640px) {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    overflow-x: hidden;
+  }
+}
+
 /* Terminal styles */
 .xterm {
   padding: 8px;

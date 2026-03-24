@@ -65,7 +65,7 @@ export function Header() {
   return (
     <>
     <TacHeader bordered>
-      <div className="flex items-center justify-between w-full px-2 h-16">
+      <div className="flex items-center justify-between w-full px-2 h-14 md:h-16">
         {/* Left: hamburger (mobile) + branding + title */}
         <div className="flex items-center gap-4 flex-1 min-w-0">
           {/* Mobile hamburger */}
@@ -97,7 +97,7 @@ export function Header() {
           {(showLogo || showAppName) && (
             <div className="w-px h-6 bg-border shrink-0 hidden md:block" />
           )}
-          <h1 className="text-sm font-medium truncate min-w-0 text-muted-foreground hidden md:block">
+          <h1 className="text-xs md:text-sm font-medium truncate min-w-0 text-muted-foreground">
             {pageTitle}
           </h1>
         </div>

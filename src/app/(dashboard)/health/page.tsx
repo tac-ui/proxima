@@ -206,7 +206,7 @@ export default function HealthPage() {
               />
             )}
             {addMode === "manual" ? (
-              <div className="flex items-end gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-end gap-3">
                 <div className="flex-1">
                   <label className="text-xs font-medium mb-1 block">URL</label>
                   <Input
@@ -216,7 +216,7 @@ export default function HealthPage() {
                     onKeyDown={(e: React.KeyboardEvent) => { if (e.key === "Enter") handleAdd(); }}
                   />
                 </div>
-                <div className="w-48">
+                <div className="sm:w-48">
                   <label className="text-xs font-medium mb-1 block">Name (optional)</label>
                   <Input
                     value={addName}
@@ -225,7 +225,7 @@ export default function HealthPage() {
                     onKeyDown={(e: React.KeyboardEvent) => { if (e.key === "Enter") handleAdd(); }}
                   />
                 </div>
-                <Button onClick={handleAdd} loading={adding} disabled={!addUrl.trim()}>
+                <Button onClick={handleAdd} loading={adding} disabled={!addUrl.trim()} className="shrink-0">
                   Add
                 </Button>
               </div>

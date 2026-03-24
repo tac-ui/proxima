@@ -87,10 +87,10 @@ export default function RoutesPage() {
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border bg-warning/5 border-warning/20"
+            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 rounded-xl border bg-warning/5 border-warning/20"
           >
             <div className="flex items-center gap-3">
-              <Cloud size={16} className="text-warning" />
+              <Cloud size={16} className="text-warning shrink-0" />
               <div>
                 <p className="text-sm font-medium">
                   {tunnelActive
@@ -104,9 +104,9 @@ export default function RoutesPage() {
                 </p>
               </div>
             </div>
-            <Link href="/cloudflare">
+            <Link href="/cloudflare" className="shrink-0">
               <Button variant="secondary" size="sm" leftIcon={<Settings size={14} />}>
-                Cloudflare Settings
+                Settings
               </Button>
             </Link>
           </motion.div>
@@ -115,7 +115,7 @@ export default function RoutesPage() {
 
       {/* Top bar */}
       <div className="flex items-center gap-4 flex-wrap">
-        <div className="flex-1 min-w-[200px] max-w-96">
+        <div className="flex-1 min-w-[160px] sm:min-w-[200px] max-w-96">
           <Input
             size="sm"
             placeholder="Search domains..."

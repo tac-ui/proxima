@@ -51,7 +51,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning className="h-full">
-      <body className="antialiased h-full">
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+      </head>
+      <body className="antialiased h-full overflow-x-hidden">
         <Providers>
           {children}
         </Providers>

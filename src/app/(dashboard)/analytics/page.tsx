@@ -55,10 +55,10 @@ function StatCard({ label, value, sub, icon }: { label: string; value: string | 
         <div className="flex items-start justify-between">
           <div>
             <p className="text-sm text-muted-foreground mb-1">{label}</p>
-            <p className="text-3xl font-bold">{value}</p>
+            <p className="text-2xl sm:text-3xl font-bold">{value}</p>
             {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
           </div>
-          <div className="w-12 h-12 rounded-xl bg-point/10 text-point flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-point/10 text-point flex items-center justify-center shrink-0">
             {icon}
           </div>
         </div>
@@ -260,29 +260,29 @@ function AnalyticsContent() {
       ) : (
         <>
           {/* Host summary */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
               <CardContent>
                 <p className="text-xs text-muted-foreground">Total Requests</p>
-                <p className="text-2xl font-bold">{analytics.summary.totalRequests.toLocaleString()}</p>
+                <p className="text-xl sm:text-2xl font-bold">{analytics.summary.totalRequests.toLocaleString()}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent>
                 <p className="text-xs text-muted-foreground">Unique Visitors</p>
-                <p className="text-2xl font-bold">{analytics.summary.uniqueVisitors.toLocaleString()}</p>
+                <p className="text-xl sm:text-2xl font-bold">{analytics.summary.uniqueVisitors.toLocaleString()}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent>
                 <p className="text-xs text-muted-foreground">Error Rate</p>
-                <p className="text-2xl font-bold">{analytics.summary.errorRate}%</p>
+                <p className="text-xl sm:text-2xl font-bold">{analytics.summary.errorRate}%</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent>
                 <p className="text-xs text-muted-foreground">Bandwidth</p>
-                <p className="text-2xl font-bold">{formatBytes(analytics.summary.bytesSent)}</p>
+                <p className="text-xl sm:text-2xl font-bold">{formatBytes(analytics.summary.bytesSent)}</p>
               </CardContent>
             </Card>
           </div>

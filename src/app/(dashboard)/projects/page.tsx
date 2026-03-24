@@ -235,7 +235,7 @@ export default function ProjectsPage() {
   return (
     <motion.div className="space-y-6" {...pageEntrance}>
       {/* Page actions bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground">
             {repos.length} project{repos.length !== 1 ? "s" : ""}
@@ -328,7 +328,7 @@ export default function ProjectsPage() {
               errorMessage={cloneErrors.repoUrl}
             />
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
                 label="Branch"
                 value={branch}
@@ -502,7 +502,7 @@ export default function ProjectsPage() {
                   className="cursor-pointer hover:border-point/30 transition-colors"
                   onClick={() => router.push(`/projects/${encodeURIComponent(repo.name)}`)}
                 >
-                  <div className="flex items-center justify-between px-5 py-3">
+                  <div className="flex items-center justify-between px-3 py-3 sm:px-5">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-9 h-9 rounded-xl bg-point/15 flex items-center justify-center shrink-0 relative">
                         <Github size={18} className="text-point" />
@@ -520,7 +520,7 @@ export default function ProjectsPage() {
                             {repo.branch}
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground font-mono truncate max-w-[400px]">{repo.repoUrl}</p>
+                        <p className="text-xs text-muted-foreground font-mono truncate max-w-[200px] sm:max-w-[400px]">{repo.repoUrl}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

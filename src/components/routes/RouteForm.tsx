@@ -293,7 +293,7 @@ export function RouteForm({
             emptyText="No services found"
           />
         )}
-        <div className="grid grid-cols-[auto_1fr_auto] gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr_auto] gap-3">
           <Select
             options={[
               { value: "http", label: "http" },
@@ -314,7 +314,7 @@ export function RouteForm({
             value={forwardPort}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForwardPort(e.target.value)}
             placeholder="80"
-            className="w-24"
+            className="w-full sm:w-24"
             error={!!errors.forwardPort}
             errorMessage={errors.forwardPort}
           />

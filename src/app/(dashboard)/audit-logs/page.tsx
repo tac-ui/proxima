@@ -150,9 +150,9 @@ export default function AuditLogsPage() {
     <motion.div className="max-w-screen-lg mx-auto space-y-6" {...pageEntrance}>
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-point/15 flex items-center justify-center">
+              <div className="w-9 h-9 rounded-xl bg-point/15 flex items-center justify-center shrink-0">
                 <ScrollText size={18} className="text-point" />
               </div>
               <div>

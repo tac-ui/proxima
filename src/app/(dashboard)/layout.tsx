@@ -17,9 +17,9 @@ export default function DashboardLayout({children}: { children: React.ReactNode 
     return (
         <AuthGuard>
           <CommandPaletteProvider>
-            <div className="h-full min-h-screen flex flex-col bg-[var(--background)]">
+            <div className="h-dvh flex flex-col bg-[var(--background)] overflow-hidden">
                 <Header/>
-                <div className="flex flex-1 overflow-hidden">
+                <div className="flex flex-1 min-h-0">
                     <Sidebar
                         collapsible
                         collapsed={collapsed}
@@ -34,7 +34,7 @@ export default function DashboardLayout({children}: { children: React.ReactNode 
                     >
                         <SidebarNav />
                     </Sidebar>
-                    <main className={isTerminal ? "flex-1 overflow-hidden p-3" : "flex-1 overflow-y-auto p-6"}>
+                    <main className={isTerminal ? "flex-1 min-h-0 overflow-hidden p-2 md:p-3" : "flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 md:p-6"}>
                         {children}
                     </main>
                 </div>

@@ -153,7 +153,7 @@ export default function StackDetailPage() {
     return (
       <div className="space-y-4">
         <Skeleton height={48} />
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Skeleton height={384} />
           <Skeleton height={384} />
         </div>
@@ -187,8 +187,8 @@ export default function StackDetailPage() {
             <ChevronLeft size={20} />
           </Button>
           <div className="min-w-0">
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold truncate">{name}</h1>
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+              <h1 className="text-lg sm:text-xl font-bold truncate">{name}</h1>
               {stack && (
                 <Badge variant={statusVariantMap[stack.status] ?? "secondary"}>
                   {statusLabelMap[stack.status] ?? stack.status}
@@ -413,7 +413,7 @@ export default function StackDetailPage() {
                             {c.state}
                           </Badge>
                         </div>
-                        <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">{c.image}</span>
+                        <span className="text-xs text-muted-foreground font-mono truncate max-w-[120px] sm:max-w-[200px]">{c.image}</span>
                       </div>
 
                       {/* Details */}

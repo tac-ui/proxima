@@ -112,7 +112,7 @@ export default function StacksPage() {
     <motion.div className="space-y-6" {...pageEntrance}>
       {/* Top bar */}
       <div className="flex items-center gap-4 flex-wrap">
-        <div className="flex-1 min-w-[200px] max-w-96">
+        <div className="flex-1 min-w-[160px] sm:min-w-[200px] max-w-96">
           <Input
             size="sm"
             placeholder="Search stacks..."

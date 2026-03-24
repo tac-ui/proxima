@@ -699,7 +699,7 @@ export default function ProjectDetailPage() {
           </Button>
           <div className="min-w-0">
             <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold truncate">{repo.name}</h1>
+              <h1 className="text-lg sm:text-xl font-bold truncate">{repo.name}</h1>
               {runningCount > 0 && (
                 <Badge variant="success">{runningCount} running</Badge>
               )}
@@ -758,7 +758,7 @@ export default function ProjectDetailPage() {
                 )}
               </div>
               <span className="text-border">·</span>
-              <span className="font-mono truncate max-w-[400px]">{repo.repoUrl}</span>
+              <span className="font-mono truncate max-w-[180px] sm:max-w-[400px]">{repo.repoUrl}</span>
               <CopyButton value={repo.repoUrl} label="repo URL" />
             </div>
           </div>
@@ -1011,7 +1011,7 @@ export default function ProjectDetailPage() {
 
                   return (
                     <div key={script.filename} className="space-y-2">
-                      <div className={`flex items-center justify-between gap-4 p-4 rounded-lg border transition-colors ${isRunning ? "border-success/30 bg-success/5" : hasFailed ? "border-destructive/30 bg-destructive/5" : "border-border bg-surface"}`}>
+                      <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-3 sm:p-4 rounded-lg border transition-colors ${isRunning ? "border-success/30 bg-success/5" : hasFailed ? "border-destructive/30 bg-destructive/5" : "border-border bg-surface"}`}>
                         <div className="min-w-0 flex items-center gap-3">
                           <div className="w-8 h-8 rounded-lg bg-point/10 flex items-center justify-center shrink-0">
                             <FileCode2 size={14} className="text-point" />
@@ -1554,7 +1554,7 @@ export default function ProjectDetailPage() {
             <CardContent>
               <div className="space-y-4">
                 {/* Info grid */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Local Path</p>
                     <div className="flex items-center gap-1.5">
