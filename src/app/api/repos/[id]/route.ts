@@ -21,11 +21,11 @@ export async function GET(
     const { id } = await params;
     const db = getDb();
 
-    // Accept both numeric ID and name
-    const repoId = parseInt(id, 10);
-    const repo = isNaN(repoId)
-      ? db.select().from(schema.repositories).where(eq(schema.repositories.name, decodeURIComponent(id))).get()
-      : db.select().from(schema.repositories).where(eq(schema.repositories.id, repoId)).get();
+    // Accept both numeric ID and name — only treat as ID if the entire string is digits
+    const isNumericId = /^\d+$/.test(id);
+    const repo = isNumericId
+      ? db.select().from(schema.repositories).where(eq(schema.repositories.id, parseInt(id, 10))).get()
+      : db.select().from(schema.repositories).where(eq(schema.repositories.name, decodeURIComponent(id))).get();
     if (!repo) throw new Error("Repository not found");
 
     return ok(toRepoInfo(repo));
@@ -42,8 +42,8 @@ export async function PUT(
     ensureDb();
     const auth = requireManager(req);
     const { id } = await params;
+    if (!/^\d+$/.test(id)) throw new Error("Invalid repository id");
     const repoId = parseInt(id, 10);
-    if (isNaN(repoId)) throw new Error("Invalid repository id");
 
     const db = getDb();
     const repo = db.select().from(schema.repositories).where(eq(schema.repositories.id, repoId)).get();
@@ -119,21 +119,34 @@ export async function DELETE(
     const auth = requireManager(req);
 
     const { id } = await params;
+    if (!/^\d+$/.test(id)) throw new Error("Invalid repository id");
     const repoId = parseInt(id, 10);
-    if (isNaN(repoId)) throw new Error("Invalid repository id");
 
     const db = getDb();
     const repo = db.select().from(schema.repositories).where(eq(schema.repositories.id, repoId)).get();
+    if (!repo) throw new Error("Repository not found");
+
+    // Clean up domain connections (proxy hosts)
+    if (repo.domainConnection) {
+      try {
+        const parsed = JSON.parse(repo.domainConnection);
+        const connections: DomainConnection[] = Array.isArray(parsed) ? parsed : [parsed];
+        for (const conn of connections) {
+          if (conn.proxyHostId) {
+            try { await removeProxyHost(conn.proxyHostId); } catch { /* may already be deleted */ }
+          }
+        }
+      } catch { /* ignore parse errors */ }
+    }
+
     db.delete(schema.repositories).where(eq(schema.repositories.id, repoId)).run();
 
     // Clean up scripts directory
-    if (repo) {
-      try { ScriptService.deleteProjectDir(repo.name); } catch { /* ignore */ }
-    }
+    try { ScriptService.deleteProjectDir(repo.name); } catch { /* ignore */ }
 
     logger.info("repo", `Deleted repo id=${repoId}`);
 
-    logAudit({ userId: auth.userId, username: auth.username, action: "delete", category: "repo", targetType: "repo", targetName: repo?.name ?? `id:${repoId}`, ipAddress: getClientIp(req) });
+    logAudit({ userId: auth.userId, username: auth.username, action: "delete", category: "repo", targetType: "repo", targetName: repo.name, ipAddress: getClientIp(req) });
     return ok();
   } catch (err) {
     return errorResponse(err);

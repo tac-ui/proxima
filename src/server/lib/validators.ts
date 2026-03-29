@@ -164,6 +164,9 @@ const PTY_SAFE_ENV_KEYS = new Set([
   "USER",
   "NODE_ENV",
   "DOCKER_HOST",
+  // SSH / Git
+  "GIT_SSH_COMMAND",
+  "SSH_AUTH_SOCK",
   // Claude Code / general CLI tools
   "XDG_CONFIG_HOME",
   "XDG_DATA_HOME",
@@ -177,11 +180,19 @@ const PTY_SAFE_ENV_KEYS = new Set([
   "TZ",
 ]);
 
-export function sanitizeEnvForPty(): Record<string, string> {
+export function sanitizeEnvForPty(extra?: Record<string, string>): Record<string, string> {
   const safeEnv: Record<string, string> = {};
   for (const key of PTY_SAFE_ENV_KEYS) {
     if (process.env[key]) {
       safeEnv[key] = process.env[key] as string;
+    }
+  }
+  if (extra) {
+    for (const [key, value] of Object.entries(extra)) {
+      if (!PTY_SAFE_ENV_KEYS.has(key)) {
+        throw new Error(`Environment key "${key}" is not in the PTY safe list`);
+      }
+      safeEnv[key] = value;
     }
   }
   return safeEnv;

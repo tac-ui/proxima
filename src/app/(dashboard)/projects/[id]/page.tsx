@@ -153,9 +153,9 @@ export default function ProjectDetailPage() {
   // --- Data fetching ---
 
   const fetchRepo = useCallback(() => {
-    // Accept both numeric ID and name
-    const idOrName = parseInt(repoParam, 10);
-    api.getRepo(isNaN(idOrName) ? repoParam : idOrName).then((res) => {
+    // Accept both numeric ID and name — only treat as ID if the entire string is digits
+    const isNumericId = /^\d+$/.test(repoParam);
+    api.getRepo(isNumericId ? parseInt(repoParam, 10) : repoParam).then((res) => {
       if (res.ok && res.data) {
         setRepo(res.data);
         setHookEnabled(res.data.hookEnabled);

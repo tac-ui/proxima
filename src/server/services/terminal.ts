@@ -76,6 +76,7 @@ export class Terminal {
   protected file: string;
   protected args: string | string[];
   protected cwd: string;
+  protected extraEnv?: Record<string, string>;
   protected callback?: (exitCode: number) => void;
 
   protected _rows: number = TERMINAL_ROWS;
@@ -98,11 +99,13 @@ export class Terminal {
     file: string,
     args: string | string[],
     cwd: string,
+    extraEnv?: Record<string, string>,
   ) {
     this._name = name;
     this.file = file;
     this.args = args;
     this.cwd = cwd;
+    this.extraEnv = extraEnv;
     Terminal.terminalMap.set(this._name, this);
   }
 
@@ -176,7 +179,7 @@ export class Terminal {
         cwd: this.cwd,
         cols: this._cols,
         rows: this._rows,
-        env: sanitizeEnvForPty(),
+        env: sanitizeEnvForPty(this.extraEnv),
       });
 
       this._ptyProcess.onData((data: string) => {
