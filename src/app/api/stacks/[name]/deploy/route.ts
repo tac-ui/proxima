@@ -6,6 +6,7 @@ import { Stack } from "@server/services/stack";
 import { getConfig } from "@server/lib/config";
 import type { StackListItem } from "@/types";
 import { logAudit, getClientIp } from "@server/services/audit";
+import { notify } from "@server/services/notification";
 
 async function broadcastStackList(stacksDir: string) {
   try {
@@ -30,21 +31,29 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ name: string }> },
 ) {
+  const { name } = await params;
   try {
     ensureDb();
     const auth = requireManager(req);
 
-    const { name } = await params;
     const body = await req.json() as { yaml?: string; env?: string; isNew?: boolean; dockerfiles?: Record<string, string> };
     const { yaml = "", env = "", isNew = false, dockerfiles } = body;
 
     const config = getConfig();
     const stack = new Stack(config.stacksDir, name, yaml, env, false, dockerfiles);
     await stack.save(isNew);
-    await stack.deploy();
+
+    try {
+      await stack.deploy();
+    } catch (deployErr) {
+      notify({ type: "deploy.failed", target: name }).catch(() => {});
+      throw deployErr;
+    }
+
     await broadcastStackList(config.stacksDir);
 
     logAudit({ userId: auth.userId, username: auth.username, action: "deploy", category: "stack", targetType: "stack", targetName: name, ipAddress: getClientIp(req) });
+    notify({ type: "deploy.success", target: name }).catch(() => {});
     return ok();
   } catch (err) {
     return errorResponse(err);

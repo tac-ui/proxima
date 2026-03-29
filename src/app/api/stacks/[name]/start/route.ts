@@ -6,6 +6,7 @@ import { Stack } from "@server/services/stack";
 import { getConfig } from "@server/lib/config";
 import type { StackListItem } from "@/types";
 import { logAudit, getClientIp } from "@server/services/audit";
+import { notify } from "@server/services/notification";
 
 async function broadcastStackList(stacksDir: string) {
   try {
@@ -41,6 +42,7 @@ export async function POST(
     await broadcastStackList(config.stacksDir);
 
     logAudit({ userId: auth.userId, username: auth.username, action: "start", category: "stack", targetType: "stack", targetName: name, ipAddress: getClientIp(req) });
+    notify({ type: "stack.started", target: name }).catch(() => {});
     return ok();
   } catch (err) {
     return errorResponse(err);

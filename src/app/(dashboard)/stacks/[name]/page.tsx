@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useApiContext } from "@/contexts/ApiContext";
 import { api } from "@/lib/api";
@@ -23,7 +23,8 @@ import {
   pageEntrance,
 } from "@tac-ui/web";
 import { ComposeEditor } from "@/components/stacks/ComposeEditor";
-import { ChevronLeft, Play, Square, RotateCw, RefreshCw, Trash2, Box, FileText, Plus } from "@tac-ui/icon";
+import { LogViewer } from "@/components/stacks/LogViewer";
+import { ChevronLeft, Play, Square, RotateCw, Trash2, Box, FileText, Plus, ScrollText } from "@tac-ui/icon";
 import { useConfirm } from "@/hooks/useConfirm";
 import { useAuth } from "@/contexts/AuthContext";
 import { CopyButton } from "@/components/shared/CopyButton";
@@ -129,25 +130,7 @@ export default function StackDetailPage() {
     });
   };
 
-  const [logs, setLogs] = useState("");
-  const [logsLoading, setLogsLoading] = useState(false);
-  const logsEndRef = useRef<HTMLPreElement>(null);
-
-  const fetchLogs = useCallback(async () => {
-    setLogsLoading(true);
-    const res = await api.getStackLogs(name);
-    if (res.ok && res.data) {
-      setLogs(res.data.logs);
-      requestAnimationFrame(() => {
-        logsEndRef.current?.scrollTo(0, logsEndRef.current.scrollHeight);
-      });
-    }
-    setLogsLoading(false);
-  }, [name]);
-
-  useEffect(() => {
-    if (connected && stack) fetchLogs();
-  }, [connected, stack, fetchLogs]);
+  const [rightTab, setRightTab] = useState("logs");
 
   if (loading) {
     return (
@@ -241,12 +224,12 @@ export default function StackDetailPage() {
       </div>
 
       {/* Two-column layout */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 xl:auto-rows-fr">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6" style={{ gridAutoRows: "minmax(0, 1fr)" }}>
         {/* Left: Editor */}
-        <div className="flex flex-col">
-          <Card className="flex-1 flex flex-col">
-            <CardContent className="flex-1 flex flex-col">
-              <Tabs value={activeTab} onValueChange={setActiveTab} variant="underline" className="flex-1 flex flex-col">
+        <div className="flex flex-col max-h-[calc(100vh-12rem)] overflow-hidden">
+          <Card className="flex-1 flex flex-col min-h-0">
+            <CardContent className="flex-1 flex flex-col min-h-0">
+              <Tabs value={activeTab} onValueChange={setActiveTab} variant="underline" className="flex-1 flex flex-col min-h-0">
                 <TabsList>
                   <TabTrigger value="compose">docker-compose.yml</TabTrigger>
                   <TabTrigger value="env">.env</TabTrigger>
@@ -262,12 +245,12 @@ export default function StackDetailPage() {
                     </span>
                   </TabTrigger>
                 </TabsList>
-                <TabContent value="compose">
+                <TabContent value="compose" className="flex-1 min-h-0 overflow-auto">
                   <div className="mt-4">
                     <ComposeEditor value={yaml} onChange={setYaml} rows={18} />
                   </div>
                 </TabContent>
-                <TabContent value="env">
+                <TabContent value="env" className="flex-1 min-h-0 overflow-auto">
                   <div className="mt-4">
                     <Textarea
                       label="Environment Variables"
@@ -278,7 +261,7 @@ export default function StackDetailPage() {
                     />
                   </div>
                 </TabContent>
-                <TabContent value="dockerfiles">
+                <TabContent value="dockerfiles" className="flex-1 min-h-0 overflow-auto">
                   <div className="mt-4 space-y-4 min-h-[460px]">
                     {/* Add new Dockerfile */}
                     <div className="flex items-end gap-2">
@@ -355,111 +338,109 @@ export default function StackDetailPage() {
           </Card>
         </div>
 
-        {/* Right: Terminal + Containers */}
-        <div className="flex flex-col gap-4">
+        {/* Right: Logs + Containers */}
+        <div className="flex flex-col">
           <Card className="flex-1 flex flex-col min-h-0">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Logs</h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  iconOnly
-                  onClick={fetchLogs}
-                  loading={logsLoading}
-                >
-                  {!logsLoading && <RefreshCw size={14} />}
-                </Button>
-              </div>
-            </CardHeader>
             <CardContent className="flex-1 flex flex-col min-h-0">
-              <pre
-                ref={logsEndRef}
-                className="text-xs font-mono leading-relaxed whitespace-pre-wrap break-all bg-muted/30 rounded-lg p-3 flex-1 min-h-[200px] overflow-y-auto text-muted-foreground"
-              >
-                {logs || (logsLoading ? "Loading..." : "No logs available.")}
-              </pre>
-            </CardContent>
-          </Card>
+              <Tabs value={rightTab} onValueChange={setRightTab} variant="underline" className="flex-1 flex flex-col min-h-0">
+                <TabsList>
+                  <TabTrigger value="logs">
+                    <span className="inline-flex items-center gap-1.5">
+                      <ScrollText size={14} />
+                      Logs
+                    </span>
+                  </TabTrigger>
+                  <TabTrigger value="containers">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Box size={14} />
+                      Containers
+                      {stack && stack.containers.length > 0 && (
+                        <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">
+                          {stack.containers.length}
+                        </span>
+                      )}
+                    </span>
+                  </TabTrigger>
+                </TabsList>
+                <TabContent value="logs" className="flex-1 flex flex-col min-h-0 mt-4">
+                  {stack && (
+                    <LogViewer
+                      stackName={name}
+                      containers={stack.containers}
+                    />
+                  )}
+                </TabContent>
+                <TabContent value="containers" className="mt-4">
+                  {!stack || stack.containers.length === 0 ? (
+                    <EmptyState
+                      icon={<Box size={24} className="text-muted-foreground" />}
+                      title="No containers"
+                      description="No containers are running for this stack."
+                    />
+                  ) : (
+                    <div className="space-y-3">
+                      {stack.containers.map((c: ContainerInfo) => (
+                        <div key={c.name} className="border border-border rounded-lg p-4 space-y-3">
+                          {/* Container header */}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="font-mono text-sm font-medium truncate">{c.name}</span>
+                              <CopyButton value={c.name} label="container name" />
+                              <Badge variant={
+                                c.state === "running" ? "success" : c.state === "exited" ? "destructive" : "warning"
+                              }>
+                                {c.state}
+                              </Badge>
+                            </div>
+                            <span className="text-xs text-muted-foreground font-mono truncate max-w-[120px] sm:max-w-[200px]">{c.image}</span>
+                          </div>
 
-          <Card>
-            <CardHeader>
-              <h3 className="text-sm font-semibold">
-                Containers
-                {stack && stack.containers.length > 0 && (
-                  <span className="ml-2 text-xs text-muted-foreground">({stack.containers.length})</span>
-                )}
-              </h3>
-            </CardHeader>
-            <CardContent>
-              {!stack || stack.containers.length === 0 ? (
-                <EmptyState
-                  icon={<Box size={24} className="text-muted-foreground" />}
-                  title="No containers"
-                  description="No containers are running for this stack."
-                />
-              ) : (
-                <div className="space-y-3">
-                  {stack.containers.map((c: ContainerInfo) => (
-                    <div key={c.name} className="border border-border rounded-lg p-4 space-y-3">
-                      {/* Container header */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-sm font-medium truncate">{c.name}</span>
-                          <CopyButton value={c.name} label="container name" />
-                          <Badge variant={
-                            c.state === "running" ? "success" : c.state === "exited" ? "destructive" : "warning"
-                          }>
-                            {c.state}
-                          </Badge>
+                          {/* Details */}
+                          <div className="grid grid-cols-1 gap-2 text-xs">
+                            {c.ports.length > 0 && (
+                              <div className="flex gap-2">
+                                <span className="text-muted-foreground w-16 shrink-0">Ports</span>
+                                <div className="font-mono text-foreground">
+                                  {c.ports.map((p: any, i: number) => (
+                                    <span key={i}>
+                                      {i > 0 && <span className="text-muted-foreground">, </span>}
+                                      {p.hostPort}:{p.containerPort}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {c.mounts && c.mounts.length > 0 && (
+                              <div className="flex gap-2">
+                                <span className="text-muted-foreground w-16 shrink-0">Volumes</span>
+                                <div className="font-mono text-foreground space-y-0.5">
+                                  {c.mounts.map((m: MountInfo, i: number) => (
+                                    <div key={i}>
+                                      {m.source} → {m.destination}{!m.rw ? " (ro)" : ""}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {c.networks && c.networks.length > 0 && (
+                              <div className="flex gap-2">
+                                <span className="text-muted-foreground w-16 shrink-0">Networks</span>
+                                <div className="font-mono text-foreground space-y-0.5">
+                                  {c.networks.map((n: NetworkInfo, i: number) => (
+                                    <div key={i}>
+                                      {n.name}{n.ipAddress ? ` (${n.ipAddress})` : ""}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <span className="text-xs text-muted-foreground font-mono truncate max-w-[120px] sm:max-w-[200px]">{c.image}</span>
-                      </div>
-
-                      {/* Details */}
-                      <div className="grid grid-cols-1 gap-2 text-xs">
-                        {c.ports.length > 0 && (
-                          <div className="flex gap-2">
-                            <span className="text-muted-foreground w-16 shrink-0">Ports</span>
-                            <div className="font-mono text-foreground">
-                              {c.ports.map((p: any, i: number) => (
-                                <span key={i}>
-                                  {i > 0 && <span className="text-muted-foreground">, </span>}
-                                  {p.hostPort}:{p.containerPort}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {c.mounts && c.mounts.length > 0 && (
-                          <div className="flex gap-2">
-                            <span className="text-muted-foreground w-16 shrink-0">Volumes</span>
-                            <div className="font-mono text-foreground space-y-0.5">
-                              {c.mounts.map((m: MountInfo, i: number) => (
-                                <div key={i}>
-                                  {m.source} → {m.destination}{!m.rw ? " (ro)" : ""}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {c.networks && c.networks.length > 0 && (
-                          <div className="flex gap-2">
-                            <span className="text-muted-foreground w-16 shrink-0">Networks</span>
-                            <div className="font-mono text-foreground space-y-0.5">
-                              {c.networks.map((n: NetworkInfo, i: number) => (
-                                <div key={i}>
-                                  {n.name}{n.ipAddress ? ` (${n.ipAddress})` : ""}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              )}
+                  )}
+                </TabContent>
+              </Tabs>
             </CardContent>
           </Card>
         </div>

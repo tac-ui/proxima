@@ -284,6 +284,22 @@ function migrateSchema(sqlite: Database.Database): void {
     }
   }
 
+  // v11 → v12: create notification_channels table
+  try {
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS notification_channels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL,
+        name TEXT NOT NULL,
+        config TEXT NOT NULL DEFAULT '{}',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      )
+    `);
+  } catch (err) {
+    logger.error("db", `Notification channels migration failed: ${err}`);
+  }
+
   // v9 → v10: add domain_connection column to repositories
   try {
     sqlite.exec(`ALTER TABLE repositories ADD COLUMN domain_connection TEXT`);

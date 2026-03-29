@@ -128,6 +128,8 @@ export const api = {
   updateHealthCheckDomain: (url: string, data: { name?: string; newUrl?: string }) => request<{ url: string; name: string; addedAt: string }[]>("PUT", "/api/health-checks", { url, ...data }),
   removeHealthCheckDomain: (url: string) => request<{ url: string; name: string; addedAt: string }[]>("DELETE", "/api/health-checks", { url }),
   checkHealthDomains: (urls: string[]) => request<{ url: string; status: "up" | "down"; statusCode?: number; responseTime: number; error?: string }[]>("POST", "/api/health-checks/check", { urls }),
+  getHealthCheckConfig: () => request<{ enabled: boolean; intervalMinutes: number; scheduleTimes?: string[]; mode: "interval" | "schedule"; messageTemplate?: string; recoveryMessageTemplate?: string }>("GET", "/api/health-checks/config"),
+  updateHealthCheckConfig: (config: { enabled?: boolean; intervalMinutes?: number; scheduleTimes?: string[]; mode?: "interval" | "schedule"; messageTemplate?: string; recoveryMessageTemplate?: string }) => request<{ enabled: boolean; intervalMinutes: number; scheduleTimes?: string[]; mode: "interval" | "schedule"; messageTemplate?: string; recoveryMessageTemplate?: string }>("PUT", "/api/health-checks/config", config),
 
   // GitHub
   getGithubStatus: () => request<{ connected: boolean; username?: string }>("GET", "/api/github/status"),
@@ -200,8 +202,25 @@ export const api = {
     request<{ success: boolean }>("POST", "/api/settings/cloudflare/tunnel/action", { action }),
   syncAllDns: () => request<{ synced: number; failed: number; errors: string[] }>("POST", "/api/settings/cloudflare/sync"),
 
+  // Notifications
+  getNotificationChannels: () => request<{ id: number; type: string; name: string; config: string; enabled: boolean; createdAt: string }[]>("GET", "/api/settings/notifications"),
+  addNotificationChannel: (data: { type: string; name: string; config: Record<string, string>; enabled?: boolean }) => request<{ id: number; type: string; name: string; config: string; enabled: boolean; createdAt: string }>("POST", "/api/settings/notifications", data),
+  updateNotificationChannel: (id: number, data: { type?: string; name?: string; config?: Record<string, string>; enabled?: boolean }) => request<{ id: number; type: string; name: string; config: string; enabled: boolean; createdAt: string }>("PUT", `/api/settings/notifications/${id}`, data),
+  deleteNotificationChannel: (id: number) => request("DELETE", `/api/settings/notifications/${id}`),
+  testNotificationChannel: (id: number) => request<{ sent: boolean }>("POST", `/api/settings/notifications/${id}/test`),
+
   // Monitoring
-  getStackLogs: (name: string) => request<{ logs: string }>("GET", `/api/stacks/${encodeURIComponent(name)}/logs`),
+  getStackLogs: (name: string, service?: string) => {
+    const params = service ? `?service=${encodeURIComponent(service)}` : "";
+    return request<{ logs: string }>("GET", `/api/stacks/${encodeURIComponent(name)}/logs${params}`);
+  },
+  getServiceLogs: (name: string, service: string, opts?: { tail?: number; since?: string }) => {
+    const params = new URLSearchParams();
+    if (opts?.tail) params.set("tail", String(opts.tail));
+    if (opts?.since) params.set("since", opts.since);
+    const qs = params.toString();
+    return request<{ logs: string }>("GET", `/api/stacks/${encodeURIComponent(name)}/logs/${encodeURIComponent(service)}${qs ? `?${qs}` : ""}`);
+  },
   getSystemMetrics: () => request<SystemMetrics>("GET", "/api/monitoring"),
   getMetricsHistory: (hours: number = 1) => request<MetricsHistoryResponse>("GET", `/api/monitoring/history?hours=${hours}`),
 

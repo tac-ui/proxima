@@ -18,7 +18,7 @@ import {
   useToast,
   pageEntrance,
 } from "@tac-ui/web";
-import { Sun, Moon, Wifi, Info, Palette, Upload, Trash2 } from "@tac-ui/icon";
+import { Sun, Moon, Wifi, Info, Palette, Upload, Trash2, Bell, Plus, Send } from "@tac-ui/icon";
 import packageJson from "../../../../package.json";
 
 export default function SettingsPage() {
@@ -45,6 +45,18 @@ export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const faviconInputRef = useRef<HTMLInputElement>(null);
 
+  // Notification state
+  const [notifChannels, setNotifChannels] = useState<{ id: number; type: string; name: string; config: string; enabled: boolean; createdAt: string }[]>([]);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [showAddChannel, setShowAddChannel] = useState(false);
+  const [newChannelType, setNewChannelType] = useState<"slack" | "telegram">("slack");
+  const [newChannelName, setNewChannelName] = useState("");
+  const [newChannelWebhookUrl, setNewChannelWebhookUrl] = useState("");
+  const [newChannelBotToken, setNewChannelBotToken] = useState("");
+  const [newChannelChatId, setNewChannelChatId] = useState("");
+  const [addingChannel, setAddingChannel] = useState(false);
+  const [testingChannelId, setTestingChannelId] = useState<number | null>(null);
+
   useEffect(() => {
     setBrandAppName(appName);
     setBrandLogoUrl(logoUrl);
@@ -61,6 +73,78 @@ export default function SettingsPage() {
       if (previewFaviconUrl) URL.revokeObjectURL(previewFaviconUrl);
     };
   }, [previewLogoUrl, previewFaviconUrl]);
+
+  // Load notification channels
+  const loadNotifChannels = async () => {
+    setNotifLoading(true);
+    try {
+      const res = await api.getNotificationChannels();
+      if (res.ok && res.data) setNotifChannels(res.data);
+    } catch { /* ignore */ }
+    setNotifLoading(false);
+  };
+
+  useEffect(() => {
+    if (isManager) loadNotifChannels();
+  }, [isManager]);
+
+  const handleAddChannel = async () => {
+    setAddingChannel(true);
+    try {
+      const config: Record<string, string> = newChannelType === "slack"
+        ? { webhookUrl: newChannelWebhookUrl }
+        : { botToken: newChannelBotToken, chatId: newChannelChatId };
+      const res = await api.addNotificationChannel({ type: newChannelType, name: newChannelName, config });
+      if (res.ok) {
+        toast("Channel added", { variant: "success" });
+        setShowAddChannel(false);
+        setNewChannelName("");
+        setNewChannelWebhookUrl("");
+        setNewChannelBotToken("");
+        setNewChannelChatId("");
+        await loadNotifChannels();
+      } else {
+        toast(res.error ?? "Failed to add channel", { variant: "error" });
+      }
+    } catch {
+      toast("Failed to add channel", { variant: "error" });
+    }
+    setAddingChannel(false);
+  };
+
+  const handleToggleChannel = async (id: number, enabled: boolean) => {
+    const res = await api.updateNotificationChannel(id, { enabled });
+    if (res.ok) {
+      setNotifChannels(prev => prev.map(ch => ch.id === id ? { ...ch, enabled } : ch));
+    } else {
+      toast(res.error ?? "Failed to update", { variant: "error" });
+    }
+  };
+
+  const handleDeleteChannel = async (id: number) => {
+    const res = await api.deleteNotificationChannel(id);
+    if (res.ok) {
+      setNotifChannels(prev => prev.filter(ch => ch.id !== id));
+      toast("Channel deleted", { variant: "success" });
+    } else {
+      toast(res.error ?? "Failed to delete", { variant: "error" });
+    }
+  };
+
+  const handleTestChannel = async (id: number) => {
+    setTestingChannelId(id);
+    try {
+      const res = await api.testNotificationChannel(id);
+      if (res.ok) {
+        toast("Test notification sent", { variant: "success" });
+      } else {
+        toast(res.error ?? "Test failed", { variant: "error" });
+      }
+    } catch {
+      toast("Test failed", { variant: "error" });
+    }
+    setTestingChannelId(null);
+  };
 
   const handleSaveBranding = async () => {
     setSaving(true);
@@ -427,6 +511,123 @@ export default function SettingsPage() {
                 {saving ? "Saving..." : "Save"}
               </Button>
             </div>
+          </div>
+        </CardContent>
+      </Card>}
+
+      {/* Notifications (manager+) */}
+      {isManager && <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-point/15 flex items-center justify-center">
+              <Bell size={18} className="text-point" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-sm font-semibold">Notifications</h2>
+              <p className="text-xs text-muted-foreground">Configure Slack and Telegram notification channels</p>
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => setShowAddChannel(v => !v)} leftIcon={<Plus size={14} />}>
+              Add Channel
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* Add channel form */}
+            {showAddChannel && (
+              <div className="border border-border rounded-lg p-4 space-y-3">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Channel Type</p>
+                  <SegmentController
+                    options={[
+                      { value: "slack", label: "Slack" },
+                      { value: "telegram", label: "Telegram" },
+                    ]}
+                    value={newChannelType}
+                    onChange={(v) => setNewChannelType(v as "slack" | "telegram")}
+                    size="sm"
+                  />
+                </div>
+                <Input
+                  label="Channel Name"
+                  value={newChannelName}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewChannelName(e.target.value)}
+                  placeholder="e.g. Team Alerts"
+                />
+                {newChannelType === "slack" ? (
+                  <Input
+                    label="Webhook URL"
+                    value={newChannelWebhookUrl}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewChannelWebhookUrl(e.target.value)}
+                    placeholder="https://hooks.slack.com/services/..."
+                  />
+                ) : (
+                  <>
+                    <Input
+                      label="Bot Token"
+                      value={newChannelBotToken}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewChannelBotToken(e.target.value)}
+                      placeholder="123456:ABC-DEF..."
+                    />
+                    <Input
+                      label="Chat ID"
+                      value={newChannelChatId}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewChannelChatId(e.target.value)}
+                      placeholder="-1001234567890"
+                    />
+                  </>
+                )}
+                <div className="flex justify-end gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setShowAddChannel(false)}>Cancel</Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={addingChannel || !newChannelName || (newChannelType === "slack" ? !newChannelWebhookUrl : (!newChannelBotToken || !newChannelChatId))}
+                    onClick={handleAddChannel}
+                  >
+                    {addingChannel ? "Adding..." : "Add"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Channel list */}
+            {notifLoading ? (
+              <p className="text-sm text-muted-foreground">Loading...</p>
+            ) : notifChannels.length === 0 && !showAddChannel ? (
+              <p className="text-sm text-muted-foreground">No notification channels configured.</p>
+            ) : (
+              notifChannels.map((ch) => (
+                <div key={ch.id} className="flex items-center justify-between border border-border rounded-lg p-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted">{ch.type === "slack" ? "Slack" : "Telegram"}</span>
+                    <span className="text-sm font-medium truncate">{ch.name}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={testingChannelId === ch.id}
+                      onClick={() => handleTestChannel(ch.id)}
+                      leftIcon={<Send size={14} />}
+                    >
+                      {testingChannelId === ch.id ? "Sending..." : "Test"}
+                    </Button>
+                    <Switch
+                      checked={ch.enabled}
+                      onChange={() => handleToggleChannel(ch.id, !ch.enabled)}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteChannel(ch.id)}
+                      leftIcon={<Trash2 size={14} />}
+                    >
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>}

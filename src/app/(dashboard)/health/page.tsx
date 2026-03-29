@@ -15,8 +15,12 @@ import {
   useToast,
   pageEntrance,
   SegmentController,
+  Switch,
+  Select,
+  Textarea,
+  Badge,
 } from "@tac-ui/web";
-import { Plus, RefreshCw, Trash2, HeartPulse, ExternalLink, Edit, Check, X } from "@tac-ui/icon";
+import { Plus, RefreshCw, Trash2, HeartPulse, ExternalLink, Edit, Check, X, Clock, Settings } from "@tac-ui/icon";
 import { useConfirm } from "@/hooks/useConfirm";
 import type { ProxyHost } from "@/types";
 
@@ -34,6 +38,28 @@ interface CheckResult {
   responseTime: number;
   error?: string;
 }
+
+interface HealthCheckConfig {
+  enabled: boolean;
+  intervalMinutes: number;
+  scheduleTimes?: string[];
+  mode: "interval" | "schedule";
+  messageTemplate?: string;
+  recoveryMessageTemplate?: string;
+}
+
+const DEFAULT_DOWN_TEMPLATE =
+  "\u{1F534} {domain} is DOWN \u2014 Status: {statusCode}, Response time: {responseTime}ms";
+const DEFAULT_RECOVERY_TEMPLATE =
+  "\u{1F7E2} {domain} is back UP \u2014 Response time: {responseTime}ms";
+
+const INTERVAL_OPTIONS = [
+  { value: "1", label: "Every 1 minute" },
+  { value: "5", label: "Every 5 minutes" },
+  { value: "10", label: "Every 10 minutes" },
+  { value: "30", label: "Every 30 minutes" },
+  { value: "60", label: "Every 1 hour" },
+];
 
 export default function HealthPage() {
   const { toast } = useToast();
@@ -55,6 +81,17 @@ export default function HealthPage() {
   const [editUrl, setEditUrl] = useState("");
   const [routes, setRoutes] = useState<ProxyHost[]>([]);
 
+  // Schedule config state
+  const [showScheduleConfig, setShowScheduleConfig] = useState(false);
+  const [config, setConfig] = useState<HealthCheckConfig>({
+    enabled: false,
+    intervalMinutes: 5,
+    mode: "interval",
+  });
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [newScheduleTime, setNewScheduleTime] = useState("09:00");
+
   const fetchDomains = useCallback(async () => {
     const res = await api.getHealthCheckDomains();
     if (res.ok && res.data) setDomains(res.data);
@@ -64,6 +101,13 @@ export default function HealthPage() {
   const fetchRoutes = useCallback(async () => {
     const res = await api.getRoutes();
     if (res.ok && res.data) setRoutes(res.data);
+  }, []);
+
+  const fetchConfig = useCallback(async () => {
+    setConfigLoading(true);
+    const res = await api.getHealthCheckConfig();
+    if (res.ok && res.data) setConfig(res.data);
+    setConfigLoading(false);
   }, []);
 
   const runChecks = useCallback(async (domainList: HealthDomain[]) => {
@@ -81,7 +125,8 @@ export default function HealthPage() {
   useEffect(() => {
     fetchDomains();
     fetchRoutes();
-  }, [fetchDomains, fetchRoutes]);
+    fetchConfig();
+  }, [fetchDomains, fetchRoutes, fetchConfig]);
 
   useEffect(() => {
     if (!loading && domains.length > 0) runChecks(domains);
@@ -155,6 +200,32 @@ export default function HealthPage() {
     setEditingUrl(null);
   };
 
+  const handleSaveConfig = async () => {
+    setConfigSaving(true);
+    const res = await api.updateHealthCheckConfig(config);
+    if (res.ok && res.data) {
+      setConfig(res.data);
+      toast("Schedule config saved", { variant: "success" });
+    } else {
+      toast(res.error ?? "Failed to save config", { variant: "error" });
+    }
+    setConfigSaving(false);
+  };
+
+  const addScheduleTime = () => {
+    if (!newScheduleTime) return;
+    const times = config.scheduleTimes ?? [];
+    if (times.includes(newScheduleTime)) return;
+    setConfig({ ...config, scheduleTimes: [...times, newScheduleTime].sort() });
+  };
+
+  const removeScheduleTime = (time: string) => {
+    setConfig({
+      ...config,
+      scheduleTimes: (config.scheduleTimes ?? []).filter((t) => t !== time),
+    });
+  };
+
   // Stats
   const upCount = Object.values(results).filter((r) => r.status === "up").length;
   const downCount = Object.values(results).filter((r) => r.status === "down").length;
@@ -172,6 +243,16 @@ export default function HealthPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {isManager && (
+            <Button
+              size="sm"
+              variant="secondary"
+              leftIcon={<Settings size={14} />}
+              onClick={() => setShowScheduleConfig(!showScheduleConfig)}
+            >
+              Schedule
+            </Button>
+          )}
           <Button
             size="sm"
             variant="secondary"
@@ -189,6 +270,154 @@ export default function HealthPage() {
           )}
         </div>
       </div>
+
+      {/* Schedule config */}
+      {showScheduleConfig && isManager && (
+        <Card>
+          <CardContent className="space-y-5 py-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Clock size={18} className="text-muted-foreground" />
+                <div>
+                  <h3 className="text-sm font-semibold">Health Check Schedule</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Automatically check domains and send notifications on status changes
+                  </p>
+                </div>
+              </div>
+              {configLoading ? (
+                <Skeleton width={44} height={24} />
+              ) : (
+                <Switch
+                  checked={config.enabled}
+                  onChange={(checked) => setConfig({ ...config, enabled: checked })}
+                  size="sm"
+                />
+              )}
+            </div>
+
+            {config.enabled && (
+              <>
+                {/* Mode selector */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium block">Check Mode</label>
+                  <SegmentController
+                    size="sm"
+                    options={[
+                      { value: "interval", label: "Interval" },
+                      { value: "schedule", label: "Scheduled Times" },
+                    ]}
+                    value={config.mode}
+                    onChange={(v) => setConfig({ ...config, mode: v as "interval" | "schedule" })}
+                  />
+                </div>
+
+                {/* Interval mode */}
+                {config.mode === "interval" && (
+                  <div className="space-y-2">
+                    <Select
+                      label="Check Interval"
+                      size="sm"
+                      options={INTERVAL_OPTIONS}
+                      value={String(config.intervalMinutes)}
+                      onChange={(v) => setConfig({ ...config, intervalMinutes: Number(v) })}
+                    />
+                  </div>
+                )}
+
+                {/* Schedule mode */}
+                {config.mode === "schedule" && (
+                  <div className="space-y-3">
+                    <label className="text-xs font-medium block">Scheduled Times (daily)</label>
+                    <div className="flex items-end gap-2">
+                      <Input
+                        type="time"
+                        value={newScheduleTime}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewScheduleTime(e.target.value)}
+                        size="sm"
+                        className="w-36"
+                      />
+                      <Button size="sm" variant="secondary" onClick={addScheduleTime}>
+                        Add Time
+                      </Button>
+                    </div>
+                    {(config.scheduleTimes ?? []).length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {(config.scheduleTimes ?? []).map((time) => (
+                          <Badge key={time} variant="secondary" className="gap-1.5 pl-2.5 pr-1.5 py-1">
+                            <Clock size={12} />
+                            {time}
+                            <button
+                              onClick={() => removeScheduleTime(time)}
+                              className="ml-0.5 hover:text-destructive transition-colors"
+                            >
+                              <X size={12} />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {(config.scheduleTimes ?? []).length === 0 && (
+                      <p className="text-xs text-muted-foreground">No times added yet. Add at least one time to enable scheduled checks.</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Custom message templates */}
+                <div className="space-y-3 border-t border-border pt-4">
+                  <div>
+                    <h4 className="text-xs font-semibold mb-1">Notification Messages</h4>
+                    <p className="text-[11px] text-muted-foreground">
+                      Available variables: <code className="bg-muted px-1 rounded">{"{domain}"}</code>{" "}
+                      <code className="bg-muted px-1 rounded">{"{url}"}</code>{" "}
+                      <code className="bg-muted px-1 rounded">{"{statusCode}"}</code>{" "}
+                      <code className="bg-muted px-1 rounded">{"{responseTime}"}</code>{" "}
+                      <code className="bg-muted px-1 rounded">{"{error}"}</code>{" "}
+                      <code className="bg-muted px-1 rounded">{"{timestamp}"}</code>
+                    </p>
+                  </div>
+                  <Textarea
+                    label="Down message"
+                    size="sm"
+                    rows={2}
+                    placeholder={DEFAULT_DOWN_TEMPLATE}
+                    value={config.messageTemplate ?? ""}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                      setConfig({ ...config, messageTemplate: e.target.value || undefined })
+                    }
+                  />
+                  <Textarea
+                    label="Recovery message"
+                    size="sm"
+                    rows={2}
+                    placeholder={DEFAULT_RECOVERY_TEMPLATE}
+                    value={config.recoveryMessageTemplate ?? ""}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                      setConfig({ ...config, recoveryMessageTemplate: e.target.value || undefined })
+                    }
+                  />
+                </div>
+
+                {/* Save button */}
+                <div className="flex justify-end">
+                  <Button size="sm" onClick={handleSaveConfig} loading={configSaving}>
+                    Save Schedule
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* Save when just toggling off */}
+            {!config.enabled && (
+              <div className="flex justify-end">
+                <Button size="sm" variant="secondary" onClick={handleSaveConfig} loading={configSaving}>
+                  Save
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Add form */}
       {showAdd && (

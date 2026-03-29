@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
       })
     );
 
+    // Manual checks don't send notifications — scheduled checks handle state-based alerts
     return ok(results);
   } catch (err) {
     return errorResponse(err);

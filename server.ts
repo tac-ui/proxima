@@ -12,6 +12,7 @@ import { getTunnelSettings } from "./src/server/services/cloudflare";
 import { getCloudflaredStatus, startCloudflared, checkAndFixNetwork } from "./src/server/services/cloudflared";
 import { syncAutoManaged } from "./src/server/services/managed-service";
 import { autoStartScripts } from "./src/server/services/auto-start";
+import { startHealthCheckScheduler } from "./src/server/services/health-check";
 
 const dev = process.env.NODE_ENV !== "production";
 
@@ -44,6 +45,9 @@ async function main() {
 
   // Auto-start scripts marked with autoStart flag
   autoStartScripts();
+
+  // Start scheduled health checks
+  startHealthCheckScheduler();
 
   // Start Docker event watcher for auto-discovery (debounced to avoid rapid re-renders)
   try {

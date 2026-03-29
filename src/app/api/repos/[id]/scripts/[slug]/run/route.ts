@@ -9,6 +9,7 @@ import { logger } from "@server/lib/logger";
 import { logAudit, getClientIp } from "@server/services/audit";
 import { parseJson } from "../../../../../_lib/repo-utils";
 import { ScriptService } from "@server/services/script";
+import { notify } from "@server/services/notification";
 
 export async function POST(
   req: NextRequest,
@@ -52,6 +53,10 @@ export async function POST(
       repo.path,
     );
     terminal.start();
+    terminal.onExit((exitCode: number) => {
+      const eventType = exitCode === 0 ? "script.success" : "script.failed";
+      notify({ type: eventType, target: `${repo.name}/${script.name}` }).catch(() => {});
+    });
 
     logger.info("repo", `Running script "${script.name}" (${filename}) at ${scriptPath} in ${repo.path}`);
     logAudit({ userId: auth.userId, username: auth.username, action: "execute", category: "repo", targetType: "repo", targetName: repo.name, details: { script: script.name }, ipAddress: getClientIp(req) });

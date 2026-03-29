@@ -129,6 +129,17 @@ export const auditLogs = sqliteTable("audit_logs", {
         .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
 });
 
+export const notificationChannels = sqliteTable("notification_channels", {
+    id: integer("id").primaryKey({autoIncrement: true}),
+    type: text("type").notNull(),              // "slack" | "telegram"
+    name: text("name").notNull(),
+    config: text("config").notNull().default("{}"),
+    enabled: integer("enabled", {mode: "boolean"}).notNull().default(true),
+    createdAt: text("created_at")
+        .notNull()
+        .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
 // Inferred types
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -150,3 +161,5 @@ export type MetricsHistoryRow = typeof metricsHistory.$inferSelect;
 export type NewMetricsHistoryRow = typeof metricsHistory.$inferInsert;
 export type WebhookLogRow = typeof webhookLogs.$inferSelect;
 export type NewWebhookLogRow = typeof webhookLogs.$inferInsert;
+export type NotificationChannel = typeof notificationChannels.$inferSelect;
+export type NewNotificationChannel = typeof notificationChannels.$inferInsert;
