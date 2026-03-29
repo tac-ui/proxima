@@ -5,6 +5,7 @@ import { Stack } from "@server/services/stack";
 import { getConfig } from "@server/lib/config";
 import Docker from "dockerode";
 import type { Readable } from "node:stream";
+import { demuxDockerLogs } from "@server/lib/docker-log-demux";
 
 export const dynamic = "force-dynamic";
 
@@ -53,12 +54,28 @@ export async function GET(
     const stream = new ReadableStream({
       start(controller) {
         const encoder = new TextEncoder();
+        let closed = false;
+
+        const onAbort = () => cleanup();
+
+        const cleanup = () => {
+          if (closed) return;
+          closed = true;
+          logStream.removeListener("data", onData);
+          logStream.removeListener("end", onEnd);
+          logStream.removeListener("error", onError);
+          logStream.destroy();
+          req.signal.removeEventListener("abort", onAbort);
+          try { controller.close(); } catch { /* already closed */ }
+        };
 
         const onData = (chunk: Buffer) => {
-          const text = demuxChunk(chunk);
+          if (closed) return;
+          const text = demuxDockerLogs(chunk);
           if (text) {
             const lines = text.split("\n").filter((l) => l.length > 0);
             for (const line of lines) {
+              if (closed) return;
               controller.enqueue(
                 encoder.encode(`data: ${JSON.stringify(line)}\n\n`),
               );
@@ -67,25 +84,20 @@ export async function GET(
         };
 
         const onEnd = () => {
+          if (closed) return;
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
+          cleanup();
         };
 
         const onError = () => {
-          controller.close();
+          cleanup();
         };
 
         logStream.on("data", onData);
         logStream.on("end", onEnd);
         logStream.on("error", onError);
 
-        req.signal.addEventListener("abort", () => {
-          logStream.removeListener("data", onData);
-          logStream.removeListener("end", onEnd);
-          logStream.removeListener("error", onError);
-          logStream.destroy();
-          controller.close();
-        });
+        req.signal.addEventListener("abort", onAbort);
       },
     });
 
@@ -99,33 +111,4 @@ export async function GET(
   } catch (err) {
     return errorResponse(err);
   }
-}
-
-function demuxChunk(chunk: Buffer): string {
-  if (typeof chunk === "string") return chunk;
-
-  const lines: string[] = [];
-  let offset = 0;
-
-  const isMultiplexed =
-    chunk.length >= 8 &&
-    (chunk[0] === 0 || chunk[0] === 1 || chunk[0] === 2) &&
-    chunk[1] === 0 &&
-    chunk[2] === 0 &&
-    chunk[3] === 0;
-
-  if (!isMultiplexed) {
-    return chunk.toString("utf-8");
-  }
-
-  while (offset < chunk.length) {
-    if (offset + 8 > chunk.length) break;
-    const size = chunk.readUInt32BE(offset + 4);
-    offset += 8;
-    if (offset + size > chunk.length) break;
-    lines.push(chunk.subarray(offset, offset + size).toString("utf-8"));
-    offset += size;
-  }
-
-  return lines.join("");
 }

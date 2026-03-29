@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     }).returning().get();
 
     logAudit({ userId: auth.userId, username: auth.username, action: "create", category: "notification", targetType: "notification_channel", targetName: body.name, ipAddress: getClientIp(req) });
-    return ok(result);
+    return ok({ id: result.id, type: result.type, name: result.name, enabled: result.enabled, createdAt: result.createdAt });
   } catch (err) {
     return errorResponse(err);
   }

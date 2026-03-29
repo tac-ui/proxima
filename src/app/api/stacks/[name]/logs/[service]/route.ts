@@ -4,6 +4,7 @@ import { ensureDb } from "../../../../_lib/db";
 import { Stack } from "@server/services/stack";
 import { getConfig } from "@server/lib/config";
 import Docker from "dockerode";
+import { demuxDockerLogs } from "@server/lib/docker-log-demux";
 
 export async function GET(
   req: NextRequest,
@@ -53,43 +54,4 @@ export async function GET(
   } catch (err) {
     return errorResponse(err);
   }
-}
-
-/**
- * Docker multiplexes stdout/stderr into a framed stream.
- * Each frame: [type(1) + 0(3) + size(4-byte BE)] + payload
- * When timestamps are enabled the output is typically plain text, but
- * we handle both cases.
- */
-function demuxDockerLogs(buffer: Buffer): string {
-  // If it's already a string (non-TTY with follow:false returns Buffer)
-  if (typeof buffer === "string") return buffer;
-
-  const lines: string[] = [];
-  let offset = 0;
-
-  // Check if this looks like multiplexed output (first byte is 0, 1, or 2
-  // and bytes 1-3 are 0)
-  const isMultiplexed =
-    buffer.length >= 8 &&
-    (buffer[0] === 0 || buffer[0] === 1 || buffer[0] === 2) &&
-    buffer[1] === 0 &&
-    buffer[2] === 0 &&
-    buffer[3] === 0;
-
-  if (!isMultiplexed) {
-    return buffer.toString("utf-8");
-  }
-
-  while (offset < buffer.length) {
-    if (offset + 8 > buffer.length) break;
-    const size = buffer.readUInt32BE(offset + 4);
-    offset += 8;
-    if (offset + size > buffer.length) break;
-    const chunk = buffer.subarray(offset, offset + size).toString("utf-8");
-    lines.push(chunk);
-    offset += size;
-  }
-
-  return lines.join("");
 }

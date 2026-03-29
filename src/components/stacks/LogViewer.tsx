@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Button, Input, Badge } from "@tac-ui/web";
 import {
@@ -13,6 +13,7 @@ import {
 import type { ContainerInfo } from "@/types";
 
 const TOKEN_KEY = "proxima_auth_token";
+const MAX_LOG_LINES = 10000;
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -112,12 +113,20 @@ export function LogViewer({ stackName, containers }: LogViewerProps) {
               if (data === "[DONE]") return;
               try {
                 const logLine = JSON.parse(data) as string;
-                setLogs((prev) => prev + logLine + "\n");
+                setLogs((prev) => {
+                  const lines = (prev + logLine + "\n").split("\n");
+                  if (lines.length > MAX_LOG_LINES) lines.splice(0, lines.length - MAX_LOG_LINES);
+                  return lines.join("\n");
+                });
                 requestAnimationFrame(scrollToBottom);
               } catch {
                 // not JSON, append as-is
                 if (data.trim()) {
-                  setLogs((prev) => prev + data + "\n");
+                  setLogs((prev) => {
+                    const lines = (prev + data + "\n").split("\n");
+                    if (lines.length > MAX_LOG_LINES) lines.splice(0, lines.length - MAX_LOG_LINES);
+                    return lines.join("\n");
+                  });
                   requestAnimationFrame(scrollToBottom);
                 }
               }
@@ -159,10 +168,7 @@ export function LogViewer({ stackName, containers }: LogViewerProps) {
       // Use the download endpoint
       const token = getToken();
       const url = `/api/stacks/${encodeURIComponent(stackName)}/logs/${encodeURIComponent(selectedService)}/download`;
-      const a = document.createElement("a");
-      a.href = url + (token ? `?token=${encodeURIComponent(token)}` : "");
 
-      // Use fetch for auth header support
       fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
@@ -188,11 +194,13 @@ export function LogViewer({ stackName, containers }: LogViewerProps) {
     }
   };
 
-  // Filter logs by search query
-  const displayedLines = logs.split("\n").filter((line) => {
-    if (!searchQuery) return true;
-    return line.toLowerCase().includes(searchQuery.toLowerCase());
-  });
+  // Filter logs by search query (memoized to avoid O(n) re-split on every render)
+  const displayedLines = useMemo(() => {
+    return logs.split("\n").filter((line) => {
+      if (!searchQuery) return true;
+      return line.toLowerCase().includes(searchQuery.toLowerCase());
+    });
+  }, [logs, searchQuery]);
 
   return (
     <div className="flex flex-col h-full min-h-0">

@@ -6,6 +6,7 @@ import { getConfig } from "@server/lib/config";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import Docker from "dockerode";
+import { demuxDockerLogs } from "@server/lib/docker-log-demux";
 
 const execFileAsync = promisify(execFile);
 
@@ -64,33 +65,4 @@ export async function GET(
   } catch (err) {
     return errorResponse(err);
   }
-}
-
-function demuxDockerLogs(buffer: Buffer): string {
-  if (typeof buffer === "string") return buffer;
-
-  const lines: string[] = [];
-  let offset = 0;
-
-  const isMultiplexed =
-    buffer.length >= 8 &&
-    (buffer[0] === 0 || buffer[0] === 1 || buffer[0] === 2) &&
-    buffer[1] === 0 &&
-    buffer[2] === 0 &&
-    buffer[3] === 0;
-
-  if (!isMultiplexed) {
-    return buffer.toString("utf-8");
-  }
-
-  while (offset < buffer.length) {
-    if (offset + 8 > buffer.length) break;
-    const size = buffer.readUInt32BE(offset + 4);
-    offset += 8;
-    if (offset + size > buffer.length) break;
-    lines.push(buffer.subarray(offset, offset + size).toString("utf-8"));
-    offset += size;
-  }
-
-  return lines.join("");
 }

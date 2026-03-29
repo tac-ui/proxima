@@ -246,6 +246,7 @@ export class Terminal {
 
   public close(): void {
     clearInterval(this.keepAliveInterval);
+    clearInterval(this.kickDisconnectedClientsInterval);
     // Send Ctrl+C to the terminal
     try {
       this._ptyProcess?.write("\x03");

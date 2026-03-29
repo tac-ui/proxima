@@ -85,6 +85,10 @@ export function autoRemoveDomains(domainNames: string[]) {
   const filtered = domains.filter((d) => !urls.has(d.url) || !d.auto);
   if (filtered.length !== domains.length) {
     saveHealthCheckDomains(filtered);
+    // Clean up in-memory status for removed domains
+    for (const url of urls) {
+      domainStatus.delete(url);
+    }
   }
 }
 
@@ -246,8 +250,8 @@ function startSchedulerWithConfig(config: HealthCheckConfig) {
     logger.info("health-check", `Starting scheduled health checks at: ${times.join(", ")}`);
     const timesSet = new Set(times);
 
-    // Check every minute if current time matches
-    scheduleTimer = setInterval(() => {
+    // Check every 30s to avoid missing the first scheduled minute
+    const checkSchedule = () => {
       const now = new Date();
       const hh = String(now.getHours()).padStart(2, "0");
       const mm = String(now.getMinutes()).padStart(2, "0");
@@ -262,7 +266,11 @@ function startSchedulerWithConfig(config: HealthCheckConfig) {
           logger.error("health-check", `Scheduled check failed: ${err}`)
         );
       }
-    }, 60_000);
+    };
+
+    // Run immediately to catch current minute, then check every 30s
+    checkSchedule();
+    scheduleTimer = setInterval(checkSchedule, 30_000);
   }
 }
 

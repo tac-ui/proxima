@@ -22,9 +22,29 @@ export async function PUT(
 
     const body = await req.json() as { type?: string; name?: string; config?: Record<string, string>; enabled?: boolean };
 
+    // Validate type
+    if (body.type !== undefined && body.type !== "slack" && body.type !== "telegram") {
+      throw new Error("type must be 'slack' or 'telegram'");
+    }
+
     // If type is changing, config must also be provided
     if (body.type !== undefined && body.type !== existing.type && !body.config) {
       throw new Error("config must be provided when changing channel type");
+    }
+
+    // Validate config if provided
+    if (body.config !== undefined) {
+      const effectiveType = body.type ?? existing.type;
+      if (effectiveType === "slack") {
+        if (!body.config.webhookUrl || !body.config.webhookUrl.startsWith("https://hooks.slack.com/")) {
+          throw new Error("Slack webhook URL must start with https://hooks.slack.com/");
+        }
+      } else if (effectiveType === "telegram") {
+        if (!body.config.botToken || !/^\d+:[A-Za-z0-9_-]+$/.test(body.config.botToken)) {
+          throw new Error("Invalid Telegram bot token format");
+        }
+        if (!body.config.chatId) throw new Error("Telegram chat ID is required");
+      }
     }
 
     const updates: Record<string, unknown> = {};
@@ -38,8 +58,9 @@ export async function PUT(
     }
 
     const updated = db.select().from(schema.notificationChannels).where(eq(schema.notificationChannels.id, channelId)).get();
-    logAudit({ userId: auth.userId, username: auth.username, action: "update", category: "notification", targetType: "notification_channel", targetName: updated?.name ?? "", ipAddress: getClientIp(req) });
-    return ok(updated);
+    if (!updated) throw new Error("Channel not found after update");
+    logAudit({ userId: auth.userId, username: auth.username, action: "update", category: "notification", targetType: "notification_channel", targetName: updated.name, ipAddress: getClientIp(req) });
+    return ok({ id: updated.id, type: updated.type, name: updated.name, enabled: updated.enabled, createdAt: updated.createdAt });
   } catch (err) {
     return errorResponse(err);
   }

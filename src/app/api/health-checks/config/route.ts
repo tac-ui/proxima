@@ -30,16 +30,20 @@ export async function PUT(req: NextRequest) {
       intervalMinutes: body.intervalMinutes ?? current.intervalMinutes,
       mode: body.mode ?? current.mode,
       scheduleTimes: body.scheduleTimes ?? current.scheduleTimes,
-      messageTemplate: body.messageTemplate ?? current.messageTemplate,
-      recoveryMessageTemplate: body.recoveryMessageTemplate ?? current.recoveryMessageTemplate,
+      messageTemplate: "messageTemplate" in body ? (body.messageTemplate || undefined) : current.messageTemplate,
+      recoveryMessageTemplate: "recoveryMessageTemplate" in body ? (body.recoveryMessageTemplate || undefined) : current.recoveryMessageTemplate,
     };
 
     // Validate
     if (updated.intervalMinutes < 1) updated.intervalMinutes = 1;
     if (updated.scheduleTimes) {
-      updated.scheduleTimes = updated.scheduleTimes.filter((t) =>
-        /^\d{2}:\d{2}$/.test(t)
-      );
+      updated.scheduleTimes = updated.scheduleTimes.filter((t) => {
+        const match = t.match(/^(\d{2}):(\d{2})$/);
+        if (!match) return false;
+        const h = parseInt(match[1], 10);
+        const m = parseInt(match[2], 10);
+        return h >= 0 && h <= 23 && m >= 0 && m <= 59;
+      });
     }
 
     saveHealthCheckConfig(updated);
