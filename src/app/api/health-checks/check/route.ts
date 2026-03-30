@@ -21,11 +21,17 @@ export async function POST(req: NextRequest) {
       body.urls.map(async (url): Promise<HealthCheckResult> => {
         const start = Date.now();
         try {
+          // Use GET instead of HEAD — some proxies drop connection on HEAD for 5xx
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 10000);
           const res = await fetch(url, {
-            method: "HEAD",
+            method: "GET",
             redirect: "follow",
-            signal: AbortSignal.timeout(10000),
+            signal: controller.signal,
           });
+          // Consume body to avoid memory leak, but don't wait for full download
+          res.body?.cancel().catch(() => {});
+          clearTimeout(timeout);
           return {
             url,
             status: res.ok ? "up" : "down",

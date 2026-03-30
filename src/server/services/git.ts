@@ -142,7 +142,12 @@ export class GitService {
     }
 
     await git.fetch(["origin"]);
-    await git.checkout(branch);
+    // Try local checkout first; if branch doesn't exist locally, create from remote
+    try {
+      await git.checkout(branch);
+    } catch {
+      await git.checkout(["-b", branch, `origin/${branch}`]);
+    }
     const result = await git.pull("origin", branch);
     logger.info("git", `Checkout ${branch} in ${repoPath}`);
     return result.summary.changes

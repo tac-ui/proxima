@@ -19,9 +19,14 @@ import {
   Select,
   Textarea,
   Badge,
+  Modal,
+  ModalHeader,
+  ModalTitle,
+  ModalFooter,
 } from "@tac-ui/web";
-import { Plus, RefreshCw, Trash2, HeartPulse, ExternalLink, Edit, Check, X, Clock, Settings } from "@tac-ui/icon";
+import { Plus, RefreshCw, Trash2, HeartPulse, ExternalLink, Edit, Check, X, Clock, Settings, Bell } from "@tac-ui/icon";
 import { useConfirm } from "@/hooks/useConfirm";
+import { useRouter } from "next/navigation";
 import type { ProxyHost } from "@/types";
 
 interface HealthDomain {
@@ -29,6 +34,17 @@ interface HealthDomain {
   name: string;
   addedAt: string;
   auto?: boolean;
+  notifyEnabled?: boolean;
+  messageTemplate?: string;
+  recoveryMessageTemplate?: string;
+  notificationChannelIds?: number[];
+}
+
+interface NotifChannel {
+  id: number;
+  type: string;
+  name: string;
+  enabled: boolean;
 }
 
 interface CheckResult {
@@ -65,6 +81,7 @@ export default function HealthPage() {
   const { toast } = useToast();
   const { isManager } = useAuth();
   const confirm = useConfirm();
+  const router = useRouter();
 
   const [domains, setDomains] = useState<HealthDomain[]>([]);
   const [results, setResults] = useState<Record<string, CheckResult>>({});
@@ -80,6 +97,42 @@ export default function HealthPage() {
   const [editName, setEditName] = useState("");
   const [editUrl, setEditUrl] = useState("");
   const [routes, setRoutes] = useState<ProxyHost[]>([]);
+  const [notifChannels, setNotifChannels] = useState<NotifChannel[]>([]);
+
+  // Detail modal state
+  const [detailDomain, setDetailDomain] = useState<HealthDomain | null>(null);
+  const [detailNotifyEnabled, setDetailNotifyEnabled] = useState(true);
+  const [detailDownTemplate, setDetailDownTemplate] = useState("");
+  const [detailRecoveryTemplate, setDetailRecoveryTemplate] = useState("");
+  const [detailSaving, setDetailSaving] = useState(false);
+  const [detailChannelIds, setDetailChannelIds] = useState<number[]>([]);
+
+  const openDetail = (domain: HealthDomain) => {
+    setDetailDomain(domain);
+    setDetailNotifyEnabled(domain.notifyEnabled !== false);
+    setDetailDownTemplate(domain.messageTemplate ?? "");
+    setDetailRecoveryTemplate(domain.recoveryMessageTemplate ?? "");
+    setDetailChannelIds(domain.notificationChannelIds ?? []);
+  };
+
+  const handleSaveDetail = async () => {
+    if (!detailDomain) return;
+    setDetailSaving(true);
+    const res = await api.updateHealthCheckDomain(detailDomain.url, {
+      notifyEnabled: detailNotifyEnabled,
+      messageTemplate: detailDownTemplate,
+      recoveryMessageTemplate: detailRecoveryTemplate,
+      notificationChannelIds: detailChannelIds,
+    });
+    if (res.ok && res.data) {
+      setDomains(res.data);
+      toast("Notification settings saved", { variant: "success" });
+      setDetailDomain(null);
+    } else {
+      toast(res.error ?? "Failed to save", { variant: "error" });
+    }
+    setDetailSaving(false);
+  };
 
   // Schedule config state
   const [showScheduleConfig, setShowScheduleConfig] = useState(false);
@@ -110,6 +163,11 @@ export default function HealthPage() {
     setConfigLoading(false);
   }, []);
 
+  const fetchNotifChannels = useCallback(async () => {
+    const res = await api.getNotificationChannels();
+    if (res.ok && res.data) setNotifChannels(res.data.map((ch) => ({ id: ch.id, type: ch.type, name: ch.name, enabled: ch.enabled })));
+  }, []);
+
   const runChecks = useCallback(async (domainList: HealthDomain[]) => {
     if (domainList.length === 0) return;
     setChecking(true);
@@ -126,7 +184,8 @@ export default function HealthPage() {
     fetchDomains();
     fetchRoutes();
     fetchConfig();
-  }, [fetchDomains, fetchRoutes, fetchConfig]);
+    if (isManager) fetchNotifChannels();
+  }, [fetchDomains, fetchRoutes, fetchConfig, isManager, fetchNotifChannels]);
 
   useEffect(() => {
     if (!loading && domains.length > 0) runChecks(domains);
@@ -296,6 +355,19 @@ export default function HealthPage() {
               )}
             </div>
 
+            {/* No notification channels warning */}
+            {notifChannels.length === 0 && (
+              <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-warning/30 bg-warning/5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Bell size={14} className="text-warning shrink-0" />
+                  <p className="text-xs text-warning">No notification channels configured. Set up Slack or Telegram to receive alerts.</p>
+                </div>
+                <Button size="sm" variant="secondary" onClick={() => router.push("/settings")} className="shrink-0">
+                  Go to Settings
+                </Button>
+              </div>
+            )}
+
             {config.enabled && (
               <>
                 {/* Mode selector */}
@@ -363,17 +435,12 @@ export default function HealthPage() {
                   </div>
                 )}
 
-                {/* Custom message templates */}
+                {/* Default message templates */}
                 <div className="space-y-3 border-t border-border pt-4">
                   <div>
-                    <h4 className="text-xs font-semibold mb-1">Notification Messages</h4>
+                    <h4 className="text-xs font-semibold mb-1">Default Notification Messages</h4>
                     <p className="text-[11px] text-muted-foreground">
-                      Available variables: <code className="bg-muted px-1 rounded">{"{domain}"}</code>{" "}
-                      <code className="bg-muted px-1 rounded">{"{url}"}</code>{" "}
-                      <code className="bg-muted px-1 rounded">{"{statusCode}"}</code>{" "}
-                      <code className="bg-muted px-1 rounded">{"{responseTime}"}</code>{" "}
-                      <code className="bg-muted px-1 rounded">{"{error}"}</code>{" "}
-                      <code className="bg-muted px-1 rounded">{"{timestamp}"}</code>
+                      Used as fallback when domains have no custom template. Per-domain templates can be set in each domain&apos;s detail view.
                     </p>
                   </div>
                   <Textarea
@@ -544,7 +611,7 @@ export default function HealthPage() {
             const isEditing = editingUrl === domain.url;
 
             return (
-              <Card key={domain.url}>
+              <Card key={domain.url} className="cursor-pointer hover:border-foreground/20 transition-colors" onClick={() => { if (!isEditing) openDetail(domain); }}>
                 <CardContent className="flex items-center justify-between py-4">
                   <div className="flex items-center gap-4 min-w-0">
                     {/* Status indicator */}
@@ -554,7 +621,7 @@ export default function HealthPage() {
 
                     <div className="min-w-0 flex-1">
                       {isEditing ? (
-                        <div className="space-y-2">
+                        <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
                           <Input
                             value={editName}
                             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditName(e.target.value)}
@@ -577,6 +644,11 @@ export default function HealthPage() {
                             {domain.auto && (
                               <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Auto</span>
                             )}
+                            {domain.notifyEnabled === false && (
+                              <Tooltip content="Notifications disabled" placement="top">
+                                <Bell size={12} className="text-muted-foreground opacity-40" />
+                              </Tooltip>
+                            )}
                             {result && (
                               <span className={`text-[11px] font-mono ${isUp ? "text-success" : "text-destructive"}`}>
                                 {result.responseTime}ms
@@ -593,22 +665,16 @@ export default function HealthPage() {
                               </span>
                             )}
                           </div>
-                          <a
-                            href={domain.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-muted-foreground hover:text-point transition-colors inline-flex items-center gap-1 font-mono truncate"
-                          >
+                          <span className="text-xs text-muted-foreground inline-flex items-center gap-1 font-mono truncate">
                             {domain.url}
-                            <ExternalLink size={10} />
-                          </a>
+                          </span>
                         </>
                       )}
                     </div>
                   </div>
 
                   {isManager && (
-                    <div className="flex items-center gap-1 shrink-0 ml-2">
+                    <div className="flex items-center gap-1 shrink-0 ml-2" onClick={(e) => e.stopPropagation()}>
                       {isEditing ? (
                         <>
                           <Tooltip content="Save" placement="top">
@@ -644,6 +710,155 @@ export default function HealthPage() {
           })}
         </div>
       )}
+      {/* Detail modal */}
+      <Modal open={!!detailDomain} onClose={() => setDetailDomain(null)} size="md">
+        {detailDomain && (() => {
+          const result = results[detailDomain.url];
+          const isUp = result?.status === "up";
+          const isDown = result?.status === "down";
+          return (
+            <>
+              <ModalHeader>
+                <ModalTitle>{detailDomain.name}</ModalTitle>
+              </ModalHeader>
+              <div className="px-6 pb-2 space-y-5">
+                {/* Status section */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-3 h-3 rounded-full ${isUp ? "bg-success" : isDown ? "bg-destructive" : "bg-muted-foreground animate-pulse"}`} />
+                    <span className="text-sm font-medium">{isUp ? "Up" : isDown ? "Down" : "Checking..."}</span>
+                    {result?.responseTime !== undefined && (
+                      <span className={`text-xs font-mono ${isUp ? "text-success" : "text-destructive"}`}>
+                        {result.responseTime}ms
+                      </span>
+                    )}
+                    {result?.statusCode !== undefined && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                        result.statusCode < 300 ? "bg-[var(--success-bg)] text-[var(--success-fg)]"
+                        : result.statusCode < 400 ? "bg-[var(--info-bg)] text-[var(--info-fg)]"
+                        : result.statusCode < 500 ? "bg-[var(--warning-bg)] text-[var(--warning-fg)]"
+                        : "bg-[var(--error-bg)] text-[var(--error-fg)]"
+                      }`}>
+                        {result.statusCode}
+                      </span>
+                    )}
+                  </div>
+                  <a
+                    href={detailDomain.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-muted-foreground hover:text-point transition-colors inline-flex items-center gap-1 font-mono"
+                  >
+                    {detailDomain.url}
+                    <ExternalLink size={10} />
+                  </a>
+                  {result?.error && (
+                    <p className="text-xs text-destructive bg-destructive/10 rounded-lg p-2">{result.error}</p>
+                  )}
+                </div>
+
+                {/* Notification settings */}
+                {isManager && (
+                  <div className="space-y-4 border-t border-border pt-4">
+                    <div className="flex items-center gap-3">
+                      <Bell size={16} className="text-muted-foreground" />
+                      <h3 className="text-sm font-semibold">Notification Settings</h3>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Enable Notifications</p>
+                        <p className="text-xs text-muted-foreground">Send alerts when status changes</p>
+                      </div>
+                      <Switch
+                        checked={detailNotifyEnabled}
+                        onChange={setDetailNotifyEnabled}
+                        size="sm"
+                      />
+                    </div>
+
+                    {detailNotifyEnabled && notifChannels.length === 0 && (
+                      <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-warning/30 bg-warning/5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Bell size={14} className="text-warning shrink-0" />
+                          <p className="text-xs text-warning">No notification channels registered.</p>
+                        </div>
+                        <Button size="sm" variant="secondary" onClick={() => { setDetailDomain(null); router.push("/settings"); }} className="shrink-0">
+                          Go to Settings
+                        </Button>
+                      </div>
+                    )}
+
+                    {detailNotifyEnabled && notifChannels.length > 0 && (
+                      <div className="space-y-4">
+                        {/* Channel selector */}
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium">Notification Channels</p>
+                          <p className="text-xs text-muted-foreground">Select channels to receive alerts. Leave all unchecked to send to all channels.</p>
+                          <div className="space-y-1.5">
+                            {notifChannels.filter((ch) => ch.enabled).map((ch) => {
+                              const selected = detailChannelIds.includes(ch.id);
+                              return (
+                                <label key={ch.id} className={`flex items-center gap-3 p-2.5 rounded-lg border transition-colors cursor-pointer ${selected ? "border-point bg-point/5" : "border-border hover:bg-surface-hover"}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={selected}
+                                    onChange={() => setDetailChannelIds((prev) => selected ? prev.filter((id) => id !== ch.id) : [...prev, ch.id])}
+                                    className="rounded border-border"
+                                  />
+                                  <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted">{ch.type === "slack" ? "Slack" : "Telegram"}</span>
+                                  <span className="text-sm">{ch.name}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                          {detailChannelIds.length === 0 && (
+                            <p className="text-[11px] text-muted-foreground">All enabled channels will receive notifications.</p>
+                          )}
+                        </div>
+
+                        {/* Custom message templates */}
+                        <div className="space-y-3">
+                          <p className="text-[11px] text-muted-foreground">
+                            Custom templates override global defaults. Variables:{" "}
+                            <code className="bg-muted px-1 rounded">{"{domain}"}</code>{" "}
+                            <code className="bg-muted px-1 rounded">{"{statusCode}"}</code>{" "}
+                            <code className="bg-muted px-1 rounded">{"{responseTime}"}</code>{" "}
+                            <code className="bg-muted px-1 rounded">{"{error}"}</code>{" "}
+                            <code className="bg-muted px-1 rounded">{"{timestamp}"}</code>
+                          </p>
+                          <Textarea
+                            label="Down message"
+                            size="sm"
+                            rows={2}
+                            placeholder={DEFAULT_DOWN_TEMPLATE}
+                            value={detailDownTemplate}
+                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDetailDownTemplate(e.target.value)}
+                          />
+                          <Textarea
+                            label="Recovery message"
+                            size="sm"
+                            rows={2}
+                            placeholder={DEFAULT_RECOVERY_TEMPLATE}
+                            value={detailRecoveryTemplate}
+                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDetailRecoveryTemplate(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <ModalFooter>
+                <Button variant="secondary" onClick={() => setDetailDomain(null)}>Close</Button>
+                {isManager && (
+                  <Button onClick={handleSaveDetail} loading={detailSaving}>Save</Button>
+                )}
+              </ModalFooter>
+            </>
+          );
+        })()}
+      </Modal>
     </motion.div>
   );
 }

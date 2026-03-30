@@ -42,7 +42,15 @@ export async function PUT(req: NextRequest) {
   try {
     ensureDb();
     requireManager(req);
-    const body = await req.json() as { url: string; name?: string; newUrl?: string };
+    const body = await req.json() as {
+      url: string;
+      name?: string;
+      newUrl?: string;
+      notifyEnabled?: boolean;
+      messageTemplate?: string;
+      recoveryMessageTemplate?: string;
+      notificationChannelIds?: number[];
+    };
     if (!body.url) throw new Error("URL is required");
 
     const domains = getHealthCheckDomains();
@@ -57,6 +65,10 @@ export async function PUT(req: NextRequest) {
       }
       domains[idx].url = newUrl;
     }
+    if (body.notifyEnabled !== undefined) domains[idx].notifyEnabled = body.notifyEnabled;
+    if (body.messageTemplate !== undefined) domains[idx].messageTemplate = body.messageTemplate || undefined;
+    if (body.recoveryMessageTemplate !== undefined) domains[idx].recoveryMessageTemplate = body.recoveryMessageTemplate || undefined;
+    if (body.notificationChannelIds !== undefined) domains[idx].notificationChannelIds = body.notificationChannelIds.length > 0 ? body.notificationChannelIds : undefined;
 
     saveHealthCheckDomains(domains);
     return ok(domains);

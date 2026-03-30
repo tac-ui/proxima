@@ -23,6 +23,10 @@ export interface NotificationEvent {
   type: NotificationEventType;
   target: string;
   message?: string;
+  /** Domain string used to match against channel domainFilter. */
+  domain?: string;
+  /** If set, only send to these specific channel IDs. */
+  channelIds?: number[];
 }
 
 interface SlackConfig {
@@ -176,8 +180,28 @@ export async function notify(event: NotificationEvent): Promise<void> {
 
   if (channels.length === 0) return;
 
+  // Filter by explicit channel IDs if specified
+  const candidates = event.channelIds?.length
+    ? channels.filter((ch) => event.channelIds!.includes(ch.id))
+    : channels;
+
+  // Filter channels by domain if the channel has a domainFilter configured
+  const matched = candidates.filter((ch) => {
+    let domains: string[];
+    try { domains = JSON.parse(ch.domainFilter); } catch { domains = []; }
+    if (!Array.isArray(domains) || domains.length === 0) return true; // no filter → all events
+    if (!event.domain) return false; // channel has filter but event has no domain → skip
+    const target = event.domain.toLowerCase();
+    return domains.some((d) => {
+      const dl = d.toLowerCase();
+      return target === dl || target.endsWith("/" + dl) || target.endsWith("." + dl) || target.includes("://" + dl);
+    });
+  });
+
+  if (matched.length === 0) return;
+
   await Promise.allSettled(
-    channels.map(async (ch) => {
+    matched.map(async (ch) => {
       try {
         const config = JSON.parse(ch.config);
         if (ch.type === "slack") {

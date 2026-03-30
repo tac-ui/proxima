@@ -14,6 +14,10 @@ export interface HealthCheckDomain {
   name: string;
   addedAt: string;
   auto?: boolean;
+  notifyEnabled?: boolean;              // default true
+  messageTemplate?: string;             // per-domain override
+  recoveryMessageTemplate?: string;     // per-domain override
+  notificationChannelIds?: number[];    // empty/undefined = all channels
 }
 
 export interface HealthCheckConfig {
@@ -149,11 +153,17 @@ let lastScheduleMinute = "";
 async function checkSingleDomain(url: string): Promise<HealthCheckResult> {
   const start = Date.now();
   try {
+    // Use GET instead of HEAD — some proxies drop connection on HEAD for 5xx
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
     const res = await fetch(url, {
-      method: "HEAD",
+      method: "GET",
       redirect: "follow",
-      signal: AbortSignal.timeout(10000),
+      signal: controller.signal,
     });
+    // Consume body to avoid memory leak, but don't wait for full download
+    res.body?.cancel().catch(() => {});
+    clearTimeout(timeout);
     return {
       url,
       status: res.ok ? "up" : "down",
@@ -175,8 +185,8 @@ async function runScheduledChecks(): Promise<void> {
   if (domains.length === 0) return;
 
   const config = getHealthCheckConfig();
-  const downTemplate = config.messageTemplate || DEFAULT_DOWN_TEMPLATE;
-  const recoveryTemplate = config.recoveryMessageTemplate || DEFAULT_RECOVERY_TEMPLATE;
+  const globalDownTemplate = config.messageTemplate || DEFAULT_DOWN_TEMPLATE;
+  const globalRecoveryTemplate = config.recoveryMessageTemplate || DEFAULT_RECOVERY_TEMPLATE;
 
   const results = await Promise.all(domains.map((d) => checkSingleDomain(d.url)));
 
@@ -188,16 +198,22 @@ async function runScheduledChecks(): Promise<void> {
 
     domainStatus.set(domain.url, currentStatus);
 
+    // Skip notification if per-domain notify is disabled
+    if (domain.notifyEnabled === false) continue;
+
     // Only notify on state change (skip first check — no previous status)
     if (previousStatus && previousStatus !== currentStatus) {
       const vars = buildTemplateVars(domain, result);
+      const downTemplate = domain.messageTemplate || globalDownTemplate;
+      const recoveryTemplate = domain.recoveryMessageTemplate || globalRecoveryTemplate;
 
+      const channelIds = domain.notificationChannelIds?.length ? domain.notificationChannelIds : undefined;
       if (currentStatus === "down") {
         const message = renderTemplate(downTemplate, vars);
-        notify({ type: "health.failed", target: domain.url, message }).catch(() => {});
+        notify({ type: "health.failed", target: domain.url, message, domain: domain.url, channelIds }).catch(() => {});
       } else {
         const message = renderTemplate(recoveryTemplate, vars);
-        notify({ type: "health.recovered", target: domain.url, message }).catch(() => {});
+        notify({ type: "health.recovered", target: domain.url, message, domain: domain.url, channelIds }).catch(() => {});
       }
     }
   }

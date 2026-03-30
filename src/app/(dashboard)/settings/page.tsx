@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useApiContext } from "@/contexts/ApiContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,7 +18,7 @@ import {
   useToast,
   pageEntrance,
 } from "@tac-ui/web";
-import { Sun, Moon, Wifi, Info, Palette, Upload, Trash2, Bell, Plus, Send } from "@tac-ui/icon";
+import { Sun, Moon, Wifi, Info, Palette, Upload, Trash2, Bell, Plus, Send, Globe, X } from "@tac-ui/icon";
 import packageJson from "../../../../package.json";
 
 export default function SettingsPage() {
@@ -46,7 +46,7 @@ export default function SettingsPage() {
   const faviconInputRef = useRef<HTMLInputElement>(null);
 
   // Notification state
-  const [notifChannels, setNotifChannels] = useState<{ id: number; type: string; name: string; config: string; enabled: boolean; createdAt: string }[]>([]);
+  const [notifChannels, setNotifChannels] = useState<{ id: number; type: string; name: string; configSummary: string; enabled: boolean; domainFilter: string[]; createdAt: string }[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
   const [showAddChannel, setShowAddChannel] = useState(false);
   const [newChannelType, setNewChannelType] = useState<"slack" | "telegram">("slack");
@@ -54,8 +54,14 @@ export default function SettingsPage() {
   const [newChannelWebhookUrl, setNewChannelWebhookUrl] = useState("");
   const [newChannelBotToken, setNewChannelBotToken] = useState("");
   const [newChannelChatId, setNewChannelChatId] = useState("");
+  const [newChannelDomainFilter, setNewChannelDomainFilter] = useState<string[]>([]);
   const [addingChannel, setAddingChannel] = useState(false);
   const [testingChannelId, setTestingChannelId] = useState<number | null>(null);
+  const [allDomains, setAllDomains] = useState<string[]>([]);
+  const [editingDomainFilterId, setEditingDomainFilterId] = useState<number | null>(null);
+  const [tgDiscovering, setTgDiscovering] = useState(false);
+  const [tgBotInfo, setTgBotInfo] = useState<{ name: string; username: string } | null>(null);
+  const [tgChats, setTgChats] = useState<{ chatId: string; title: string; type: string; lastMessage?: string; lastMessageDate?: string }[]>([]);
 
   useEffect(() => {
     setBrandAppName(appName);
@@ -74,19 +80,26 @@ export default function SettingsPage() {
     };
   }, [previewLogoUrl, previewFaviconUrl]);
 
-  // Load notification channels
-  const loadNotifChannels = async () => {
+  // Load notification channels + domain list
+  const loadNotifChannels = useCallback(async () => {
     setNotifLoading(true);
     try {
-      const res = await api.getNotificationChannels();
-      if (res.ok && res.data) setNotifChannels(res.data);
+      const [chRes, routeRes] = await Promise.all([
+        api.getNotificationChannels(),
+        api.getRoutes(),
+      ]);
+      if (chRes.ok && chRes.data) setNotifChannels(chRes.data);
+      if (routeRes.ok && routeRes.data) {
+        const domains = routeRes.data.flatMap((r) => r.domainNames);
+        setAllDomains([...new Set(domains)].sort());
+      }
     } catch { /* ignore */ }
     setNotifLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
     if (isManager) loadNotifChannels();
-  }, [isManager]);
+  }, [isManager, loadNotifChannels]);
 
   const handleAddChannel = async () => {
     setAddingChannel(true);
@@ -94,7 +107,7 @@ export default function SettingsPage() {
       const config: Record<string, string> = newChannelType === "slack"
         ? { webhookUrl: newChannelWebhookUrl }
         : { botToken: newChannelBotToken, chatId: newChannelChatId };
-      const res = await api.addNotificationChannel({ type: newChannelType, name: newChannelName, config });
+      const res = await api.addNotificationChannel({ type: newChannelType, name: newChannelName, config, domainFilter: newChannelDomainFilter });
       if (res.ok) {
         toast("Channel added", { variant: "success" });
         setShowAddChannel(false);
@@ -102,6 +115,9 @@ export default function SettingsPage() {
         setNewChannelWebhookUrl("");
         setNewChannelBotToken("");
         setNewChannelChatId("");
+        setNewChannelDomainFilter([]);
+        setTgBotInfo(null);
+        setTgChats([]);
         await loadNotifChannels();
       } else {
         toast(res.error ?? "Failed to add channel", { variant: "error" });
@@ -110,6 +126,28 @@ export default function SettingsPage() {
       toast("Failed to add channel", { variant: "error" });
     }
     setAddingChannel(false);
+  };
+
+  const handleDiscoverTelegram = async () => {
+    if (!newChannelBotToken) return;
+    setTgDiscovering(true);
+    setTgBotInfo(null);
+    setTgChats([]);
+    try {
+      const res = await api.discoverTelegramChats(newChannelBotToken);
+      if (res.ok && res.data) {
+        setTgBotInfo(res.data.bot);
+        setTgChats(res.data.chats);
+        if (res.data.chats.length === 0) {
+          toast("No chats found. Send a message to the bot first, then try again.", { variant: "warning" });
+        }
+      } else {
+        toast(res.error ?? "Failed to verify bot token", { variant: "error" });
+      }
+    } catch {
+      toast("Failed to connect to Telegram", { variant: "error" });
+    }
+    setTgDiscovering(false);
   };
 
   const handleToggleChannel = async (id: number, enabled: boolean) => {
@@ -128,6 +166,15 @@ export default function SettingsPage() {
       toast("Channel deleted", { variant: "success" });
     } else {
       toast(res.error ?? "Failed to delete", { variant: "error" });
+    }
+  };
+
+  const handleUpdateDomainFilter = async (id: number, domainFilter: string[]) => {
+    const res = await api.updateNotificationChannel(id, { domainFilter });
+    if (res.ok) {
+      setNotifChannels(prev => prev.map(ch => ch.id === id ? { ...ch, domainFilter } : ch));
+    } else {
+      toast(res.error ?? "Failed to update domain filter", { variant: "error" });
     }
   };
 
@@ -562,23 +609,97 @@ export default function SettingsPage() {
                     placeholder="https://hooks.slack.com/services/..."
                   />
                 ) : (
-                  <>
-                    <Input
-                      label="Bot Token"
-                      value={newChannelBotToken}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewChannelBotToken(e.target.value)}
-                      placeholder="123456:ABC-DEF..."
-                    />
+                  <div className="space-y-3">
+                    <div className="flex gap-2 items-end">
+                      <div className="flex-1">
+                        <Input
+                          label="Bot Token"
+                          value={newChannelBotToken}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setNewChannelBotToken(e.target.value); setTgBotInfo(null); setTgChats([]); setNewChannelChatId(""); }}
+                          placeholder="123456:ABC-DEF..."
+                        />
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={!newChannelBotToken || tgDiscovering}
+                        onClick={handleDiscoverTelegram}
+                        className="shrink-0 mb-px"
+                      >
+                        {tgDiscovering ? "Checking..." : "Discover Chats"}
+                      </Button>
+                    </div>
+                    {tgBotInfo && (
+                      <div className="text-xs text-success flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-success" />
+                        Bot verified: <span className="font-medium">@{tgBotInfo.username}</span> ({tgBotInfo.name})
+                      </div>
+                    )}
+                    {tgChats.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Select Chat</p>
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                          {tgChats.map((chat) => (
+                            <button
+                              key={chat.chatId}
+                              type="button"
+                              className={`w-full text-left p-2.5 rounded-lg border transition-colors ${newChannelChatId === chat.chatId ? "border-point bg-point/10" : "border-border hover:border-foreground/30"}`}
+                              onClick={() => {
+                                setNewChannelChatId(chat.chatId);
+                                if (!newChannelName) setNewChannelName(chat.title);
+                              }}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">{chat.title}</p>
+                                  <p className="text-xs text-muted-foreground">{chat.type} &middot; {chat.chatId}</p>
+                                </div>
+                                {newChannelChatId === chat.chatId && <span className="text-point text-xs font-medium shrink-0">Selected</span>}
+                              </div>
+                              {chat.lastMessage && (
+                                <p className="text-xs text-muted-foreground mt-1 truncate">&ldquo;{chat.lastMessage}&rdquo;</p>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {tgBotInfo && tgChats.length === 0 && !tgDiscovering && (
+                      <div className="text-xs text-muted-foreground border border-dashed border-border rounded-lg p-3">
+                        No chats found. Send any message to <span className="font-medium">@{tgBotInfo.username}</span> (or add it to a group), then click &ldquo;Discover Chats&rdquo; again.
+                      </div>
+                    )}
                     <Input
                       label="Chat ID"
                       value={newChannelChatId}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewChannelChatId(e.target.value)}
-                      placeholder="-1001234567890"
+                      placeholder={tgChats.length > 0 ? "Select from above or enter manually" : "-1001234567890"}
                     />
-                  </>
+                  </div>
                 )}
+                {/* Domain filter */}
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Domain Filter</p>
+                  <p className="text-xs text-muted-foreground">Select domains to receive notifications for. Leave empty to receive all notifications.</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {allDomains.map((d) => {
+                      const selected = newChannelDomainFilter.includes(d);
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${selected ? "bg-point/15 border-point text-point" : "bg-muted border-border text-muted-foreground hover:border-foreground/30"}`}
+                          onClick={() => setNewChannelDomainFilter(prev => selected ? prev.filter(x => x !== d) : [...prev, d])}
+                        >
+                          {d}
+                        </button>
+                      );
+                    })}
+                    {allDomains.length === 0 && <p className="text-xs text-muted-foreground">No domains configured yet.</p>}
+                  </div>
+                </div>
                 <div className="flex justify-end gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => setShowAddChannel(false)}>Cancel</Button>
+                  <Button variant="ghost" size="sm" onClick={() => { setShowAddChannel(false); setTgBotInfo(null); setTgChats([]); }}>Cancel</Button>
                   <Button
                     variant="primary"
                     size="sm"
@@ -598,32 +719,74 @@ export default function SettingsPage() {
               <p className="text-sm text-muted-foreground">No notification channels configured.</p>
             ) : (
               notifChannels.map((ch) => (
-                <div key={ch.id} className="flex items-center justify-between border border-border rounded-lg p-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted">{ch.type === "slack" ? "Slack" : "Telegram"}</span>
-                    <span className="text-sm font-medium truncate">{ch.name}</span>
+                <div key={ch.id} className="border border-border rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted">{ch.type === "slack" ? "Slack" : "Telegram"}</span>
+                      <span className="text-sm font-medium truncate">{ch.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={testingChannelId === ch.id}
+                        onClick={() => handleTestChannel(ch.id)}
+                        leftIcon={<Send size={14} />}
+                      >
+                        {testingChannelId === ch.id ? "Sending..." : "Test"}
+                      </Button>
+                      <Switch
+                        checked={ch.enabled}
+                        onChange={() => handleToggleChannel(ch.id, !ch.enabled)}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteChannel(ch.id)}
+                        leftIcon={<Trash2 size={14} />}
+                      >
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={testingChannelId === ch.id}
-                      onClick={() => handleTestChannel(ch.id)}
-                      leftIcon={<Send size={14} />}
-                    >
-                      {testingChannelId === ch.id ? "Sending..." : "Test"}
-                    </Button>
-                    <Switch
-                      checked={ch.enabled}
-                      onChange={() => handleToggleChannel(ch.id, !ch.enabled)}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteChannel(ch.id)}
-                      leftIcon={<Trash2 size={14} />}
-                    >
-                    </Button>
+                  {/* Domain filter display / edit */}
+                  <div className="flex items-start gap-2">
+                    <Globe size={14} className="text-muted-foreground mt-0.5 shrink-0" />
+                    {editingDomainFilterId === ch.id ? (
+                      <div className="flex-1 space-y-2">
+                        <div className="flex flex-wrap gap-1.5">
+                          {allDomains.map((d) => {
+                            const selected = ch.domainFilter.includes(d);
+                            return (
+                              <button
+                                key={d}
+                                type="button"
+                                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${selected ? "bg-point/15 border-point text-point" : "bg-muted border-border text-muted-foreground hover:border-foreground/30"}`}
+                                onClick={() => {
+                                  const updated = selected ? ch.domainFilter.filter(x => x !== d) : [...ch.domainFilter, d];
+                                  setNotifChannels(prev => prev.map(c => c.id === ch.id ? { ...c, domainFilter: updated } : c));
+                                }}
+                              >
+                                {d}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => { setEditingDomainFilterId(null); loadNotifChannels(); }}>Cancel</Button>
+                          <Button variant="primary" size="sm" onClick={() => { handleUpdateDomainFilter(ch.id, ch.domainFilter); setEditingDomainFilterId(null); }}>Save</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors text-left"
+                        onClick={() => setEditingDomainFilterId(ch.id)}
+                      >
+                        {ch.domainFilter.length > 0
+                          ? ch.domainFilter.join(", ")
+                          : "All domains"}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))

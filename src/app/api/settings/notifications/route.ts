@@ -1,5 +1,5 @@
 import { type NextRequest } from "next/server";
-import { requireAuth, requireManager, errorResponse, ok } from "../../_lib/auth";
+import { requireManager, errorResponse, ok } from "../../_lib/auth";
 import { ensureDb } from "../../_lib/db";
 import { getDb, schema } from "@server/db/index";
 import { logAudit, getClientIp } from "@server/services/audit";
@@ -21,7 +21,9 @@ export async function GET(req: NextRequest) {
           configSummary = `Chat: ${parsed.chatId}`;
         }
       } catch { /* ignore */ }
-      return { id: ch.id, type: ch.type, name: ch.name, enabled: ch.enabled, configSummary, createdAt: ch.createdAt };
+      let domainFilter: string[] = [];
+      try { domainFilter = JSON.parse(ch.domainFilter); } catch { /* ignore */ }
+      return { id: ch.id, type: ch.type, name: ch.name, enabled: ch.enabled, configSummary, domainFilter, createdAt: ch.createdAt };
     });
     return ok(safe);
   } catch (err) {
@@ -34,7 +36,7 @@ export async function POST(req: NextRequest) {
     ensureDb();
     const auth = requireManager(req);
     const db = getDb();
-    const body = await req.json() as { type: string; name: string; config: Record<string, string>; enabled?: boolean };
+    const body = await req.json() as { type: string; name: string; config: Record<string, string>; enabled?: boolean; domainFilter?: string[] };
 
     if (!body.type || !body.name || !body.config) {
       return errorResponse(new Error("Missing required fields"), "type, name, and config are required");
@@ -64,10 +66,13 @@ export async function POST(req: NextRequest) {
       name: body.name,
       config: JSON.stringify(body.config),
       enabled: body.enabled !== false,
+      domainFilter: JSON.stringify(Array.isArray(body.domainFilter) ? body.domainFilter : []),
     }).returning().get();
 
     logAudit({ userId: auth.userId, username: auth.username, action: "create", category: "notification", targetType: "notification_channel", targetName: body.name, ipAddress: getClientIp(req) });
-    return ok({ id: result.id, type: result.type, name: result.name, enabled: result.enabled, createdAt: result.createdAt });
+    let domainFilter: string[] = [];
+    try { domainFilter = JSON.parse(result.domainFilter); } catch { /* ignore */ }
+    return ok({ id: result.id, type: result.type, name: result.name, enabled: result.enabled, domainFilter, createdAt: result.createdAt });
   } catch (err) {
     return errorResponse(err);
   }

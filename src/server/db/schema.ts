@@ -135,6 +135,7 @@ export const notificationChannels = sqliteTable("notification_channels", {
     name: text("name").notNull(),
     config: text("config").notNull().default("{}"),
     enabled: integer("enabled", {mode: "boolean"}).notNull().default(true),
+    domainFilter: text("domain_filter").notNull().default("[]"),  // JSON string[] — empty = all
     createdAt: text("created_at")
         .notNull()
         .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),

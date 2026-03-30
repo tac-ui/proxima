@@ -20,7 +20,7 @@ export async function PUT(
     const existing = db.select().from(schema.notificationChannels).where(eq(schema.notificationChannels.id, channelId)).get();
     if (!existing) throw new Error("Channel not found");
 
-    const body = await req.json() as { type?: string; name?: string; config?: Record<string, string>; enabled?: boolean };
+    const body = await req.json() as { type?: string; name?: string; config?: Record<string, string>; enabled?: boolean; domainFilter?: string[] };
 
     // Validate type
     if (body.type !== undefined && body.type !== "slack" && body.type !== "telegram") {
@@ -52,6 +52,7 @@ export async function PUT(
     if (body.name !== undefined) updates.name = body.name;
     if (body.config !== undefined) updates.config = JSON.stringify(body.config);
     if (body.enabled !== undefined) updates.enabled = body.enabled;
+    if (body.domainFilter !== undefined) updates.domainFilter = JSON.stringify(Array.isArray(body.domainFilter) ? body.domainFilter : []);
 
     if (Object.keys(updates).length > 0) {
       db.update(schema.notificationChannels).set(updates).where(eq(schema.notificationChannels.id, channelId)).run();
@@ -60,7 +61,9 @@ export async function PUT(
     const updated = db.select().from(schema.notificationChannels).where(eq(schema.notificationChannels.id, channelId)).get();
     if (!updated) throw new Error("Channel not found after update");
     logAudit({ userId: auth.userId, username: auth.username, action: "update", category: "notification", targetType: "notification_channel", targetName: updated.name, ipAddress: getClientIp(req) });
-    return ok({ id: updated.id, type: updated.type, name: updated.name, enabled: updated.enabled, createdAt: updated.createdAt });
+    let domainFilter: string[] = [];
+    try { domainFilter = JSON.parse(updated.domainFilter); } catch { /* ignore */ }
+    return ok({ id: updated.id, type: updated.type, name: updated.name, enabled: updated.enabled, domainFilter, createdAt: updated.createdAt });
   } catch (err) {
     return errorResponse(err);
   }

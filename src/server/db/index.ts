@@ -300,6 +300,16 @@ function migrateSchema(sqlite: Database.Database): void {
     logger.error("db", `Notification channels migration failed: ${err}`);
   }
 
+  // v12 → v13: add domain_filter column to notification_channels
+  try {
+    sqlite.exec(`ALTER TABLE notification_channels ADD COLUMN domain_filter TEXT NOT NULL DEFAULT '[]'`);
+    logger.info("db", "Migration: added domain_filter column to notification_channels table");
+  } catch (err) {
+    if (err instanceof Error && !err.message.includes("duplicate column")) {
+      throw err;
+    }
+  }
+
   // v9 → v10: add domain_connection column to repositories
   try {
     sqlite.exec(`ALTER TABLE repositories ADD COLUMN domain_connection TEXT`);

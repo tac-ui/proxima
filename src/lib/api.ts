@@ -123,9 +123,9 @@ export const api = {
   suggestProxy: (stackName: string) => request("GET", `/api/discovery/suggest/${encodeURIComponent(stackName)}`),
 
   // Health Checks
-  getHealthCheckDomains: () => request<{ url: string; name: string; addedAt: string }[]>("GET", "/api/health-checks"),
+  getHealthCheckDomains: () => request<{ url: string; name: string; addedAt: string; auto?: boolean; notifyEnabled?: boolean; messageTemplate?: string; recoveryMessageTemplate?: string; notificationChannelIds?: number[] }[]>("GET", "/api/health-checks"),
   addHealthCheckDomain: (url: string, name: string) => request<{ url: string; name: string; addedAt: string }[]>("POST", "/api/health-checks", { url, name }),
-  updateHealthCheckDomain: (url: string, data: { name?: string; newUrl?: string }) => request<{ url: string; name: string; addedAt: string }[]>("PUT", "/api/health-checks", { url, ...data }),
+  updateHealthCheckDomain: (url: string, data: { name?: string; newUrl?: string; notifyEnabled?: boolean; messageTemplate?: string; recoveryMessageTemplate?: string; notificationChannelIds?: number[] }) => request<{ url: string; name: string; addedAt: string; auto?: boolean; notifyEnabled?: boolean; messageTemplate?: string; recoveryMessageTemplate?: string; notificationChannelIds?: number[] }[]>("PUT", "/api/health-checks", { url, ...data }),
   removeHealthCheckDomain: (url: string) => request<{ url: string; name: string; addedAt: string }[]>("DELETE", "/api/health-checks", { url }),
   checkHealthDomains: (urls: string[]) => request<{ url: string; status: "up" | "down"; statusCode?: number; responseTime: number; error?: string }[]>("POST", "/api/health-checks/check", { urls }),
   getHealthCheckConfig: () => request<{ enabled: boolean; intervalMinutes: number; scheduleTimes?: string[]; mode: "interval" | "schedule"; messageTemplate?: string; recoveryMessageTemplate?: string }>("GET", "/api/health-checks/config"),
@@ -203,11 +203,15 @@ export const api = {
   syncAllDns: () => request<{ synced: number; failed: number; errors: string[] }>("POST", "/api/settings/cloudflare/sync"),
 
   // Notifications
-  getNotificationChannels: () => request<{ id: number; type: string; name: string; config: string; enabled: boolean; createdAt: string }[]>("GET", "/api/settings/notifications"),
-  addNotificationChannel: (data: { type: string; name: string; config: Record<string, string>; enabled?: boolean }) => request<{ id: number; type: string; name: string; config: string; enabled: boolean; createdAt: string }>("POST", "/api/settings/notifications", data),
-  updateNotificationChannel: (id: number, data: { type?: string; name?: string; config?: Record<string, string>; enabled?: boolean }) => request<{ id: number; type: string; name: string; config: string; enabled: boolean; createdAt: string }>("PUT", `/api/settings/notifications/${id}`, data),
+  getNotificationChannels: () => request<{ id: number; type: string; name: string; configSummary: string; enabled: boolean; domainFilter: string[]; createdAt: string }[]>("GET", "/api/settings/notifications"),
+  addNotificationChannel: (data: { type: string; name: string; config: Record<string, string>; enabled?: boolean; domainFilter?: string[] }) => request<{ id: number; type: string; name: string; enabled: boolean; domainFilter: string[]; createdAt: string }>("POST", "/api/settings/notifications", data),
+  updateNotificationChannel: (id: number, data: { type?: string; name?: string; config?: Record<string, string>; enabled?: boolean; domainFilter?: string[] }) => request<{ id: number; type: string; name: string; enabled: boolean; domainFilter: string[]; createdAt: string }>("PUT", `/api/settings/notifications/${id}`, data),
   deleteNotificationChannel: (id: number) => request("DELETE", `/api/settings/notifications/${id}`),
   testNotificationChannel: (id: number) => request<{ sent: boolean }>("POST", `/api/settings/notifications/${id}/test`),
+  discoverTelegramChats: (botToken: string) => request<{
+    bot: { name: string; username: string };
+    chats: { chatId: string; title: string; type: string; lastMessage?: string; lastMessageDate?: string }[];
+  }>("POST", "/api/settings/notifications/telegram-discover", { botToken }),
 
   // Monitoring
   getStackLogs: (name: string, service?: string) => {
