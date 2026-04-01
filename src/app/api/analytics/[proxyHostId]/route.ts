@@ -27,14 +27,13 @@ export async function GET(
     }
     const hours = Math.min(rawHours, MAX_HOURS);
 
-    // Look up the proxy host to get its domain
+    // Look up the proxy host to get its domains
     const host = await getProxyHost(hostId);
-    const primaryDomain = host.domainNames[0];
-    if (!primaryDomain) {
+    if (!host.domainNames.length) {
       throw new ValidationError("Proxy host has no domain names");
     }
 
-    const data = await getAnalytics(primaryDomain, hours);
+    const data = await getAnalytics(host.domainNames, hours);
     return ok(data);
   } catch (err) {
     return errorResponse(err);

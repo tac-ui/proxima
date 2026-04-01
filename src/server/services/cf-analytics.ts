@@ -122,16 +122,26 @@ function classifyStatus(status: number): "2xx" | "3xx" | "4xx" | "5xx" | "other"
   return "other";
 }
 
-export async function getAnalytics(domain: string, hours: number = 24): Promise<AnalyticsData> {
+export async function getAnalytics(domains: string | string[], hours: number = 24): Promise<AnalyticsData> {
+  const domainList = Array.isArray(domains) ? domains : [domains];
+  if (domainList.length === 0) return emptyAnalytics();
+
   const settings = getCloudflareSettings();
   if (!settings.apiToken || settings.zones.length === 0) {
     return emptyAnalytics();
   }
 
-  const zone = resolveZoneForDomain(domain, settings.zones);
-  if (!zone) {
-    return emptyAnalytics();
+  // Group domains by zone
+  const domainsByZone = new Map<string, string[]>();
+  for (const domain of domainList) {
+    const zone = resolveZoneForDomain(domain, settings.zones);
+    if (!zone) continue;
+    const list = domainsByZone.get(zone.zoneId) ?? [];
+    list.push(domain);
+    domainsByZone.set(zone.zoneId, list);
   }
+
+  if (domainsByZone.size === 0) return emptyAnalytics();
 
   const { start, end } = toDateTimeRange(hours);
 
@@ -187,16 +197,35 @@ export async function getAnalytics(domain: string, hours: number = 24): Promise<
     }
   `;
 
-  const filter = {
-    datetime_geq: start,
-    datetime_leq: end,
-    clientRequestHTTPHost: domain,
-  };
+  // Query each zone in parallel and merge results
+  const zoneResults = await Promise.all(
+    [...domainsByZone.entries()].map(async ([zoneId, zoneDomains]) => {
+      const filter = zoneDomains.length === 1
+        ? { datetime_geq: start, datetime_leq: end, clientRequestHTTPHost: zoneDomains[0] }
+        : { datetime_geq: start, datetime_leq: end, clientRequestHTTPHost_in: zoneDomains };
+      return graphqlQuery<AnalyticsQueryResult>(query, { zoneTag: zoneId, filter }, settings.apiToken);
+    })
+  );
 
-  const data = await graphqlQuery<AnalyticsQueryResult>(query, {
-    zoneTag: zone.zoneId,
-    filter,
-  }, settings.apiToken);
+  // Merge all zone results
+  const mergedTraffic: HttpRequestsAdaptiveGroup[] = [];
+  const mergedStatus: StatusMapGroup[] = [];
+  const mergedPaths: TopPathGroup[] = [];
+  const mergedReferrers: TopRefGroup[] = [];
+
+  for (const data of zoneResults) {
+    if (!data || !data.viewer.zones[0]) continue;
+    const z = data.viewer.zones[0];
+    mergedTraffic.push(...z.trafficByHour);
+    mergedStatus.push(...z.statusBreakdown);
+    mergedPaths.push(...z.topPaths);
+    mergedReferrers.push(...z.topReferrers);
+  }
+
+  // Use merged data as if it came from a single zone
+  const data = mergedTraffic.length > 0 ? {
+    viewer: { zones: [{ trafficByHour: mergedTraffic, statusBreakdown: mergedStatus, topPaths: mergedPaths, topReferrers: mergedReferrers, uniqueVisitors: [] }] }
+  } : null;
 
   if (!data || !data.viewer.zones[0]) {
     return emptyAnalytics();
@@ -250,21 +279,27 @@ export async function getAnalytics(domain: string, hours: number = 24): Promise<
     b.status5xx = Math.round(total5xx * ratio);
   }
 
-  // Top paths
-  const topPaths = zoneData.topPaths
-    .filter(g => g.dimensions.clientRequestPath)
-    .map(g => ({
-      path: g.dimensions.clientRequestPath,
-      count: g.count,
-    }));
+  // Top paths (deduplicate across zones)
+  const pathMap = new Map<string, number>();
+  for (const g of zoneData.topPaths) {
+    if (!g.dimensions.clientRequestPath) continue;
+    pathMap.set(g.dimensions.clientRequestPath, (pathMap.get(g.dimensions.clientRequestPath) ?? 0) + g.count);
+  }
+  const topPaths = [...pathMap.entries()]
+    .map(([path, count]) => ({ path, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 20);
 
-  // Top referrers
-  const topReferrers = zoneData.topReferrers
-    .filter(g => g.dimensions.clientRequestReferer && g.dimensions.clientRequestReferer !== "")
-    .map(g => ({
-      referrer: g.dimensions.clientRequestReferer,
-      count: g.count,
-    }));
+  // Top referrers (deduplicate across zones)
+  const refMap = new Map<string, number>();
+  for (const g of zoneData.topReferrers) {
+    if (!g.dimensions.clientRequestReferer || g.dimensions.clientRequestReferer === "") continue;
+    refMap.set(g.dimensions.clientRequestReferer, (refMap.get(g.dimensions.clientRequestReferer) ?? 0) + g.count);
+  }
+  const topReferrers = [...refMap.entries()]
+    .map(([referrer, count]) => ({ referrer, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 20);
 
   return {
     buckets,
