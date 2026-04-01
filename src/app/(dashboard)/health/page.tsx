@@ -18,13 +18,12 @@ import {
   Switch,
   Select,
   Textarea,
-  Badge,
   Modal,
   ModalHeader,
   ModalTitle,
   ModalFooter,
 } from "@tac-ui/web";
-import { Plus, RefreshCw, Trash2, HeartPulse, ExternalLink, Edit, Check, X, Clock, Settings, Bell } from "@tac-ui/icon";
+import { Plus, RefreshCw, Trash2, HeartPulse, ExternalLink, Edit, Bell } from "@tac-ui/icon";
 import { useConfirm } from "@/hooks/useConfirm";
 import { useRouter } from "next/navigation";
 import type { ProxyHost } from "@/types";
@@ -93,9 +92,6 @@ export default function HealthPage() {
   const [adding, setAdding] = useState(false);
   const [addMode, setAddMode] = useState<"manual" | "routes">("manual");
   const [selectedRouteDomains, setSelectedRouteDomains] = useState<Set<string>>(new Set());
-  const [editingUrl, setEditingUrl] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editUrl, setEditUrl] = useState("");
   const [routes, setRoutes] = useState<ProxyHost[]>([]);
   const [notifChannels, setNotifChannels] = useState<NotifChannel[]>([]);
 
@@ -106,9 +102,13 @@ export default function HealthPage() {
   const [detailRecoveryTemplate, setDetailRecoveryTemplate] = useState("");
   const [detailSaving, setDetailSaving] = useState(false);
   const [detailChannelIds, setDetailChannelIds] = useState<number[]>([]);
+  const [detailName, setDetailName] = useState("");
+  const [detailUrl, setDetailUrl] = useState("");
 
   const openDetail = (domain: HealthDomain) => {
     setDetailDomain(domain);
+    setDetailName(domain.name);
+    setDetailUrl(domain.url);
     setDetailNotifyEnabled(domain.notifyEnabled !== false);
     setDetailDownTemplate(domain.messageTemplate ?? "");
     setDetailRecoveryTemplate(domain.recoveryMessageTemplate ?? "");
@@ -118,12 +118,15 @@ export default function HealthPage() {
   const handleSaveDetail = async () => {
     if (!detailDomain) return;
     setDetailSaving(true);
-    const res = await api.updateHealthCheckDomain(detailDomain.url, {
+    const data: Parameters<typeof api.updateHealthCheckDomain>[1] = {
       notifyEnabled: detailNotifyEnabled,
       messageTemplate: detailDownTemplate,
       recoveryMessageTemplate: detailRecoveryTemplate,
       notificationChannelIds: detailChannelIds,
-    });
+    };
+    if (detailName.trim() && detailName.trim() !== detailDomain.name) data.name = detailName.trim();
+    if (detailUrl.trim() && detailUrl.trim() !== detailDomain.url) data.newUrl = detailUrl.trim();
+    const res = await api.updateHealthCheckDomain(detailDomain.url, data);
     if (res.ok && res.data) {
       setDomains(res.data);
       toast("Notification settings saved", { variant: "success" });
@@ -135,15 +138,11 @@ export default function HealthPage() {
   };
 
   // Schedule config state
-  const [showScheduleConfig, setShowScheduleConfig] = useState(false);
   const [config, setConfig] = useState<HealthCheckConfig>({
     enabled: false,
     intervalMinutes: 5,
     mode: "interval",
   });
-  const [configLoading, setConfigLoading] = useState(false);
-  const [configSaving, setConfigSaving] = useState(false);
-  const [newScheduleTime, setNewScheduleTime] = useState("09:00");
 
   const fetchDomains = useCallback(async () => {
     const res = await api.getHealthCheckDomains();
@@ -157,10 +156,8 @@ export default function HealthPage() {
   }, []);
 
   const fetchConfig = useCallback(async () => {
-    setConfigLoading(true);
     const res = await api.getHealthCheckConfig();
     if (res.ok && res.data) setConfig(res.data);
-    setConfigLoading(false);
   }, []);
 
   const fetchNotifChannels = useCallback(async () => {
@@ -231,58 +228,11 @@ export default function HealthPage() {
     }
   };
 
-  const startEdit = (domain: HealthDomain) => {
-    setEditingUrl(domain.url);
-    setEditName(domain.name);
-    setEditUrl(domain.url);
-  };
-
-  const cancelEdit = () => {
-    setEditingUrl(null);
-  };
-
-  const saveEdit = async (originalUrl: string) => {
-    const data: { name?: string; newUrl?: string } = {};
-    const domain = domains.find((d) => d.url === originalUrl);
-    if (!domain) return;
-    if (editName.trim() && editName.trim() !== domain.name) data.name = editName.trim();
-    if (editUrl.trim() && editUrl.trim() !== domain.url) data.newUrl = editUrl.trim();
-    if (Object.keys(data).length === 0) { setEditingUrl(null); return; }
-
-    const res = await api.updateHealthCheckDomain(originalUrl, data);
-    if (res.ok && res.data) {
-      setDomains(res.data);
-      toast("Updated", { variant: "success" });
-    } else {
-      toast(res.error ?? "Failed to update", { variant: "error" });
-    }
-    setEditingUrl(null);
-  };
-
-  const handleSaveConfig = async () => {
-    setConfigSaving(true);
-    const res = await api.updateHealthCheckConfig(config);
-    if (res.ok && res.data) {
-      setConfig(res.data);
-      toast("Schedule config saved", { variant: "success" });
-    } else {
-      toast(res.error ?? "Failed to save config", { variant: "error" });
-    }
-    setConfigSaving(false);
-  };
-
-  const addScheduleTime = () => {
-    if (!newScheduleTime) return;
-    const times = config.scheduleTimes ?? [];
-    if (times.includes(newScheduleTime)) return;
-    setConfig({ ...config, scheduleTimes: [...times, newScheduleTime].sort() });
-  };
-
-  const removeScheduleTime = (time: string) => {
-    setConfig({
-      ...config,
-      scheduleTimes: (config.scheduleTimes ?? []).filter((t) => t !== time),
-    });
+  const saveConfig = async (updated: HealthCheckConfig) => {
+    setConfig(updated);
+    const res = await api.updateHealthCheckConfig(updated);
+    if (res.ok && res.data) setConfig(res.data);
+    else toast(res.error ?? "Failed to save config", { variant: "error" });
   };
 
   // Stats
@@ -303,14 +253,23 @@ export default function HealthPage() {
         </div>
         <div className="flex items-center gap-2">
           {isManager && (
-            <Button
-              size="sm"
-              variant="secondary"
-              leftIcon={<Settings size={14} />}
-              onClick={() => setShowScheduleConfig(!showScheduleConfig)}
-            >
-              Schedule
-            </Button>
+            <div className="flex items-center gap-2 border border-border rounded-lg px-2.5 py-1">
+              <Tooltip content={config.enabled ? "Auto-check enabled" : "Auto-check disabled"} placement="top">
+                <Switch
+                  checked={config.enabled}
+                  onChange={(checked) => saveConfig({ ...config, enabled: checked })}
+                  size="sm"
+                />
+              </Tooltip>
+              {config.enabled && (
+                <Select
+                  size="sm"
+                  options={INTERVAL_OPTIONS}
+                  value={String(config.intervalMinutes)}
+                  onChange={(v) => saveConfig({ ...config, intervalMinutes: Number(v) })}
+                />
+              )}
+            </div>
           )}
           <Button
             size="sm"
@@ -329,162 +288,6 @@ export default function HealthPage() {
           )}
         </div>
       </div>
-
-      {/* Schedule config */}
-      {showScheduleConfig && isManager && (
-        <Card>
-          <CardContent className="space-y-5 py-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Clock size={18} className="text-muted-foreground" />
-                <div>
-                  <h3 className="text-sm font-semibold">Health Check Schedule</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Automatically check domains and send notifications on status changes
-                  </p>
-                </div>
-              </div>
-              {configLoading ? (
-                <Skeleton width={44} height={24} />
-              ) : (
-                <Switch
-                  checked={config.enabled}
-                  onChange={(checked) => setConfig({ ...config, enabled: checked })}
-                  size="sm"
-                />
-              )}
-            </div>
-
-            {/* No notification channels warning */}
-            {notifChannels.length === 0 && (
-              <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-warning/30 bg-warning/5">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Bell size={14} className="text-warning shrink-0" />
-                  <p className="text-xs text-warning">No notification channels configured. Set up Slack or Telegram to receive alerts.</p>
-                </div>
-                <Button size="sm" variant="secondary" onClick={() => router.push("/settings")} className="shrink-0">
-                  Go to Settings
-                </Button>
-              </div>
-            )}
-
-            {config.enabled && (
-              <>
-                {/* Mode selector */}
-                <div className="space-y-2">
-                  <label className="text-xs font-medium block">Check Mode</label>
-                  <SegmentController
-                    size="sm"
-                    options={[
-                      { value: "interval", label: "Interval" },
-                      { value: "schedule", label: "Scheduled Times" },
-                    ]}
-                    value={config.mode}
-                    onChange={(v) => setConfig({ ...config, mode: v as "interval" | "schedule" })}
-                  />
-                </div>
-
-                {/* Interval mode */}
-                {config.mode === "interval" && (
-                  <div className="space-y-2">
-                    <Select
-                      label="Check Interval"
-                      size="sm"
-                      options={INTERVAL_OPTIONS}
-                      value={String(config.intervalMinutes)}
-                      onChange={(v) => setConfig({ ...config, intervalMinutes: Number(v) })}
-                    />
-                  </div>
-                )}
-
-                {/* Schedule mode */}
-                {config.mode === "schedule" && (
-                  <div className="space-y-3">
-                    <label className="text-xs font-medium block">Scheduled Times (daily)</label>
-                    <div className="flex items-end gap-2">
-                      <Input
-                        type="time"
-                        value={newScheduleTime}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewScheduleTime(e.target.value)}
-                        size="sm"
-                        className="w-36"
-                      />
-                      <Button size="sm" variant="secondary" onClick={addScheduleTime}>
-                        Add Time
-                      </Button>
-                    </div>
-                    {(config.scheduleTimes ?? []).length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {(config.scheduleTimes ?? []).map((time) => (
-                          <Badge key={time} variant="secondary" className="gap-1.5 pl-2.5 pr-1.5 py-1">
-                            <Clock size={12} />
-                            {time}
-                            <button
-                              onClick={() => removeScheduleTime(time)}
-                              className="ml-0.5 hover:text-destructive transition-colors"
-                            >
-                              <X size={12} />
-                            </button>
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                    {(config.scheduleTimes ?? []).length === 0 && (
-                      <p className="text-xs text-muted-foreground">No times added yet. Add at least one time to enable scheduled checks.</p>
-                    )}
-                  </div>
-                )}
-
-                {/* Default message templates */}
-                <div className="space-y-3 border-t border-border pt-4">
-                  <div>
-                    <h4 className="text-xs font-semibold mb-1">Default Notification Messages</h4>
-                    <p className="text-[11px] text-muted-foreground">
-                      Used as fallback when domains have no custom template. Per-domain templates can be set in each domain&apos;s detail view.
-                    </p>
-                  </div>
-                  <Textarea
-                    label="Down message"
-                    size="sm"
-                    rows={2}
-                    placeholder={DEFAULT_DOWN_TEMPLATE}
-                    value={config.messageTemplate ?? ""}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                      setConfig({ ...config, messageTemplate: e.target.value || undefined })
-                    }
-                  />
-                  <Textarea
-                    label="Recovery message"
-                    size="sm"
-                    rows={2}
-                    placeholder={DEFAULT_RECOVERY_TEMPLATE}
-                    value={config.recoveryMessageTemplate ?? ""}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                      setConfig({ ...config, recoveryMessageTemplate: e.target.value || undefined })
-                    }
-                  />
-                </div>
-
-                {/* Save button */}
-                <div className="flex justify-end">
-                  <Button size="sm" onClick={handleSaveConfig} loading={configSaving}>
-                    Save Schedule
-                  </Button>
-                </div>
-              </>
-            )}
-
-            {/* Save when just toggling off */}
-            {!config.enabled && (
-              <div className="flex justify-end">
-                <Button size="sm" variant="secondary" onClick={handleSaveConfig} loading={configSaving}>
-                  Save
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       {/* Add form */}
       {showAdd && (
@@ -608,100 +411,76 @@ export default function HealthPage() {
             const result = results[domain.url];
             const isUp = result?.status === "up";
             const isDown = result?.status === "down";
-            const isEditing = editingUrl === domain.url;
+            // Resolve channel names for this domain
+            const activeChannels = domain.notifyEnabled !== false
+              ? (domain.notificationChannelIds?.length
+                  ? notifChannels.filter((ch) => domain.notificationChannelIds!.includes(ch.id) && ch.enabled)
+                  : notifChannels.filter((ch) => ch.enabled))
+              : [];
 
             return (
-              <Card key={domain.url} className="cursor-pointer hover:border-foreground/20 transition-colors" onClick={() => { if (!isEditing) openDetail(domain); }}>
+              <Card key={domain.url} className="cursor-pointer hover:border-foreground/20 transition-colors" onClick={() => openDetail(domain)}>
                 <CardContent className="flex items-center justify-between py-4">
                   <div className="flex items-center gap-4 min-w-0">
                     {/* Status indicator */}
                     <Tooltip content={isUp ? `${result.statusCode} OK` : isDown ? (result.error || `${result.statusCode}`) : "Checking..."} placement="top">
-                      <div className={`w-3 h-3 rounded-full shrink-0 ${isUp ? "bg-success" : isDown ? "bg-destructive" : "bg-muted-foreground animate-pulse"}`} />
+                      <div className={`w-3 h-3 rounded-full shrink-0 ${isUp ? "bg-success" : isDown ? "bg-error" : "bg-muted-foreground animate-pulse"}`} />
                     </Tooltip>
 
                     <div className="min-w-0 flex-1">
-                      {isEditing ? (
-                        <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
-                          <Input
-                            value={editName}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditName(e.target.value)}
-                            placeholder="Name"
-                            size="sm"
-                            onKeyDown={(e: React.KeyboardEvent) => { if (e.key === "Enter") saveEdit(domain.url); if (e.key === "Escape") cancelEdit(); }}
-                          />
-                          <Input
-                            value={editUrl}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditUrl(e.target.value)}
-                            placeholder="https://example.com"
-                            size="sm"
-                            onKeyDown={(e: React.KeyboardEvent) => { if (e.key === "Enter") saveEdit(domain.url); if (e.key === "Escape") cancelEdit(); }}
-                          />
-                        </div>
-                      ) : (
-                        <>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">{domain.name}</span>
-                            {domain.auto && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Auto</span>
-                            )}
-                            {domain.notifyEnabled === false && (
-                              <Tooltip content="Notifications disabled" placement="top">
-                                <Bell size={12} className="text-muted-foreground opacity-40" />
-                              </Tooltip>
-                            )}
-                            {result && (
-                              <span className={`text-[11px] font-mono ${isUp ? "text-success" : "text-destructive"}`}>
-                                {result.responseTime}ms
-                              </span>
-                            )}
-                            {result?.statusCode !== undefined && (
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                                result.statusCode < 300 ? "bg-[var(--success-bg)] text-[var(--success-fg)]"
-                                : result.statusCode < 400 ? "bg-[var(--info-bg)] text-[var(--info-fg)]"
-                                : result.statusCode < 500 ? "bg-[var(--warning-bg)] text-[var(--warning-fg)]"
-                                : "bg-[var(--error-bg)] text-[var(--error-fg)]"
-                              }`}>
-                                {result.statusCode}
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-xs text-muted-foreground inline-flex items-center gap-1 font-mono truncate">
-                            {domain.url}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{domain.name}</span>
+                        {domain.auto && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Auto</span>
+                        )}
+                        {result && (
+                          <span className={`text-[11px] font-mono ${isUp ? "text-success" : "text-destructive"}`}>
+                            {result.responseTime}ms
                           </span>
-                        </>
-                      )}
+                        )}
+                        {result?.statusCode !== undefined && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                            result.statusCode < 300 ? "bg-[var(--success-bg)] text-[var(--success-fg)]"
+                            : result.statusCode < 400 ? "bg-[var(--info-bg)] text-[var(--info-fg)]"
+                            : result.statusCode < 500 ? "bg-[var(--warning-bg)] text-[var(--warning-fg)]"
+                            : "bg-[var(--error-bg)] text-[var(--error-fg)]"
+                          }`}>
+                            {result.statusCode}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-muted-foreground font-mono truncate">
+                          {domain.url}
+                        </span>
+                        {domain.notifyEnabled === false ? (
+                          <span className="text-[10px] text-muted-foreground/50 shrink-0">Notifications off</span>
+                        ) : activeChannels.length > 0 && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Bell size={10} className="text-muted-foreground" />
+                            <span className="text-[10px] text-muted-foreground">
+                              {domain.notificationChannelIds?.length
+                                ? activeChannels.map((ch) => ch.name).join(", ")
+                                : "All channels"}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
                   {isManager && (
                     <div className="flex items-center gap-1 shrink-0 ml-2" onClick={(e) => e.stopPropagation()}>
-                      {isEditing ? (
-                        <>
-                          <Tooltip content="Save" placement="top">
-                            <Button variant="ghost" size="sm" iconOnly onClick={() => saveEdit(domain.url)}>
-                              <Check size={14} className="text-success" />
-                            </Button>
-                          </Tooltip>
-                          <Tooltip content="Cancel" placement="top">
-                            <Button variant="ghost" size="sm" iconOnly onClick={cancelEdit}>
-                              <X size={14} />
-                            </Button>
-                          </Tooltip>
-                        </>
-                      ) : (
-                        <>
-                          <Tooltip content="Edit" placement="top">
-                            <Button variant="ghost" size="sm" iconOnly onClick={() => startEdit(domain)}>
-                              <Edit size={14} />
-                            </Button>
-                          </Tooltip>
-                          <Tooltip content="Remove" placement="top">
-                            <Button variant="ghost" size="sm" iconOnly onClick={() => handleRemove(domain.url, domain.name)}>
-                              <Trash2 size={14} className="text-destructive" />
-                            </Button>
-                          </Tooltip>
-                        </>
-                      )}
+                      <Tooltip content="Edit" placement="top">
+                        <Button variant="ghost" size="sm" iconOnly onClick={() => openDetail(domain)}>
+                          <Edit size={14} />
+                        </Button>
+                      </Tooltip>
+                      <Tooltip content="Remove" placement="top">
+                        <Button variant="ghost" size="sm" iconOnly onClick={() => handleRemove(domain.url, domain.name)}>
+                          <Trash2 size={14} className="text-destructive" />
+                        </Button>
+                      </Tooltip>
                     </div>
                   )}
                 </CardContent>
@@ -725,7 +504,7 @@ export default function HealthPage() {
                 {/* Status section */}
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full ${isUp ? "bg-success" : isDown ? "bg-destructive" : "bg-muted-foreground animate-pulse"}`} />
+                    <div className={`w-3 h-3 rounded-full ${isUp ? "bg-success" : isDown ? "bg-error" : "bg-muted-foreground animate-pulse"}`} />
                     <span className="text-sm font-medium">{isUp ? "Up" : isDown ? "Down" : "Checking..."}</span>
                     {result?.responseTime !== undefined && (
                       <span className={`text-xs font-mono ${isUp ? "text-success" : "text-destructive"}`}>
@@ -756,6 +535,24 @@ export default function HealthPage() {
                     <p className="text-xs text-destructive bg-destructive/10 rounded-lg p-2">{result.error}</p>
                   )}
                 </div>
+
+                {/* Edit domain info */}
+                {isManager && (
+                  <div className="space-y-3 border-t border-border pt-4">
+                    <Input
+                      label="Name"
+                      value={detailName}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDetailName(e.target.value)}
+                      size="sm"
+                    />
+                    <Input
+                      label="URL"
+                      value={detailUrl}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDetailUrl(e.target.value)}
+                      size="sm"
+                    />
+                  </div>
+                )}
 
                 {/* Notification settings */}
                 {isManager && (
