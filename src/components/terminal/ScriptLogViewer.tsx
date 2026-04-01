@@ -117,7 +117,7 @@ export function ScriptLogViewer({
   const isError = exitCode !== undefined && exitCode !== 0;
 
   return (
-    <div className={`rounded-lg border overflow-hidden ${isError ? "border-destructive/30" : exited ? "border-border" : "border-point/30"}`}>
+    <div className={`rounded-lg border overflow-hidden ${isError ? "border-error/30" : exited ? "border-border" : "border-point/30"}`}>
       {/* Header */}
       <button
         onClick={() => setExpanded((e) => !e)}
@@ -134,7 +134,7 @@ export function ScriptLogViewer({
           )}
           <span className="text-xs font-medium text-muted-foreground truncate">{title}</span>
           {exited && exitCode !== undefined && (
-            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${isError ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success"}`}>
+            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${isError ? "bg-error/10 text-error" : "bg-success/10 text-success"}`}>
               {isError ? `exit ${exitCode}` : "done"}
             </span>
           )}

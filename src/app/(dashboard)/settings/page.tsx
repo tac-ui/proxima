@@ -278,6 +278,7 @@ export default function SettingsPage() {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
+        URL.revokeObjectURL(img.src);
         const size = Math.min(img.width, img.height);
         const canvas = document.createElement("canvas");
         canvas.width = size;

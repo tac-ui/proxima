@@ -1011,7 +1011,7 @@ export default function ProjectDetailPage() {
 
                   return (
                     <div key={script.filename} className="space-y-2">
-                      <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-3 sm:p-4 rounded-lg border transition-colors ${isRunning ? "border-success/30 bg-success/5" : hasFailed ? "border-destructive/30 bg-destructive/5" : "border-border bg-surface"}`}>
+                      <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-3 sm:p-4 rounded-lg border transition-colors ${isRunning ? "border-success/30 bg-success/5" : hasFailed ? "border-error/30 bg-error/5" : "border-border bg-surface"}`}>
                         <div className="min-w-0 flex items-center gap-3">
                           <div className="w-8 h-8 rounded-lg bg-point/10 flex items-center justify-center shrink-0">
                             <FileCode2 size={14} className="text-point" />

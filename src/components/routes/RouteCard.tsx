@@ -137,7 +137,7 @@ export function RouteCard({ host, tunnelActive, onDelete, isManager, domainStatu
                 disabled={deleting}
                 onClick={handleDelete}
               >
-                <Trash2 size={13} className="text-destructive" />
+                <Trash2 size={13} className="text-error" />
               </Button>
             </div>
           )}
@@ -148,7 +148,7 @@ export function RouteCard({ host, tunnelActive, onDelete, isManager, domainStatu
 }
 
 function StatusDot({ result }: { result?: DomainCheckResult }) {
-  const color = result?.status === "up" ? "bg-success" : result?.status === "down" ? "bg-destructive" : "bg-muted-foreground animate-pulse";
+  const color = result?.status === "up" ? "bg-success" : result?.status === "down" ? "bg-error" : "bg-muted-foreground animate-pulse";
   const label = result?.status === "up"
     ? `${result.statusCode ?? "OK"} · ${result.responseTime}ms`
     : result?.status === "down"

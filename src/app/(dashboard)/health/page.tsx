@@ -205,7 +205,6 @@ export default function HealthPage() {
       setAddName("");
       setShowAdd(false);
       toast("Domain added", { variant: "success" });
-      runChecks(res.data);
     } else {
       toast(res.error ?? "Failed to add", { variant: "error" });
     }
@@ -247,7 +246,7 @@ export default function HealthPage() {
           {domains.length > 0 && !loading && (
             <div className="flex items-center gap-2 text-xs">
               <span className="text-success font-medium">{upCount} up</span>
-              {downCount > 0 && <span className="text-destructive font-medium">{downCount} down</span>}
+              {downCount > 0 && <span className="text-error font-medium">{downCount} down</span>}
             </div>
           )}
         </div>
@@ -366,7 +365,6 @@ export default function HealthPage() {
                     setDomains(updated);
                     setSelectedRouteDomains(new Set());
                     toast(`Added ${selectedRouteDomains.size} domain(s)`, { variant: "success" });
-                    runChecks(updated);
                     setAdding(false);
                   }}
                   loading={adding}
@@ -434,7 +432,7 @@ export default function HealthPage() {
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Auto</span>
                         )}
                         {result && (
-                          <span className={`text-[11px] font-mono ${isUp ? "text-success" : "text-destructive"}`}>
+                          <span className={`text-[11px] font-mono ${isUp ? "text-success" : "text-error"}`}>
                             {result.responseTime}ms
                           </span>
                         )}
@@ -478,7 +476,7 @@ export default function HealthPage() {
                       </Tooltip>
                       <Tooltip content="Remove" placement="top">
                         <Button variant="ghost" size="sm" iconOnly onClick={() => handleRemove(domain.url, domain.name)}>
-                          <Trash2 size={14} className="text-destructive" />
+                          <Trash2 size={14} className="text-error" />
                         </Button>
                       </Tooltip>
                     </div>
@@ -507,7 +505,7 @@ export default function HealthPage() {
                     <div className={`w-3 h-3 rounded-full ${isUp ? "bg-success" : isDown ? "bg-error" : "bg-muted-foreground animate-pulse"}`} />
                     <span className="text-sm font-medium">{isUp ? "Up" : isDown ? "Down" : "Checking..."}</span>
                     {result?.responseTime !== undefined && (
-                      <span className={`text-xs font-mono ${isUp ? "text-success" : "text-destructive"}`}>
+                      <span className={`text-xs font-mono ${isUp ? "text-success" : "text-error"}`}>
                         {result.responseTime}ms
                       </span>
                     )}
@@ -532,7 +530,7 @@ export default function HealthPage() {
                     <ExternalLink size={10} />
                   </a>
                   {result?.error && (
-                    <p className="text-xs text-destructive bg-destructive/10 rounded-lg p-2">{result.error}</p>
+                    <p className="text-xs text-error bg-error/10 rounded-lg p-2">{result.error}</p>
                   )}
                 </div>
 

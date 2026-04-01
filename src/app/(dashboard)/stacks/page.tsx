@@ -155,8 +155,8 @@ export default function StacksPage() {
             className="flex flex-col items-center justify-center py-16"
           >
             <div className="flex flex-col items-center gap-4 max-w-md text-center">
-              <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center">
-                <AlertTriangle size={28} className="text-destructive" />
+              <div className="w-14 h-14 rounded-full bg-error/10 flex items-center justify-center">
+                <AlertTriangle size={28} className="text-error" />
               </div>
               <h2 className="text-lg font-bold">Docker Not Connected</h2>
               <p className="text-sm text-muted-foreground">

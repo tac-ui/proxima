@@ -36,7 +36,7 @@ function formatBytes(bytes: number): string {
 function UsageBar({ percent, label }: { percent: number; label: string }) {
   const color =
     percent >= 90
-      ? "bg-destructive"
+      ? "bg-error"
       : percent >= 70
         ? "bg-warning"
         : "bg-point";

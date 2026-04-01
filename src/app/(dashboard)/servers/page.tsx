@@ -285,8 +285,8 @@ export default function ServersPage() {
               className="flex flex-col items-center justify-center py-16"
             >
               <div className="flex flex-col items-center gap-4 max-w-md text-center">
-                <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center">
-                  <AlertTriangle size={28} className="text-destructive" />
+                <div className="w-14 h-14 rounded-full bg-error/10 flex items-center justify-center">
+                  <AlertTriangle size={28} className="text-error" />
                 </div>
                 <h2 className="text-lg font-bold">Docker Not Connected</h2>
                 <p className="text-sm text-muted-foreground">
@@ -420,8 +420,8 @@ export default function ServersPage() {
                                       const isDown = status === false;
                                       return (
                                         <Tooltip key={`${p.hostPort}:${p.containerPort}`} content={isUp ? "Port reachable" : isDown ? "Port not reachable" : "Checking..."} placement="top">
-                                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-mono border transition-colors ${isUp ? "border-success/30 bg-success/10 text-success" : isDown ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-border bg-surface text-muted-foreground"}`}>
-                                            <span className={`w-1.5 h-1.5 rounded-full ${isUp ? "bg-success" : isDown ? "bg-destructive" : "bg-muted-foreground animate-pulse"}`} />
+                                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-mono border transition-colors ${isUp ? "border-success/30 bg-success/10 text-success" : isDown ? "border-error/30 bg-error/10 text-error" : "border-border bg-surface text-muted-foreground"}`}>
+                                            <span className={`w-1.5 h-1.5 rounded-full ${isUp ? "bg-success" : isDown ? "bg-error" : "bg-muted-foreground animate-pulse"}`} />
                                             {p.hostPort}:{p.containerPort}
                                           </span>
                                         </Tooltip>

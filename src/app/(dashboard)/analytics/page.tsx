@@ -158,7 +158,7 @@ function AnalyticsContent() {
         { label: "2xx", value: analytics.summary.status2xx, color: "var(--color-success)" },
         { label: "3xx", value: analytics.summary.status3xx, color: "var(--color-info)" },
         { label: "4xx", value: analytics.summary.status4xx, color: "var(--color-warning)" },
-        { label: "5xx", value: analytics.summary.status5xx, color: "var(--color-destructive)" },
+        { label: "5xx", value: analytics.summary.status5xx, color: "var(--color-error)" },
       ].filter((d) => d.value > 0)
     : [];
 
