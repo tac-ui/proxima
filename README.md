@@ -191,13 +191,25 @@ Navigate to **Terminal** for standalone shell sessions.
 
 Place `.sh` files in `/data/init.d/` to run custom setup on container start. Scripts run as the proxima user with bash.
 
-Example — install Claude Code CLI:
+Example — install Claude Code CLI with persistent data:
 ```bash
 mkdir -p /path/to/data/init.d
 cat > /path/to/data/init.d/01-claude.sh << 'EOF'
 #!/bin/bash
+# Persist claude data in /data volume
+mkdir -p /data/.claude /data/.local
+ln -sfn /data/.claude "$HOME/.claude"
+ln -sfn /data/.local "$HOME/.local"
+
+# Persist .claude.json config
+[ -f /data/.claude.json ] || touch /data/.claude.json
+ln -sfn /data/.claude.json "$HOME/.claude.json"
+
+# Add local bin to PATH permanently
 grep -q '.local/bin' "$HOME/.bashrc" 2>/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
 export PATH="$HOME/.local/bin:$PATH"
+
+# Install Claude Code if not present
 if ! command -v claude >/dev/null 2>&1; then
   curl -fsSL https://claude.ai/install.sh | /bin/bash
 fi

@@ -622,10 +622,10 @@ export default function SettingsPage() {
                       </div>
                       <Button
                         variant="secondary"
-                        size="sm"
+                        size="md"
                         disabled={!newChannelBotToken || tgDiscovering}
                         onClick={handleDiscoverTelegram}
-                        className="shrink-0 mb-px"
+                        className="shrink-0"
                       >
                         {tgDiscovering ? "Checking..." : "Discover Chats"}
                       </Button>
@@ -750,8 +750,8 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   {/* Domain filter display / edit */}
-                  <div className="flex items-start gap-2">
-                    <Globe size={14} className="text-muted-foreground mt-1.5 shrink-0" />
+                  <div className="flex items-center gap-2">
+                    <Globe size={14} className="text-muted-foreground shrink-0" />
                     {editingDomainFilterId === ch.id ? (
                       <div className="flex-1 space-y-2">
                         <div className="flex flex-wrap gap-1.5">

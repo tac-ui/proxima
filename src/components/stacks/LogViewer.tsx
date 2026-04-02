@@ -246,8 +246,8 @@ export function LogViewer({ stackName, containers }: LogViewerProps) {
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center gap-2 mb-2 flex-shrink-0">
-        <div className="relative flex-1 max-w-xs">
+      <div className="flex items-center gap-2 mb-2 flex-shrink-0 min-w-0">
+        <div className="relative flex-1 max-w-xs min-w-0">
           <Search
             size={14}
             className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
@@ -269,60 +269,62 @@ export function LogViewer({ stackName, containers }: LogViewerProps) {
           )}
         </div>
 
-        <Button
-          variant="ghost"
-          size="sm"
-          iconOnly
-          onClick={() => {
-            setFollow(!follow);
-            if (!follow) {
-              requestAnimationFrame(scrollToBottom);
-            }
-          }}
-          title={follow ? "Auto-scroll on" : "Auto-scroll off"}
-        >
-          <ArrowDownToLine
-            size={14}
-            className={follow ? "text-primary" : "text-muted-foreground"}
-          />
-        </Button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            onClick={() => {
+              setFollow(!follow);
+              if (!follow) {
+                requestAnimationFrame(scrollToBottom);
+              }
+            }}
+            title={follow ? "Auto-scroll on" : "Auto-scroll off"}
+          >
+            <ArrowDownToLine
+              size={14}
+              className={follow ? "text-primary" : "text-muted-foreground"}
+            />
+          </Button>
 
-        <Button
-          variant="ghost"
-          size="sm"
-          iconOnly
-          onClick={fetchLogs}
-          loading={loading}
-          title="Refresh logs"
-        >
-          {!loading && <RotateCw size={14} />}
-        </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            onClick={fetchLogs}
+            loading={loading}
+            title="Refresh logs"
+          >
+            {!loading && <RotateCw size={14} />}
+          </Button>
 
-        <Button
-          variant="ghost"
-          size="sm"
-          iconOnly
-          onClick={handleDownload}
-          title="Download logs"
-        >
-          <Download size={14} />
-        </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            onClick={handleDownload}
+            title="Download logs"
+          >
+            <Download size={14} />
+          </Button>
 
-        <Button
-          variant="ghost"
-          size="sm"
-          iconOnly
-          onClick={handleClear}
-          title="Clear display"
-        >
-          <X size={14} />
-        </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            onClick={handleClear}
+            title="Clear display"
+          >
+            <X size={14} />
+          </Button>
 
-        {searchQuery && (
-          <Badge variant="secondary" className="text-xs">
-            {displayedLines.filter((l) => l.trim()).length} matches
-          </Badge>
-        )}
+          {searchQuery && (
+            <Badge variant="secondary" className="text-xs whitespace-nowrap">
+              {displayedLines.filter((l) => l.trim()).length} matches
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* Log output */}
