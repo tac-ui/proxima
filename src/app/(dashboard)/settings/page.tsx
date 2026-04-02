@@ -751,7 +751,7 @@ export default function SettingsPage() {
                   </div>
                   {/* Domain filter display / edit */}
                   <div className="flex items-start gap-2">
-                    <Globe size={14} className="text-muted-foreground mt-0.5 shrink-0" />
+                    <Globe size={14} className="text-muted-foreground mt-1.5 shrink-0" />
                     {editingDomainFilterId === ch.id ? (
                       <div className="flex-1 space-y-2">
                         <div className="flex flex-wrap gap-1.5">
@@ -772,7 +772,7 @@ export default function SettingsPage() {
                             );
                           })}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex justify-end gap-2">
                           <Button variant="ghost" size="sm" onClick={() => { setEditingDomainFilterId(null); loadNotifChannels(); }}>Cancel</Button>
                           <Button variant="primary" size="sm" onClick={() => { handleUpdateDomainFilter(ch.id, ch.domainFilter); setEditingDomainFilterId(null); }}>Save</Button>
                         </div>
