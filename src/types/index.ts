@@ -263,6 +263,7 @@ export interface RepositoryInfo {
   hookApiKey: string | null;
   domainConnection: DomainConnection | null;
   domainConnections: DomainConnection[];
+  sshKeyId: number | null;
 }
 
 export interface WebhookLog {
@@ -398,4 +399,84 @@ export interface CloudflaredStatus {
   containerId?: string;
   error?: string;
   logs?: string;
+}
+
+// === OpenClaw Types ===
+export interface OpenClawModels {
+  // Core providers
+  openaiApiKey?: string;
+  anthropicApiKey?: string;
+  geminiApiKey?: string;
+  openrouterApiKey?: string;
+  // Additional providers
+  deepseekApiKey?: string;
+  xaiApiKey?: string;
+  groqApiKey?: string;
+  mistralApiKey?: string;
+  fireworksApiKey?: string;
+  perplexityApiKey?: string;
+  // Ollama (local)
+  ollamaBaseUrl?: string;
+  // Azure OpenAI
+  azureOpenaiApiKey?: string;
+  azureOpenaiEndpoint?: string;
+  // Cloudflare AI Gateway
+  cloudflareAiGwApiKey?: string;
+  cloudflareAccountId?: string;
+  cloudflareGatewayId?: string;
+}
+
+export interface OpenClawSettings {
+  enabled: boolean;
+  gatewayToken: string;
+  gatewayPort: number;
+  image: string;
+  models: OpenClawModels;
+  sshKeyId?: number | null;
+}
+
+export interface OpenClawStatus {
+  state: "running" | "stopped" | "not_found" | "restarting" | "error";
+  containerId?: string;
+  error?: string;
+  logs?: string;
+  gatewayUrl?: string;
+}
+
+// === OpenClaw Gateway Types ===
+export interface OpenClawSession {
+  key: string;
+  label?: string;
+  active: boolean;
+  lastActivityAt?: number;
+  modelRef?: string;
+  thinkingLevel?: string;
+}
+
+export interface OpenClawMessage {
+  id?: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp?: number;
+}
+
+export interface OpenClawChannel {
+  type: string;
+  status: "connected" | "disconnected" | "error";
+  name?: string;
+  lastSeen?: number;
+}
+
+export interface OpenClawUsage {
+  totalTokens: number;
+  totalCost: number;
+  sessionsCount: number;
+}
+
+export interface OpenClawChatEvent {
+  runId: string;
+  sessionKey: string;
+  state: "delta" | "final" | "aborted" | "error";
+  message?: { role: string; content: string };
+  errorMessage?: string;
 }

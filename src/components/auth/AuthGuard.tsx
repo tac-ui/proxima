@@ -14,6 +14,14 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { appName, logoUrl } = useBranding();
   const router = useRouter();
 
+  // Timeout for loading state
+  const [timedOut, setTimedOut] = useState(false);
+  useEffect(() => {
+    if (!loading) { setTimedOut(false); return; }
+    const timer = setTimeout(() => setTimedOut(true), 15000);
+    return () => clearTimeout(timer);
+  }, [loading]);
+
   // Track branding changes for crossfade
   const [displayLogo, setDisplayLogo] = useState(logoUrl);
   const [displayName, setDisplayName] = useState(appName);
@@ -73,14 +81,27 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
           >
             {displayName}
           </h1>
-          <p className="text-sm text-muted-foreground mb-8">
-            {!connected ? "Connecting to server..." : "Loading..."}
-          </p>
-
-          {/* Loading indicator */}
-          <div className="w-56">
-            <Indicator />
-          </div>
+          {timedOut ? (
+            <div className="text-center space-y-4">
+              <p className="text-sm text-error mb-2">Unable to connect to server</p>
+              <p className="text-xs text-muted-foreground max-w-xs">Check that the Proxima server is running and accessible.</p>
+              <button
+                className="text-sm font-medium text-point hover:underline"
+                onClick={() => { setTimedOut(false); window.location.reload(); }}
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground mb-8">
+                {!connected ? "Connecting to server..." : "Loading..."}
+              </p>
+              <div className="w-56">
+                <Indicator />
+              </div>
+            </>
+          )}
         </div>
       </div>
     );

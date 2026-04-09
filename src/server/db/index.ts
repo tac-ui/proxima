@@ -319,6 +319,16 @@ function migrateSchema(sqlite: Database.Database): void {
       throw err;
     }
   }
+
+  // v13 → v14: add ssh_key_id column to repositories
+  try {
+    sqlite.exec(`ALTER TABLE repositories ADD COLUMN ssh_key_id INTEGER`);
+    logger.info("db", "Migration: added ssh_key_id column to repositories table");
+  } catch (err) {
+    if (err instanceof Error && !err.message.includes("duplicate column")) {
+      throw err;
+    }
+  }
 }
 
 export function getDb(): ReturnType<typeof drizzle<typeof schema>> {

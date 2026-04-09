@@ -370,8 +370,8 @@ export default function ProjectDetailPage() {
     if (!repo) return;
     const ok = await confirm({
       title: "Delete Project",
-      message: `Are you sure you want to delete "${repo.name}"? This only removes it from Proxima — the files on disk are not deleted.`,
-      confirmLabel: "Delete",
+      message: `Are you sure you want to delete "${repo.name}"? This will permanently remove the project and all its files from disk. This action cannot be undone.`,
+      confirmLabel: "Delete Project",
       variant: "destructive",
     });
     if (!ok) return;

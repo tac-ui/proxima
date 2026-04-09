@@ -29,7 +29,7 @@ export async function POST(
     const gitService = new GitService(config.stacksDir);
 
     logger.info("repo", `Pulling repo id=${repoId} path=${repo.path}`);
-    const message = await gitService.pullRepo(repo.path, repo.branch, repo.repoUrl, findSshKeyPath());
+    const message = await gitService.pullRepo(repo.path, repo.branch, repo.repoUrl, findSshKeyPath(repoId));
     logger.info("repo", `Pull result: ${message}`);
 
     logAudit({ userId: auth.userId, username: auth.username, action: "execute", category: "repo", targetType: "repo", targetName: repo.name, details: { operation: "pull" }, ipAddress: getClientIp(req) });

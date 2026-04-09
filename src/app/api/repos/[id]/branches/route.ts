@@ -25,7 +25,7 @@ export async function GET(
 
     const config = getConfig();
     const gitService = new GitService(config.stacksDir);
-    const branches = await gitService.listRemoteBranches(repo.path, repo.repoUrl, findSshKeyPath());
+    const branches = await gitService.listRemoteBranches(repo.path, repo.repoUrl, findSshKeyPath(repoId));
 
     return ok({ branches, current: repo.branch });
   } catch (err) {

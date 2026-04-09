@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import { useConfirm } from "@/hooks/useConfirm";
 import { useAuth } from "@/contexts/AuthContext";
-import { EmptyState, Button, pageEntrance } from "@tac-ui/web";
+import { EmptyState, Button, pageEntrance, useToast } from "@tac-ui/web";
 import { Plus, X, SquareTerminal, Circle } from "@tac-ui/icon";
 
 const Terminal = dynamic(
@@ -24,6 +24,7 @@ export default function TerminalPage() {
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const confirm = useConfirm();
+  const { toast } = useToast();
   const { isManager } = useAuth();
   const exitTimers = useRef<Record<string, NodeJS.Timeout>>({});
 
@@ -50,11 +51,15 @@ export default function TerminalPage() {
         const newTab = { id: res.data.terminalId, connected: false };
         setTabs((prev) => [...prev, newTab]);
         setActiveTab(res.data.terminalId);
+      } else {
+        toast(res.error ?? "Failed to create terminal", { variant: "error" });
       }
+    } catch {
+      toast("Failed to create terminal session", { variant: "error" });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   const closeTab = useCallback(
     async (id: string) => {

@@ -3,11 +3,14 @@ import { requireAuth, requireManager, errorResponse, ok } from "../../_lib/auth"
 import { ensureDb } from "../../_lib/db";
 import { getDb, schema } from "@server/db/index";
 import { eq } from "drizzle-orm";
+import fs from "node:fs";
+import path from "node:path";
 import { logger } from "@server/lib/logger";
 import { logAudit, getClientIp } from "@server/services/audit";
 import { toRepoInfo } from "../../_lib/repo-utils";
 import { ScriptService } from "@server/services/script";
 import { create as createProxyHost, remove as removeProxyHost, update as updateProxyHost } from "@server/services/proxy-host";
+import { getConfig } from "@server/lib/config";
 import type { DomainConnection } from "@/types";
 
 export async function GET(
@@ -143,6 +146,22 @@ export async function DELETE(
 
     // Clean up scripts directory
     try { ScriptService.deleteProjectDir(repo.name); } catch { /* ignore */ }
+
+    // Remove project files from stacks directory
+    if (repo.path && fs.existsSync(repo.path)) {
+      const config = getConfig();
+      const resolved = path.resolve(repo.path);
+      const stacksResolved = path.resolve(config.stacksDir);
+      // Safety: only delete if path is inside stacks directory
+      if (resolved.startsWith(stacksResolved + path.sep)) {
+        try {
+          fs.rmSync(resolved, { recursive: true, force: true });
+          logger.info("repo", `Removed project directory: ${resolved}`);
+        } catch (err) {
+          logger.warn("repo", `Failed to remove project directory: ${err}`);
+        }
+      }
+    }
 
     logger.info("repo", `Deleted repo id=${repoId}`);
 

@@ -13,6 +13,7 @@ import { getCloudflaredStatus, startCloudflared, checkAndFixNetwork } from "./sr
 import { syncAutoManaged } from "./src/server/services/managed-service";
 import { autoStartScripts } from "./src/server/services/auto-start";
 import { startHealthCheckScheduler } from "./src/server/services/health-check";
+import { autoStartOpenClaw, shutdownOpenClaw } from "./src/server/services/openclaw";
 
 const dev = process.env.NODE_ENV !== "production";
 
@@ -48,6 +49,9 @@ async function main() {
 
   // Start scheduled health checks
   startHealthCheckScheduler();
+
+  // Auto-start OpenClaw gateway if enabled
+  autoStartOpenClaw();
 
   // Start Docker event watcher for auto-discovery (debounced to avoid rapid re-renders)
   try {
@@ -114,6 +118,16 @@ async function main() {
   httpServer.listen(config.port, config.hostname, () => {
     logger.info("server", `Listening on http://${config.hostname}:${config.port}`);
   });
+
+  // Graceful shutdown
+  const shutdown = async (signal: string) => {
+    logger.info("server", `Received ${signal}, shutting down...`);
+    await shutdownOpenClaw();
+    httpServer.close();
+    process.exit(0);
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
 main().catch((err) => {

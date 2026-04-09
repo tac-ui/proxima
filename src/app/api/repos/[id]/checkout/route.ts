@@ -34,7 +34,7 @@ export async function POST(
     const gitService = new GitService(config.stacksDir);
 
     logger.info("repo", `Checkout branch=${branch} for repo id=${repoId}`);
-    const message = await gitService.checkoutBranch(repo.path, branch, repo.repoUrl, findSshKeyPath());
+    const message = await gitService.checkoutBranch(repo.path, branch, repo.repoUrl, findSshKeyPath(repoId));
 
     // Update branch in DB
     db.update(schema.repositories)

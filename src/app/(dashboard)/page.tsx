@@ -148,11 +148,11 @@ export default function DashboardPage() {
     api.getAnalyticsSummary().then((res) => {
       if (res.ok && res.data) setTrafficSummary(res.data);
       setTrafficLoading(false);
-    });
+    }).catch(() => setTrafficLoading(false));
     api.getRepos().then((res) => {
       if (res.ok && res.data) setRepos(res.data);
       setReposLoading(false);
-    });
+    }).catch(() => setReposLoading(false));
   }, [connected]);
 
   const runningStacks = stackList.filter((s) => s.status === "running").length;

@@ -14,8 +14,8 @@ export async function POST(req: NextRequest) {
     ensureDb();
     const auth = requireManager(req);
 
-    const body = await req.json() as GitCloneRequest;
-    const { repoUrl, branch, sshKeyPath, targetDir } = body;
+    const body = await req.json() as GitCloneRequest & { sshKeyId?: number };
+    const { repoUrl, branch, sshKeyPath, targetDir, sshKeyId } = body;
 
     if (!repoUrl || !targetDir) {
       throw new Error("repoUrl and targetDir are required");
@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
         path: result.path,
         branch: branch ?? "main",
         scripts: "[]",
+        sshKeyId: sshKeyId ?? null,
       })
       .onConflictDoNothing()
       .run();

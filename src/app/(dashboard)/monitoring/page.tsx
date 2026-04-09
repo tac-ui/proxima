@@ -13,7 +13,7 @@ import {
   SegmentController,
   pageEntrance,
 } from "@tac-ui/web";
-import { Activity, Cpu, HardDrive, MemoryStick, RefreshCw, Server } from "@tac-ui/icon";
+import { Activity, AlertCircle, Cpu, HardDrive, MemoryStick, RefreshCw, Server } from "@tac-ui/icon";
 import { LoadingIndicator } from "@/components/shared/LoadingIndicator";
 import type { SystemMetrics, MetricsHistoryPoint } from "@/types";
 
@@ -74,6 +74,7 @@ export default function MonitoringPage() {
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [metricsError, setMetricsError] = useState(false);
   const [historyHours, setHistoryHours] = useState("1");
   const [historyPoints, setHistoryPoints] = useState<MetricsHistoryPoint[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -83,9 +84,16 @@ export default function MonitoringPage() {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
 
-    const res = await api.getSystemMetrics();
-    if (res.ok && res.data) {
-      setMetrics(res.data);
+    try {
+      const res = await api.getSystemMetrics();
+      if (res.ok && res.data) {
+        setMetrics(res.data);
+        setMetricsError(false);
+      } else {
+        setMetricsError(true);
+      }
+    } catch {
+      setMetricsError(true);
     }
 
     if (isRefresh) setRefreshing(false);
@@ -374,6 +382,23 @@ export default function MonitoringPage() {
             )}
           </div>
         </>
+      ) : metricsError ? (
+        <Card>
+          <CardContent>
+            <div className="flex flex-col items-center justify-center py-12 space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-error/15 flex items-center justify-center">
+                <AlertCircle size={24} className="text-error" />
+              </div>
+              <div className="text-center space-y-1">
+                <p className="text-sm font-semibold">Failed to load metrics</p>
+                <p className="text-xs text-muted-foreground">Could not connect to the monitoring service. Check if the server is running.</p>
+              </div>
+              <Button variant="secondary" size="sm" onClick={() => fetchMetrics()} leftIcon={<RefreshCw size={14} />}>
+                Retry
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       ) : null}
     </motion.div>
   );

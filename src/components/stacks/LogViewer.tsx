@@ -246,8 +246,8 @@ export function LogViewer({ stackName, containers }: LogViewerProps) {
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center gap-2 mb-2 flex-shrink-0 min-w-0">
-        <div className="relative flex-1 max-w-xs min-w-0">
+      <div className="flex flex-wrap items-center gap-2 mb-2 flex-shrink-0 min-w-0">
+        <div className="relative flex-1 min-w-[140px] max-w-xs">
           <Search
             size={14}
             className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"

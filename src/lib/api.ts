@@ -1,4 +1,4 @@
-import type { ApiResponse, StackListItem, Stack, ProxyHost, GitCloneRequest, DiscoveredService, SshKeyInfo, RepositoryInfo, ListeningProcess, AnalyticsData, HostAnalyticsSummary, CloudflareSettingsResponse, CloudflareSettingsPayload, CloudflareTestResult, CloudflareZone, CloudflareTunnelSettingsResponse, CloudflareTunnelSettingsPayload, CloudflaredStatus, User, UserRole, ManagedService, ManagedServiceType, DiscoveredServiceWithManaged, ListeningProcessWithManaged, AuditLogResponse, SystemMetrics, MetricsHistoryResponse, WebhookLog } from "@/types";
+import type { ApiResponse, StackListItem, Stack, ProxyHost, GitCloneRequest, DiscoveredService, SshKeyInfo, RepositoryInfo, ListeningProcess, AnalyticsData, HostAnalyticsSummary, CloudflareSettingsResponse, CloudflareSettingsPayload, CloudflareTestResult, CloudflareZone, CloudflareTunnelSettingsResponse, CloudflareTunnelSettingsPayload, CloudflaredStatus, User, UserRole, ManagedService, ManagedServiceType, DiscoveredServiceWithManaged, ListeningProcessWithManaged, AuditLogResponse, SystemMetrics, MetricsHistoryResponse, WebhookLog, OpenClawSettings, OpenClawStatus } from "@/types";
 
 const TOKEN_KEY = "proxima_auth_token";
 
@@ -232,4 +232,11 @@ export const api = {
   getWebhookConfig: (id: number) => request<{ hookEnabled: boolean; hookApiKey: string | null }>("GET", `/api/repos/${id}/webhook`),
   updateWebhookConfig: (id: number, body: { enabled: boolean; apiKey?: string }) => request<{ hookEnabled: boolean; hookApiKey: string }>("PUT", `/api/repos/${id}/webhook`, body),
   getWebhookLogs: (id: number, page?: number, limit?: number) => request<{ logs: WebhookLog[]; total: number }>("GET", `/api/repos/${id}/webhook/logs?page=${page ?? 1}&limit=${limit ?? 20}`),
+
+  // OpenClaw
+  getOpenClawToken: () => request<{ token: string; port: number }>("GET", "/api/settings/openclaw/token"),
+  getOpenClawSettings: () => request<OpenClawSettings>("GET", "/api/settings/openclaw"),
+  updateOpenClawSettings: (data: Partial<OpenClawSettings>) => request<OpenClawSettings>("PUT", "/api/settings/openclaw", data),
+  getOpenClawStatus: () => request<OpenClawStatus>("GET", "/api/settings/openclaw/status"),
+  openclawAction: (action: "start" | "stop" | "restart") => request<{ success: boolean; error?: string }>("POST", "/api/settings/openclaw/action", { action }),
 };

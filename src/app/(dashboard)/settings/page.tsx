@@ -2,6 +2,7 @@
 
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { useApiContext } from "@/contexts/ApiContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBranding } from "@/contexts/BrandingContext";
@@ -18,7 +19,7 @@ import {
   useToast,
   pageEntrance,
 } from "@tac-ui/web";
-import { Sun, Moon, Wifi, Info, Palette, Upload, Trash2, Bell, Plus, Send, Globe, X } from "@tac-ui/icon";
+import { Sun, Moon, Wifi, Info, Palette, Upload, Trash2, Bell, Plus, Send, Globe, X, BrainCircuit } from "@tac-ui/icon";
 import packageJson from "../../../../package.json";
 
 export default function SettingsPage() {
@@ -63,6 +64,11 @@ export default function SettingsPage() {
   const [tgBotInfo, setTgBotInfo] = useState<{ name: string; username: string } | null>(null);
   const [tgChats, setTgChats] = useState<{ chatId: string; title: string; type: string; lastMessage?: string; lastMessageDate?: string }[]>([]);
 
+  // OpenClaw state
+  const [ocEnabled, setOcEnabled] = useState(false);
+  const [ocStatus, setOcStatus] = useState<{ state: string }>({ state: "not_found" });
+  const [ocSaving, setOcSaving] = useState(false);
+
   useEffect(() => {
     setBrandAppName(appName);
     setBrandLogoUrl(logoUrl);
@@ -100,6 +106,22 @@ export default function SettingsPage() {
   useEffect(() => {
     if (isManager) loadNotifChannels();
   }, [isManager, loadNotifChannels]);
+
+  // Load OpenClaw status
+  const loadOpenClaw = useCallback(async () => {
+    try {
+      const [settingsRes, statusRes] = await Promise.all([
+        api.getOpenClawSettings(),
+        api.getOpenClawStatus(),
+      ]);
+      if (settingsRes.ok && settingsRes.data) setOcEnabled(settingsRes.data.enabled);
+      if (statusRes.ok && statusRes.data) setOcStatus(statusRes.data);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (isManager) loadOpenClaw();
+  }, [isManager, loadOpenClaw]);
 
   const handleAddChannel = async () => {
     setAddingChannel(true);
@@ -566,15 +588,17 @@ export default function SettingsPage() {
       {/* Notifications (manager+) */}
       {isManager && <Card>
         <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-point/15 flex items-center justify-center">
-              <Bell size={18} className="text-point" />
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="w-9 h-9 rounded-xl bg-point/15 flex items-center justify-center shrink-0">
+                <Bell size={18} className="text-point" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold">Notifications</h2>
+                <p className="text-xs text-muted-foreground">Configure Slack and Telegram channels</p>
+              </div>
             </div>
-            <div className="flex-1">
-              <h2 className="text-sm font-semibold">Notifications</h2>
-              <p className="text-xs text-muted-foreground">Configure Slack and Telegram notification channels</p>
-            </div>
-            <Button variant="secondary" size="sm" onClick={() => setShowAddChannel(v => !v)} leftIcon={<Plus size={14} />}>
+            <Button variant="secondary" size="sm" onClick={() => setShowAddChannel(v => !v)} leftIcon={<Plus size={14} />} className="self-start sm:self-auto">
               Add Channel
             </Button>
           </div>
@@ -611,21 +635,18 @@ export default function SettingsPage() {
                   />
                 ) : (
                   <div className="space-y-3">
-                    <div className="flex gap-2 items-end">
-                      <div className="flex-1">
-                        <Input
-                          label="Bot Token"
-                          value={newChannelBotToken}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setNewChannelBotToken(e.target.value); setTgBotInfo(null); setTgChats([]); setNewChannelChatId(""); }}
-                          placeholder="123456:ABC-DEF..."
-                        />
-                      </div>
+                    <div className="space-y-2">
+                      <Input
+                        label="Bot Token"
+                        value={newChannelBotToken}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setNewChannelBotToken(e.target.value); setTgBotInfo(null); setTgChats([]); setNewChannelChatId(""); }}
+                        placeholder="123456:ABC-DEF..."
+                      />
                       <Button
                         variant="secondary"
-                        size="md"
+                        size="sm"
                         disabled={!newChannelBotToken || tgDiscovering}
                         onClick={handleDiscoverTelegram}
-                        className="shrink-0"
                       >
                         {tgDiscovering ? "Checking..." : "Discover Chats"}
                       </Button>
@@ -721,9 +742,9 @@ export default function SettingsPage() {
             ) : (
               notifChannels.map((ch) => (
                 <div key={ch.id} className="border border-border rounded-lg p-3 space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
                     <div className="flex items-center gap-3 min-w-0">
-                      <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted">{ch.type === "slack" ? "Slack" : "Telegram"}</span>
+                      <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted shrink-0">{ch.type === "slack" ? "Slack" : "Telegram"}</span>
                       <span className="text-sm font-medium truncate">{ch.name}</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -745,6 +766,8 @@ export default function SettingsPage() {
                         size="sm"
                         onClick={() => handleDeleteChannel(ch.id)}
                         leftIcon={<Trash2 size={14} />}
+                        iconOnly
+                        aria-label={`Delete ${ch.name}`}
                       >
                       </Button>
                     </div>
@@ -791,6 +814,58 @@ export default function SettingsPage() {
                   </div>
                 </div>
               ))
+            )}
+          </div>
+        </CardContent>
+      </Card>}
+
+      {/* OpenClaw (manager+) */}
+      {isManager && <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-point/15 flex items-center justify-center">
+              <BrainCircuit size={18} className="text-point" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold">OpenClaw</h2>
+                <span className={`w-1.5 h-1.5 rounded-full ${ocStatus.state === "running" ? "bg-success" : ocStatus.state === "error" ? "bg-error" : "bg-muted-foreground"}`} />
+              </div>
+              <p className="text-xs text-muted-foreground">AI assistant with multi-channel support</p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Enable OpenClaw</p>
+                <p className="text-xs text-muted-foreground">Personal AI assistant gateway</p>
+              </div>
+              <Switch
+                checked={ocEnabled}
+                onChange={async () => {
+                  const next = !ocEnabled;
+                  setOcEnabled(next);
+                  setOcSaving(true);
+                  const res = await api.updateOpenClawSettings({ enabled: next });
+                  if (res.ok) {
+                    toast(next ? "OpenClaw enabled" : "OpenClaw disabled", { variant: "success" });
+                    setTimeout(() => loadOpenClaw(), 2000);
+                  } else {
+                    toast(res.error ?? "Failed", { variant: "error" });
+                    setOcEnabled(!next);
+                  }
+                  setOcSaving(false);
+                }}
+              />
+            </div>
+            {ocEnabled && (
+              <Link href="/openclaw">
+                <Button variant="secondary" size="sm" leftIcon={<BrainCircuit size={14} />}>
+                  Open Dashboard
+                </Button>
+              </Link>
             )}
           </div>
         </CardContent>

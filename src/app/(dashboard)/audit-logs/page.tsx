@@ -17,6 +17,7 @@ import {
   fadeVariants,
   tacSpring,
   Indicator,
+  useToast,
 } from "@tac-ui/web";
 import { ScrollText, ShieldAlert, ChevronLeft, ChevronRight } from "@tac-ui/icon";
 
@@ -92,6 +93,7 @@ function formatTime(iso: string): string {
 
 export default function AuditLogsPage() {
   const { isAdmin } = useAuth();
+  const { toast } = useToast();
 
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [total, setTotal] = useState(0);
@@ -124,6 +126,7 @@ export default function AuditLogsPage() {
       }
     } catch {
       setLoaded(true);
+      toast("Failed to load audit logs", { variant: "error" });
     }
   }, [page, category, dateFilter]);
 

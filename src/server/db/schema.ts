@@ -72,6 +72,7 @@ export const repositories = sqliteTable("repositories", {
     hookEnabled: integer("hook_enabled", {mode: "boolean"}).notNull().default(false),
     hookApiKey: text("hook_api_key"),
     domainConnection: text("domain_connection"),
+    sshKeyId: integer("ssh_key_id"),
     createdAt: text("created_at")
         .notNull()
         .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
