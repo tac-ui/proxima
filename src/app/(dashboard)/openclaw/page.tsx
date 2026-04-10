@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useOpenClaw } from "@/contexts/OpenClawContext";
 import { api } from "@/lib/api";
 import { Card, CardHeader, CardContent, Button, Badge, Input, SensitiveInput, Select, pageEntrance, useToast } from "@tac-ui/web";
-import { BrainCircuit, Settings, Wifi, Key, FileText } from "@tac-ui/icon";
+import { BrainCircuit, Settings, Wifi, Key, FileText, KeyRound } from "@tac-ui/icon";
 import { useConfirm } from "@/hooks/useConfirm";
 import { SessionList } from "@/components/openclaw/SessionList";
 import { ChannelSetup } from "@/components/openclaw/ChannelSetup";
@@ -14,6 +14,7 @@ import { ModelManager } from "@/components/openclaw/ModelManager";
 import { ModelSelector } from "@/components/openclaw/ModelSelector";
 import { ConfigEditor } from "@/components/openclaw/ConfigEditor";
 import { FileManager } from "@/components/openclaw/FileManager";
+import { TokenProviderManager } from "@/components/openclaw/TokenProviderManager";
 
 // ---------------------------------------------------------------------------
 // Onboarding
@@ -248,6 +249,26 @@ export default function OpenClawPage() {
           </CardHeader>
           <CardContent>
             <ModelManager settings={settings} onSaved={refreshSettings} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Token Providers */}
+      {isManager && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center">
+                <KeyRound size={18} className="text-muted-foreground" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold">Token Providers</h2>
+                <p className="text-xs text-muted-foreground">Custom token providers (OAuth, openai-codex, etc.)</p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <TokenProviderManager />
           </CardContent>
         </Card>
       )}

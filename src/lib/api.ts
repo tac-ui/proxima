@@ -239,6 +239,9 @@ export const api = {
   // OpenClaw
   getOpenClawToken: () => request<{ token: string; port: number }>("GET", "/api/settings/openclaw/token"),
   getOpenClawImportChannels: () => request<{ type: string; name: string; config: Record<string, string> }[]>("GET", "/api/settings/openclaw/import-channels"),
+  getOpenClawAuthProfiles: () => request<{ profileId: string; provider: string; hasToken: boolean; expires?: number; displayName?: string }[]>("GET", "/api/settings/openclaw/auth-profiles"),
+  addOpenClawAuthProfile: (data: { provider: string; profileId?: string; token: string; expiresInDays?: number; displayName?: string }) => request<{ profileId: string; provider: string }>("POST", "/api/settings/openclaw/auth-profiles", data),
+  removeOpenClawAuthProfile: (profileId: string) => request("DELETE", "/api/settings/openclaw/auth-profiles", { profileId }),
   getOpenClawFiles: () => request<{ name: string; size: number }[]>("GET", "/api/settings/openclaw/files"),
   readOpenClawFile: (name: string) => request<{ name: string; content: string }>("PUT", "/api/settings/openclaw/files", { name }),
   writeOpenClawFile: (name: string, content: string) => request<{ name: string }>("POST", "/api/settings/openclaw/files", { name, content }),

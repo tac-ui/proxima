@@ -102,6 +102,105 @@ function getStateDir(): string {
 }
 
 // ---------------------------------------------------------------------------
+// Auth profile management (custom token providers)
+// Writes to ~/.openclaw/agents/main/agent/auth-profiles.json
+// ---------------------------------------------------------------------------
+
+interface AuthProfileStore {
+  version: number;
+  profiles: Record<string, AuthProfileCredential>;
+}
+
+interface AuthProfileCredential {
+  type: "token";
+  provider: string;
+  token?: string;
+  expires?: number;
+  displayName?: string;
+}
+
+function getAuthProfilesPath(): string {
+  const stateDir = getStateDir();
+  const agentDir = path.join(stateDir, "agents", "main", "agent");
+  if (!fs.existsSync(agentDir)) fs.mkdirSync(agentDir, { recursive: true });
+  return path.join(agentDir, "auth-profiles.json");
+}
+
+function normalizeProviderId(raw: string): string {
+  return raw.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function loadAuthProfiles(): AuthProfileStore {
+  const filePath = getAuthProfilesPath();
+  if (!fs.existsSync(filePath)) return { version: 1, profiles: {} };
+  try {
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && parsed.profiles) return parsed as AuthProfileStore;
+  } catch (err) {
+    logger.warn("openclaw", `Failed to parse auth-profiles.json: ${err}`);
+  }
+  return { version: 1, profiles: {} };
+}
+
+function saveAuthProfiles(store: AuthProfileStore): void {
+  fs.writeFileSync(getAuthProfilesPath(), JSON.stringify(store, null, 2), "utf-8");
+}
+
+export function listAuthProfiles(): { profileId: string; provider: string; hasToken: boolean; expires?: number; displayName?: string }[] {
+  const store = loadAuthProfiles();
+  return Object.entries(store.profiles).map(([profileId, cred]) => ({
+    profileId,
+    provider: cred.provider,
+    hasToken: !!cred.token,
+    expires: cred.expires,
+    displayName: cred.displayName,
+  }));
+}
+
+export function upsertAuthProfile(params: {
+  provider: string;
+  profileId?: string;
+  token: string;
+  expiresInDays?: number;
+  displayName?: string;
+}): { profileId: string; provider: string } {
+  const provider = normalizeProviderId(params.provider);
+  if (!provider) throw new Error("Invalid provider id");
+  if (!params.token?.trim()) throw new Error("Token is required");
+
+  const profileId = params.profileId?.trim() || `${provider}:manual`;
+  const store = loadAuthProfiles();
+
+  const credential: AuthProfileCredential = {
+    type: "token",
+    provider,
+    token: params.token.trim(),
+  };
+  if (params.expiresInDays && params.expiresInDays > 0) {
+    credential.expires = Date.now() + params.expiresInDays * 24 * 60 * 60 * 1000;
+  }
+  if (params.displayName?.trim()) {
+    credential.displayName = params.displayName.trim();
+  }
+
+  store.profiles[profileId] = credential;
+  saveAuthProfiles(store);
+  logger.info("openclaw", `Auth profile saved: ${profileId} (${provider})`);
+
+  return { profileId, provider };
+}
+
+export function removeAuthProfile(profileId: string): void {
+  const store = loadAuthProfiles();
+  if (store.profiles[profileId]) {
+    delete store.profiles[profileId];
+    saveAuthProfiles(store);
+    logger.info("openclaw", `Auth profile removed: ${profileId}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Process status
 // ---------------------------------------------------------------------------
 

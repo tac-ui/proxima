@@ -436,6 +436,14 @@ export interface OpenClawSettings {
   sshKeyId?: number | null;
 }
 
+export interface OpenClawAuthProfile {
+  profileId: string;
+  provider: string;
+  hasToken: boolean;
+  expires?: number;
+  displayName?: string;
+}
+
 export interface OpenClawStatus {
   state: "running" | "stopped" | "not_found" | "restarting" | "error";
   containerId?: string;
