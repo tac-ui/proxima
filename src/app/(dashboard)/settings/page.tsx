@@ -2,7 +2,6 @@
 
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import Link from "next/link";
 import { useApiContext } from "@/contexts/ApiContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBranding } from "@/contexts/BrandingContext";
@@ -19,7 +18,7 @@ import {
   useToast,
   pageEntrance,
 } from "@tac-ui/web";
-import { Sun, Moon, Wifi, Info, Palette, Upload, Trash2, Bell, Plus, Send, Globe, X, BrainCircuit } from "@tac-ui/icon";
+import { Sun, Moon, Wifi, Info, Palette, Upload, Trash2, Bell, Plus, Send, Globe, X } from "@tac-ui/icon";
 import packageJson from "../../../../package.json";
 
 export default function SettingsPage() {
@@ -64,9 +63,6 @@ export default function SettingsPage() {
   const [tgBotInfo, setTgBotInfo] = useState<{ name: string; username: string } | null>(null);
   const [tgChats, setTgChats] = useState<{ chatId: string; title: string; type: string; lastMessage?: string; lastMessageDate?: string }[]>([]);
 
-  // OpenClaw state
-  const [ocEnabled, setOcEnabled] = useState(false);
-  const [ocStatus, setOcStatus] = useState<{ state: string }>({ state: "not_found" });
 
   useEffect(() => {
     setBrandAppName(appName);
@@ -106,21 +102,6 @@ export default function SettingsPage() {
     if (isManager) loadNotifChannels();
   }, [isManager, loadNotifChannels]);
 
-  // Load OpenClaw status
-  const loadOpenClaw = useCallback(async () => {
-    try {
-      const [settingsRes, statusRes] = await Promise.all([
-        api.getOpenClawSettings(),
-        api.getOpenClawStatus(),
-      ]);
-      if (settingsRes.ok && settingsRes.data) setOcEnabled(settingsRes.data.enabled);
-      if (statusRes.ok && statusRes.data) setOcStatus(statusRes.data);
-    } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => {
-    if (isManager) loadOpenClaw();
-  }, [isManager, loadOpenClaw]);
 
   const handleAddChannel = async () => {
     setAddingChannel(true);
@@ -823,31 +804,6 @@ export default function SettingsPage() {
               ))
             )}
           </div>
-        </CardContent>
-      </Card>}
-
-      {/* OpenClaw (manager+) */}
-      {isManager && <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-point/15 flex items-center justify-center">
-              <BrainCircuit size={18} className="text-point" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold">OpenClaw</h2>
-                <span className={`w-1.5 h-1.5 rounded-full ${ocStatus.state === "running" ? "bg-success" : ocStatus.state === "error" ? "bg-error" : "bg-muted-foreground"}`} />
-              </div>
-              <p className="text-xs text-muted-foreground">AI assistant with multi-channel support</p>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Link href="/openclaw">
-            <Button variant="secondary" size="sm" leftIcon={<BrainCircuit size={14} />}>
-              {ocEnabled ? "Open Dashboard" : "Set Up OpenClaw"}
-            </Button>
-          </Link>
         </CardContent>
       </Card>}
 
