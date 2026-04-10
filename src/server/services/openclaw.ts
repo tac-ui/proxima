@@ -123,6 +123,7 @@ function writeGatewayConfig(stateDir: string, opts: { port: number; bind?: strin
   }
 
   const existingGateway = (existing.gateway as Record<string, unknown>) ?? {};
+  const existingControlUi = (existingGateway.controlUi as Record<string, unknown>) ?? {};
   const merged = {
     ...existing,
     gateway: {
@@ -130,6 +131,12 @@ function writeGatewayConfig(stateDir: string, opts: { port: number; bind?: strin
       mode: opts.mode ?? existingGateway.mode ?? "local",
       port: opts.port,
       bind: opts.bind ?? existingGateway.bind ?? "lan",
+      controlUi: {
+        ...existingControlUi,
+        // Accept all origins — Proxima proxies through /api/openclaw/ws
+        // so the client origin varies with the user's Proxima URL.
+        allowedOrigins: ["*"],
+      },
     },
   };
 
@@ -275,6 +282,31 @@ function appendLog(line: string) {
 // Process lifecycle
 // ---------------------------------------------------------------------------
 
+/**
+ * Invoke `openclaw gateway stop` to release a stale lock held by a previous
+ * gateway instance that Proxima has lost track of. Best-effort: always
+ * resolves, even on failure or timeout.
+ */
+function stopStaleGateway(binPath: string, env: NodeJS.ProcessEnv): Promise<void> {
+  return new Promise((resolve) => {
+    try {
+      const proc = fork(binPath, ["gateway", "stop"], {
+        env,
+        stdio: "ignore",
+        detached: false,
+      });
+      const timer = setTimeout(() => {
+        try { proc.kill("SIGKILL"); } catch { /* ignore */ }
+        resolve();
+      }, 5000);
+      proc.on("exit", () => { clearTimeout(timer); resolve(); });
+      proc.on("error", () => { clearTimeout(timer); resolve(); });
+    } catch {
+      resolve();
+    }
+  });
+}
+
 export async function startOpenClaw(): Promise<void> {
   if (gatewayProcess && gatewayProcess.exitCode === null) {
     logger.info("openclaw", "Gateway already running");
@@ -336,6 +368,11 @@ export async function startOpenClaw(): Promise<void> {
 
   // Write gateway config so the binary doesn't bail on "Missing config"
   writeGatewayConfig(stateDir, { port, bind: "lan", mode: "local" });
+
+  // Clean up any stale gateway instance that may be holding the lock file
+  // (e.g. after a Proxima container restart where the prior gateway
+  // detached or was left behind). Best-effort; ignore errors.
+  await stopStaleGateway(binPath, env);
 
   gatewayProcess = fork(binPath, ["gateway", "--bind", "lan", "--port", String(port)], {
     env,

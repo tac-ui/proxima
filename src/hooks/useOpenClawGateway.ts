@@ -136,14 +136,17 @@ export function useOpenClawGateway(): OpenClawGateway {
                 instanceId: nextId(),
               },
               role: "operator",
+              // Mirror CLI_DEFAULT_OPERATOR_SCOPES from the gateway: admin is
+              // required for config.patch, sessions.delete, agents.files.set,
+              // etc. The other scopes don't grant anything admin doesn't
+              // already cover, but listing them keeps parity with the CLI.
               scopes: [
+                "operator.admin",
                 "operator.read",
                 "operator.write",
-                "operator.chat",
-                "operator.sessions",
-                "operator.config",
-                "operator.channels",
-                "operator.logs",
+                "operator.approvals",
+                "operator.pairing",
+                "operator.talk.secrets",
               ],
               caps: ["tool-events"],
               ...(typeof navigator !== "undefined" ? {

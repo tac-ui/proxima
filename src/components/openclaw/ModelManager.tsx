@@ -107,12 +107,11 @@ export function ModelManager({ settings, onSaved }: ModelManagerProps) {
                   </div>
                 ) : (
                   <>
-                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                    <div className="flex-1 min-w-0 flex items-center">
                       <span
                         className={`w-2 h-2 rounded-full shrink-0 ${configured ? "bg-success" : "bg-muted-foreground/40"}`}
                         aria-label={configured ? "Configured" : "Not configured"}
                       />
-                      <span className="text-xs text-muted-foreground">{configured ? "Configured" : "Not configured"}</span>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <Button variant="ghost" size="sm" onClick={() => { if (isMasked(p.key)) setValues(prev => ({ ...prev, [p.key]: "" })); setEditMode(p.key); }}>

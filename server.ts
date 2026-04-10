@@ -112,7 +112,14 @@ async function main() {
         const settings = getOpenClawSettings();
         const port = settings.gatewayPort || 20242;
         logger.info("server", `Proxying OpenClaw WS to ws://127.0.0.1:${port}`);
-        const upstream = new WsClient(`ws://127.0.0.1:${port}`);
+        // Set an explicit Origin header so the gateway's control-UI origin
+        // check accepts the proxied connection (since we tunnel through
+        // Proxima, the browser's original origin is not meaningful here).
+        const upstream = new WsClient(`ws://127.0.0.1:${port}`, {
+          headers: {
+            origin: `http://127.0.0.1:${port}`,
+          },
+        });
 
         wss.handleUpgrade(req, socket, head, (client) => {
           const messageQueue: { data: Buffer | string; isBinary: boolean }[] = [];
