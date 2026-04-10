@@ -39,7 +39,9 @@ export function getOpenClawSettings(): OpenClawSettings {
   const db = getDb();
   const enabled = dbHelpers.getSetting(db, "openclaw:enabled")?.value === "true";
   const gatewayToken = dbHelpers.getSetting(db, "openclaw:gatewayToken")?.value ?? "";
-  const gatewayPort = parseInt(dbHelpers.getSetting(db, "openclaw:gatewayPort")?.value ?? String(DEFAULT_PORT), 10);
+  const savedPort = parseInt(dbHelpers.getSetting(db, "openclaw:gatewayPort")?.value ?? String(DEFAULT_PORT), 10);
+  // Auto-migrate legacy default port (18789 → 20242)
+  const gatewayPort = savedPort === 18789 ? DEFAULT_PORT : savedPort;
   const image = dbHelpers.getSetting(db, "openclaw:image")?.value ?? "";
   let models: OpenClawModels = {};
   try {
@@ -108,6 +110,25 @@ function getStateDir(): string {
     fs.mkdirSync(stateDir, { recursive: true });
   }
   return stateDir;
+}
+
+/** Ensure a minimal openclaw.json exists so gateway can start without 'Missing config' error. */
+function ensureOpenClawConfigFile(stateDir: string, port: number): void {
+  const configPath = path.join(stateDir, "openclaw.json");
+  if (fs.existsSync(configPath)) return;
+  const minimalConfig = {
+    gateway: {
+      mode: "local",
+      port,
+      bind: "lan",
+    },
+  };
+  try {
+    fs.writeFileSync(configPath, JSON.stringify(minimalConfig, null, 2), "utf-8");
+    logger.info("openclaw", `Created minimal config at ${configPath}`);
+  } catch (err) {
+    logger.warn("openclaw", `Failed to create config file: ${err}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -303,7 +324,10 @@ export async function startOpenClaw(): Promise<void> {
   const binPath = getOpenClawBin();
   logger.info("openclaw", `Starting gateway on port ${port} (bin: ${binPath})`);
 
-  gatewayProcess = fork(binPath, ["gateway", "--bind", "lan", "--port", String(port)], {
+  // Ensure a minimal openclaw.json exists so gateway doesn't bail on "Missing config"
+  ensureOpenClawConfigFile(stateDir, port);
+
+  gatewayProcess = fork(binPath, ["gateway", "--bind", "lan", "--port", String(port), "--allow-unconfigured"], {
     env,
     stdio: ["ignore", "pipe", "pipe", "ipc"],
     detached: false,
