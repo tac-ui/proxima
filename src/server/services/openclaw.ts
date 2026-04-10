@@ -112,22 +112,32 @@ function getStateDir(): string {
   return stateDir;
 }
 
-/** Ensure a minimal openclaw.json exists so gateway can start without 'Missing config' error. */
-function ensureOpenClawConfigFile(stateDir: string, port: number): void {
+/** Write/merge gateway config to openclaw.json. Preserves user-edited fields. */
+function writeGatewayConfig(stateDir: string, opts: { port: number; bind?: string; mode?: string }): void {
   const configPath = path.join(stateDir, "openclaw.json");
-  if (fs.existsSync(configPath)) return;
-  const minimalConfig = {
+  let existing: Record<string, unknown> = {};
+  if (fs.existsSync(configPath)) {
+    try {
+      existing = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    } catch { /* malformed, start fresh */ }
+  }
+
+  const existingGateway = (existing.gateway as Record<string, unknown>) ?? {};
+  const merged = {
+    ...existing,
     gateway: {
-      mode: "local",
-      port,
-      bind: "lan",
+      ...existingGateway,
+      mode: opts.mode ?? existingGateway.mode ?? "local",
+      port: opts.port,
+      bind: opts.bind ?? existingGateway.bind ?? "lan",
     },
   };
+
   try {
-    fs.writeFileSync(configPath, JSON.stringify(minimalConfig, null, 2), "utf-8");
-    logger.info("openclaw", `Created minimal config at ${configPath}`);
+    fs.writeFileSync(configPath, JSON.stringify(merged, null, 2), "utf-8");
+    logger.info("openclaw", `Updated gateway config at ${configPath}`);
   } catch (err) {
-    logger.warn("openclaw", `Failed to create config file: ${err}`);
+    logger.warn("openclaw", `Failed to write config file: ${err}`);
   }
 }
 
@@ -324,10 +334,10 @@ export async function startOpenClaw(): Promise<void> {
   const binPath = getOpenClawBin();
   logger.info("openclaw", `Starting gateway on port ${port} (bin: ${binPath})`);
 
-  // Ensure a minimal openclaw.json exists so gateway doesn't bail on "Missing config"
-  ensureOpenClawConfigFile(stateDir, port);
+  // Write gateway config so the binary doesn't bail on "Missing config"
+  writeGatewayConfig(stateDir, { port, bind: "lan", mode: "local" });
 
-  gatewayProcess = fork(binPath, ["gateway", "--bind", "lan", "--port", String(port), "--allow-unconfigured"], {
+  gatewayProcess = fork(binPath, ["gateway", "--bind", "lan", "--port", String(port)], {
     env,
     stdio: ["ignore", "pipe", "pipe", "ipc"],
     detached: false,
