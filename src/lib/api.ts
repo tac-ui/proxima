@@ -100,6 +100,9 @@ export const api = {
   deleteRepoScript: (id: number, slug: string) => request("DELETE", `/api/repos/${id}/scripts/${slug}`),
   runRepoScript: (id: number, slug: string) => request<{ terminalId: string }>("POST", `/api/repos/${id}/scripts/${slug}/run`),
   getRepoCommits: (id: number, limit: number = 10) => request<{ commits: { hash: string; shortHash: string; message: string; author: string; date: string }[] }>("GET", `/api/repos/${id}/commits?limit=${limit}`),
+  getRepoGit: (id: number) => request<{ changes: { staged: string[]; unstaged: string[]; untracked: string[] }; envFiles: { path: string; tracked: boolean }[] }>("GET", `/api/repos/${id}/git`),
+  repoGitCommit: (id: number, message: string) => request<{ message: string }>("POST", `/api/repos/${id}/git`, { action: "commit", message }),
+  repoGitPush: (id: number) => request<{ message: string }>("POST", `/api/repos/${id}/git`, { action: "push" }),
 
   // SSH Keys
   getSshKeys: () => request<SshKeyInfo[]>("GET", "/api/ssh-keys"),

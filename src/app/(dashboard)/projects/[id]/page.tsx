@@ -126,9 +126,14 @@ export default function ProjectDetailPage() {
   const [repoDirty, setRepoDirty] = useState(false);
   const [restoring, setRestoring] = useState(false);
 
-  // Git commits
+  // Git commits & changes
   const [commits, setCommits] = useState<{ hash: string; shortHash: string; message: string; author: string; date: string }[]>([]);
   const [commitsRefreshing, setCommitsRefreshing] = useState(false);
+  const [gitChanges, setGitChanges] = useState<{ staged: string[]; unstaged: string[]; untracked: string[] }>({ staged: [], unstaged: [], untracked: [] });
+  const [envTracking, setEnvTracking] = useState<{ path: string; tracked: boolean }[]>([]);
+  const [commitMsg, setCommitMsg] = useState("");
+  const [committing, setCommitting] = useState(false);
+  const [pushing, setPushing] = useState(false);
 
   // Webhook state
   const [hookEnabled, setHookEnabled] = useState(false);
@@ -170,6 +175,12 @@ export default function ProjectDetailPage() {
           });
           api.getRepoStatus(id).then((sr) => {
             if (sr.ok && sr.data) setRepoDirty(sr.data.dirty);
+          });
+          api.getRepoGit(id).then((gr) => {
+            if (gr.ok && gr.data) {
+              setGitChanges(gr.data.changes);
+              setEnvTracking(gr.data.envFiles);
+            }
           });
         }
       } else {
@@ -1546,7 +1557,7 @@ export default function ProjectDetailPage() {
                   <GitBranch size={14} />
                   <p className="text-sm font-semibold">Git</p>
                 </div>
-                <Button size="sm" variant="ghost" iconOnly onClick={fetchCommits} title="Refresh" aria-label="Refresh">
+                <Button size="sm" variant="ghost" iconOnly onClick={() => { fetchCommits(); fetchRepo(); }} title="Refresh" aria-label="Refresh">
                   <RefreshCw size={12} className={commitsRefreshing ? "animate-spin" : ""} />
                 </Button>
               </div>
@@ -1572,6 +1583,117 @@ export default function ProjectDetailPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Env file tracking warning */}
+                {envTracking.some(e => e.tracked) && (
+                  <div className="text-xs text-warning bg-warning/10 border border-warning/20 rounded-lg px-3 py-2">
+                    <p className="font-medium">Env files tracked by Git</p>
+                    <p className="text-muted-foreground mt-0.5">
+                      {envTracking.filter(e => e.tracked).map(e => e.path).join(", ")} — consider adding to .gitignore
+                    </p>
+                  </div>
+                )}
+
+                {/* Changed files */}
+                {(gitChanges.staged.length > 0 || gitChanges.unstaged.length > 0 || gitChanges.untracked.length > 0) && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Changes</p>
+                    <div className="border border-border rounded-lg divide-y divide-border max-h-48 overflow-y-auto">
+                      {gitChanges.staged.map((f) => (
+                        <div key={`s-${f}`} className="flex items-center gap-2 px-3 py-1.5 text-xs">
+                          <Badge variant="success">staged</Badge>
+                          <span className="font-mono truncate">{f}</span>
+                        </div>
+                      ))}
+                      {gitChanges.unstaged.map((f) => (
+                        <div key={`u-${f}`} className="flex items-center gap-2 px-3 py-1.5 text-xs">
+                          <Badge variant="warning">modified</Badge>
+                          <span className="font-mono truncate">{f}</span>
+                        </div>
+                      ))}
+                      {gitChanges.untracked.map((f) => (
+                        <div key={`n-${f}`} className="flex items-center gap-2 px-3 py-1.5 text-xs">
+                          <Badge variant="secondary">untracked</Badge>
+                          <span className="font-mono truncate">{f}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Commit form */}
+                    {isManager && (
+                      <div className="space-y-2 pt-1">
+                        <Input
+                          value={commitMsg}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCommitMsg(e.target.value)}
+                          placeholder="Commit message..."
+                          size="sm"
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            disabled={!commitMsg.trim() || committing}
+                            onClick={async () => {
+                              setCommitting(true);
+                              const res = await api.repoGitCommit(repoId, commitMsg);
+                              if (res.ok) { toast(res.data?.message ?? "Committed", { variant: "success" }); setCommitMsg(""); fetchRepo(); }
+                              else toast(res.error ?? "Commit failed", { variant: "error" });
+                              setCommitting(false);
+                            }}
+                          >
+                            {committing ? "Committing..." : "Commit All"}
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={pushing}
+                            onClick={async () => {
+                              setPushing(true);
+                              const res = await api.repoGitPush(repoId);
+                              if (res.ok) toast(res.data?.message ?? "Pushed", { variant: "success" });
+                              else toast(res.error ?? "Push failed", { variant: "error" });
+                              setPushing(false);
+                            }}
+                          >
+                            {pushing ? "Pushing..." : "Push"}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-error hover:text-error"
+                            onClick={handleRestore}
+                            disabled={restoring}
+                          >
+                            Discard All
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {gitChanges.staged.length === 0 && gitChanges.unstaged.length === 0 && gitChanges.untracked.length === 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Changes</p>
+                    <p className="text-xs text-muted-foreground">Working tree clean</p>
+                    {isManager && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={pushing}
+                        onClick={async () => {
+                          setPushing(true);
+                          const res = await api.repoGitPush(repoId);
+                          if (res.ok) toast(res.data?.message ?? "Pushed", { variant: "success" });
+                          else toast(res.error ?? "Push failed", { variant: "error" });
+                          setPushing(false);
+                        }}
+                      >
+                        {pushing ? "Pushing..." : "Push"}
+                      </Button>
+                    )}
+                  </div>
+                )}
 
                 {/* Recent Commits */}
                 <div className="space-y-2">

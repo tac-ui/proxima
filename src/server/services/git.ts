@@ -189,6 +189,47 @@ export class GitService {
     return local.all;
   }
 
+  async getChangedFiles(repoPath: string): Promise<{ staged: string[]; unstaged: string[]; untracked: string[] }> {
+    if (!existsSync(repoPath)) throw new Error("Repository path does not exist");
+    const git: SimpleGit = simpleGit(repoPath);
+    const status = await git.status();
+    return {
+      staged: status.staged,
+      unstaged: status.modified.concat(status.deleted),
+      untracked: status.not_added,
+    };
+  }
+
+  async commitChanges(repoPath: string, message: string, addAll: boolean = true): Promise<string> {
+    if (!existsSync(repoPath)) throw new Error("Repository path does not exist");
+    if (!message.trim()) throw new Error("Commit message is required");
+    const git: SimpleGit = simpleGit(repoPath);
+    if (addAll) await git.add("-A");
+    const result = await git.commit(message);
+    logger.info("git", `Commit in ${repoPath}: ${result.commit || "no changes"}`);
+    return result.commit ? `Committed: ${result.commit}` : "Nothing to commit";
+  }
+
+  async pushChanges(repoPath: string, branch?: string, repoUrl?: string, sshKeyPath?: string): Promise<string> {
+    if (!existsSync(repoPath)) throw new Error("Repository path does not exist");
+    const git: SimpleGit = simpleGit(repoPath);
+    this.configureRepo(git, repoUrl, sshKeyPath);
+    await git.push("origin", branch || "HEAD");
+    logger.info("git", `Push in ${repoPath}`);
+    return "Pushed to remote";
+  }
+
+  async isTrackedByGit(repoPath: string, filePath: string): Promise<boolean> {
+    if (!existsSync(repoPath)) return false;
+    const git: SimpleGit = simpleGit(repoPath);
+    try {
+      const result = await git.raw(["ls-files", filePath]);
+      return result.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
+
   detectComposeFiles(dir: string): string[] {
     const composePatterns = [
       "docker-compose.yml",
