@@ -2,7 +2,8 @@
 
 import React, { useState } from "react";
 import { Button, SensitiveInput, Input, Badge, Switch, useToast } from "@tac-ui/web";
-import { Wifi, WifiOff } from "@tac-ui/icon";
+import { Wifi, WifiOff, Download } from "@tac-ui/icon";
+import { api } from "@/lib/api";
 import type { OpenClawGateway } from "@/hooks/useOpenClawGateway";
 import type { OpenClawChannel } from "@/types";
 
@@ -106,6 +107,36 @@ export function ChannelSetup({ gateway, channels, onRefresh }: ChannelSetupProps
     setSaving(false);
   };
 
+  const handleImportFromProxima = async () => {
+    setSaving(true);
+    try {
+      const res = await api.getOpenClawImportChannels();
+      if (!res.ok || !res.data?.length) { toast("No Proxima notification channels found", { variant: "warning" }); setSaving(false); return; }
+
+      let imported = 0;
+      for (const ch of res.data) {
+        if (ch.type === "telegram" && ch.config.botToken) {
+          const ok = await patchConfig({ channels: { telegram: { botToken: ch.config.botToken, enabled: true } } });
+          if (ok) imported++;
+        }
+        if (ch.type === "discord" && ch.config.botToken) {
+          const ok = await patchConfig({ channels: { discord: { token: ch.config.botToken, enabled: true } } });
+          if (ok) imported++;
+        }
+      }
+
+      if (imported > 0) {
+        toast(`Imported ${imported} channel(s) from Proxima`, { variant: "success" });
+        setTimeout(onRefresh, 2000);
+      } else {
+        toast("No compatible channels to import (Telegram/Discord only)", { variant: "warning" });
+      }
+    } catch {
+      toast("Failed to import channels", { variant: "error" });
+    }
+    setSaving(false);
+  };
+
   const addingChannel = CHANNELS.find(c => c.type === adding);
   const existingTypes = new Set(channels.map(c => c.type));
 
@@ -174,7 +205,10 @@ export function ChannelSetup({ gateway, channels, onRefresh }: ChannelSetupProps
               {ch.label}
             </button>
           ))}
-          <p className="text-[10px] text-muted-foreground self-center">Other channels can be added via Advanced Config.</p>
+          <button type="button" className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-dashed border-border transition-all text-xs text-muted-foreground hover:text-foreground hover:border-foreground/30" onClick={handleImportFromProxima} disabled={saving}>
+            <Download size={14} />
+            Import from Proxima
+          </button>
         </div>
       )}
     </div>

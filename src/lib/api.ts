@@ -235,6 +235,7 @@ export const api = {
 
   // OpenClaw
   getOpenClawToken: () => request<{ token: string; port: number }>("GET", "/api/settings/openclaw/token"),
+  getOpenClawImportChannels: () => request<{ type: string; name: string; config: Record<string, string> }[]>("GET", "/api/settings/openclaw/import-channels"),
   getOpenClawSettings: () => request<OpenClawSettings>("GET", "/api/settings/openclaw"),
   updateOpenClawSettings: (data: Partial<OpenClawSettings>) => request<OpenClawSettings>("PUT", "/api/settings/openclaw", data),
   getOpenClawStatus: () => request<OpenClawStatus>("GET", "/api/settings/openclaw/status"),
