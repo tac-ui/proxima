@@ -498,7 +498,7 @@ export default function HealthPage() {
               <ModalHeader>
                 <ModalTitle>{detailDomain.name}</ModalTitle>
               </ModalHeader>
-              <div className="px-6 pb-2 space-y-5">
+              <div className="px-6 pb-2 space-y-5 max-h-[70vh] overflow-y-auto">
                 {/* Status section */}
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">

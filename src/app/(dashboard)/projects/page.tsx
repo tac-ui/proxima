@@ -284,7 +284,7 @@ export default function ProjectsPage() {
             <ModalTitle>Clone Repository</ModalTitle>
             <ModalDescription>Clone a Git repository into your projects</ModalDescription>
           </ModalHeader>
-          <div className="px-6 pb-2 space-y-4">
+          <div className="px-6 pb-2 space-y-4 max-h-[70vh] overflow-y-auto">
             <div>
               <label className="text-sm font-medium mb-1.5 block">Protocol</label>
               <SegmentController
