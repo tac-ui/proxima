@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { SensitiveInput, Button, useToast } from "@tac-ui/web";
-import { Key } from "@tac-ui/icon";
+import { Key, ChevronDown } from "@tac-ui/icon";
 import { api } from "@/lib/api";
 import type { OpenClawSettings, OpenClawModels } from "@/types";
 
@@ -86,48 +87,82 @@ export function ModelManager({ settings, onSaved }: ModelManagerProps) {
         {PROVIDERS.map((p) => {
           const configured = isConfigured(p.key);
           const editing = editMode === p.key;
+          const displayValue = configured ? values[p.key] ?? "" : "";
+
+          const toggleOpen = () => {
+            if (editing) {
+              setEditMode(null);
+              return;
+            }
+            if (isMasked(p.key)) {
+              setValues(prev => ({ ...prev, [p.key]: "" }));
+            }
+            setEditMode(p.key);
+          };
 
           return (
-            <div key={p.key} className="border border-border rounded-lg p-3">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                <span className={`text-[10px] font-semibold px-2 py-1 rounded-md self-start shrink-0 ${p.color}`}>
+            <div key={p.key} className="border border-border rounded-lg overflow-hidden">
+              <button
+                type="button"
+                onClick={toggleOpen}
+                className="w-full flex items-center gap-3 p-3 hover:bg-muted/30 transition-colors text-left"
+              >
+                <span className={`text-[10px] font-semibold px-2 py-1 rounded-md shrink-0 ${p.color}`}>
                   {p.label}
                 </span>
-                {editing ? (
-                  <div className="flex-1 min-w-0 space-y-2">
-                    <SensitiveInput
-                      value={values[p.key] ?? ""}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setValues(prev => ({ ...prev, [p.key]: e.target.value }))}
-                      placeholder={p.placeholder}
-                    />
-                    <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => setEditMode(null)}>Cancel</Button>
-                      <Button variant="primary" size="sm" disabled={saving} onClick={() => handleSave(p.key)}>Save</Button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex-1 min-w-0 flex items-center">
-                      {configured && (
-                        <span
-                          className="w-2 h-2 rounded-full shrink-0 bg-success"
-                          aria-label="Configured"
-                        />
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Button variant="ghost" size="sm" onClick={() => { if (isMasked(p.key)) setValues(prev => ({ ...prev, [p.key]: "" })); setEditMode(p.key); }}>
-                        {configured ? "Change" : "Add"}
-                      </Button>
-                      {configured && (
-                        <Button variant="ghost" size="sm" className="text-error hover:text-error" onClick={() => handleRemove(p.key)} disabled={saving}>
-                          Remove
-                        </Button>
-                      )}
-                    </div>
-                  </>
+                <span className="flex-1 min-w-0 text-xs text-muted-foreground truncate font-mono">
+                  {displayValue || <span className="font-sans italic">Not set</span>}
+                </span>
+                {configured && (
+                  <span className="w-2 h-2 rounded-full bg-success shrink-0" aria-label="Configured" />
                 )}
-              </div>
+                <motion.span
+                  animate={{ rotate: editing ? 180 : 0 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  className="shrink-0 text-muted-foreground"
+                >
+                  <ChevronDown size={14} />
+                </motion.span>
+              </button>
+
+              <AnimatePresence initial={false}>
+                {editing && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                    className="overflow-hidden"
+                  >
+                    <div className="px-3 pb-3 pt-2 space-y-2 border-t border-border">
+                      <SensitiveInput
+                        value={values[p.key] ?? ""}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setValues(prev => ({ ...prev, [p.key]: e.target.value }))}
+                        placeholder={p.placeholder}
+                      />
+                      <div className="flex items-center justify-end gap-2">
+                        {configured && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-error hover:text-error mr-auto"
+                            disabled={saving}
+                            onClick={() => handleRemove(p.key)}
+                          >
+                            Remove
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="sm" onClick={() => setEditMode(null)}>
+                          Cancel
+                        </Button>
+                        <Button variant="primary" size="sm" disabled={saving} onClick={() => handleSave(p.key)}>
+                          Save
+                        </Button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           );
         })}
