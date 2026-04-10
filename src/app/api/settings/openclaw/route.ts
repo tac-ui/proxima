@@ -12,15 +12,15 @@ function maskKey(key?: string): string {
 }
 
 function maskedResponse(settings: ReturnType<typeof getOpenClawSettings>) {
+  // Mask all fields ending in ApiKey or containing Token
+  const maskedModels: Record<string, string> = {};
+  for (const [key, val] of Object.entries(settings.models)) {
+    maskedModels[key] = key.endsWith("ApiKey") || key.endsWith("Token") ? maskKey(val) : (val ?? "");
+  }
   return {
     ...settings,
     gatewayToken: settings.gatewayToken ? "••••••••" : "",
-    models: {
-      openaiApiKey: maskKey(settings.models.openaiApiKey),
-      anthropicApiKey: maskKey(settings.models.anthropicApiKey),
-      geminiApiKey: maskKey(settings.models.geminiApiKey),
-      openrouterApiKey: maskKey(settings.models.openrouterApiKey),
-    },
+    models: maskedModels,
   };
 }
 

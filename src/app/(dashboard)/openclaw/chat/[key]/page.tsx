@@ -83,8 +83,8 @@ export default function OpenClawChatPage() {
           if (last?.role === "assistant" && last.id === `stream-${evt.runId}`) {
             return [...prev.slice(0, -1), { ...last, content: streamingContentRef.current }];
           }
-          // Create new streaming message
-          return [...prev, {
+          // Remove thinking placeholder and create streaming message
+          return [...prev.filter(m => !m.id?.startsWith("thinking-")), {
             id: `stream-${evt.runId}`,
             role: "assistant" as const,
             content: streamingContentRef.current,

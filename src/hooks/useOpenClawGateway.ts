@@ -94,7 +94,8 @@ export function useOpenClawGateway(): OpenClawGateway {
 
       const { token, port } = authRef.current;
       const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
-      const wsUrl = `ws://${host}:${port}`;
+      const protocol = typeof window !== "undefined" && window.location.protocol === "https:" ? "wss" : "ws";
+      const wsUrl = `${protocol}://${host}:${port}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
