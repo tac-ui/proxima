@@ -99,10 +99,11 @@ export function useOpenClawGateway(): OpenClawGateway {
       }
       authRef.current = res.data;
 
-      const { token, port } = authRef.current;
-      const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
+      const { token } = authRef.current;
+      // Use Proxima's own origin as proxy — avoids exposing gateway port 20242 externally
+      const host = typeof window !== "undefined" ? window.location.host : "localhost";
       const protocol = typeof window !== "undefined" && window.location.protocol === "https:" ? "wss" : "ws";
-      const wsUrl = `${protocol}://${host}:${port}`;
+      const wsUrl = `${protocol}://${host}/api/openclaw/ws`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 

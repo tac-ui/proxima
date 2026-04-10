@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { parse } from "node:url";
 import next from "next";
-import { WebSocketServer } from "ws";
+import { WebSocketServer, WebSocket as WsClient } from "ws";
 import { ensureDb } from "./src/app/api/_lib/db";
 import { getConfig, initHostDataDir } from "./src/server/lib/config";
 import { NetworkDiscovery } from "./src/server/services/network-discovery";
@@ -13,7 +13,7 @@ import { getCloudflaredStatus, startCloudflared, checkAndFixNetwork } from "./sr
 import { syncAutoManaged } from "./src/server/services/managed-service";
 import { autoStartScripts } from "./src/server/services/auto-start";
 import { startHealthCheckScheduler } from "./src/server/services/health-check";
-import { autoStartOpenClaw, shutdownOpenClaw } from "./src/server/services/openclaw";
+import { autoStartOpenClaw, shutdownOpenClaw, getOpenClawSettings } from "./src/server/services/openclaw";
 
 const dev = process.env.NODE_ENV !== "production";
 
@@ -106,6 +106,49 @@ async function main() {
         logger.debug("server", "WebSocket upgrade complete, emitting connection");
         wss.emit("connection", ws, req);
       });
+    } else if (pathname === "/api/openclaw/ws") {
+      // Proxy WebSocket to OpenClaw gateway on localhost (so 20242 doesn't need to be exposed)
+      try {
+        const settings = getOpenClawSettings();
+        const port = settings.gatewayPort || 20242;
+        const upstream = new WsClient(`ws://127.0.0.1:${port}`);
+
+        wss.handleUpgrade(req, socket, head, (client) => {
+          const messageQueue: { data: Buffer | string; isBinary: boolean }[] = [];
+          let upstreamOpen = false;
+
+          client.on("message", (data, isBinary) => {
+            const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
+            if (upstreamOpen && upstream.readyState === WsClient.OPEN) {
+              upstream.send(buf, { binary: isBinary });
+            } else {
+              messageQueue.push({ data: buf, isBinary });
+            }
+          });
+          client.on("close", () => { try { upstream.close(); } catch { /* ignore */ } });
+          client.on("error", () => { try { upstream.close(); } catch { /* ignore */ } });
+
+          upstream.on("open", () => {
+            upstreamOpen = true;
+            // Flush queued messages
+            while (messageQueue.length > 0) {
+              const msg = messageQueue.shift()!;
+              upstream.send(msg.data, { binary: msg.isBinary });
+            }
+          });
+          upstream.on("message", (data, isBinary) => {
+            if (client.readyState === WsClient.OPEN) client.send(data, { binary: isBinary });
+          });
+          upstream.on("close", () => { try { client.close(); } catch { /* ignore */ } });
+          upstream.on("error", (err) => {
+            logger.warn("server", `OpenClaw WS upstream error: ${err.message}`);
+            try { client.close(1011, "Upstream error"); } catch { /* ignore */ }
+          });
+        });
+      } catch (err) {
+        logger.error("server", `OpenClaw WS proxy setup failed: ${err}`);
+        socket.destroy();
+      }
     } else {
       // Let Next.js handle HMR WebSocket upgrades in dev
       // For anything else, destroy the socket
