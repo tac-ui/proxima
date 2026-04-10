@@ -39,15 +39,16 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
     openrouter: { field: "openrouterApiKey", placeholder: "sk-or-..." },
   };
 
-  const handleStart = async () => {
-    if (!apiKey.trim()) return;
+  const handleStart = async (skipKey = false) => {
     setLoading(true);
     try {
-      const mapping = KEY_MAP[provider];
+      const models = !skipKey && apiKey.trim()
+        ? { [KEY_MAP[provider].field]: apiKey.trim() } as Record<string, string>
+        : undefined;
       const res = await api.updateOpenClawSettings({
         enabled: true,
         gatewayPort: 18789,
-        models: { [mapping.field]: apiKey.trim() } as Record<string, string>,
+        ...(models ? { models } : {}),
       });
       if (res.ok) {
         toast("OpenClaw is starting...", { variant: "success" });
@@ -90,11 +91,13 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
                 placeholder={KEY_MAP[provider].placeholder}
               />
             </div>
-            <Button variant="primary" size="sm" disabled={!apiKey.trim() || loading} onClick={handleStart}>
-              {loading ? "Starting..." : "Start OpenClaw"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="primary" size="sm" disabled={loading} onClick={() => handleStart()}>
+                {loading ? "Starting..." : apiKey.trim() ? "Start OpenClaw" : "Start without API Key"}
+              </Button>
+            </div>
             <p className="text-[10px] text-muted-foreground">
-              You can add more providers and configure channels later.
+              {apiKey.trim() ? "You can add more providers and configure channels later." : "You can add API keys and configure providers later from the dashboard."}
             </p>
           </div>
         </CardContent>
