@@ -97,7 +97,7 @@ export function ModelSelector({ gateway }: ModelSelectorProps) {
         disabled={!gateway.connected || saving}
       />
       {customMode && (
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <Input
             value={customModel}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomModel(e.target.value)}
