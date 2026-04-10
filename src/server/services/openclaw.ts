@@ -136,6 +136,15 @@ function writeGatewayConfig(stateDir: string, opts: { port: number; bind?: strin
         // Accept all origins — Proxima proxies through /api/openclaw/ws
         // so the client origin varies with the user's Proxima URL.
         allowedOrigins: ["*"],
+        // Proxima always proxies through 127.0.0.1:<port>, so the gateway
+        // sees a local client. We disable device-identity checks because
+        // WebCrypto SubtleCrypto (required for device pairing) is only
+        // available in secure contexts (HTTPS), which Proxima doesn't
+        // require for local self-hosted usage. The gateway itself only
+        // listens on 127.0.0.1 and is reached via the authenticated
+        // Proxima proxy, so the trust boundary is Proxima's own session.
+        allowInsecureAuth: true,
+        dangerouslyDisableDeviceAuth: true,
       },
     },
   };
