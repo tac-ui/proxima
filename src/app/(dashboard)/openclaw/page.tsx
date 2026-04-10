@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOpenClaw } from "@/contexts/OpenClawContext";
 import { api } from "@/lib/api";
-import { Card, CardHeader, CardContent, Button, Badge, SensitiveInput, Select, pageEntrance, useToast } from "@tac-ui/web";
+import { Card, CardHeader, CardContent, Button, Badge, Input, SensitiveInput, Select, pageEntrance, useToast } from "@tac-ui/web";
 import { BrainCircuit, Settings, MessageSquare, Wifi, Key } from "@tac-ui/icon";
 import { useConfirm } from "@/hooks/useConfirm";
 import { SessionList } from "@/components/openclaw/SessionList";
@@ -32,14 +32,16 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
     { value: "google", label: "Google (Gemini)" },
     { value: "openrouter", label: "OpenRouter" },
     { value: "zai", label: "ZAI (GLM)" },
+    { value: "ollama", label: "Ollama (Local)" },
   ];
 
-  const KEY_MAP: Record<string, { field: string; placeholder: string }> = {
+  const KEY_MAP: Record<string, { field: string; placeholder: string; isUrl?: boolean }> = {
     anthropic: { field: "anthropicApiKey", placeholder: "sk-ant-..." },
     openai: { field: "openaiApiKey", placeholder: "sk-..." },
     google: { field: "geminiApiKey", placeholder: "AI..." },
     openrouter: { field: "openrouterApiKey", placeholder: "sk-or-..." },
     zai: { field: "zaiApiKey", placeholder: "..." },
+    ollama: { field: "ollamaBaseUrl", placeholder: "http://localhost:11434", isUrl: true },
   };
 
   const handleStart = async (skipKey = false) => {
@@ -87,12 +89,20 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
               <Select options={PROVIDERS} value={provider} onChange={setProvider} />
             </div>
             <div>
-              <label className="text-sm font-medium block mb-1.5">API Key</label>
-              <SensitiveInput
-                value={apiKey}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setApiKey(e.target.value)}
-                placeholder={KEY_MAP[provider].placeholder}
-              />
+              <label className="text-sm font-medium block mb-1.5">{KEY_MAP[provider].isUrl ? "Base URL" : "API Key"}</label>
+              {KEY_MAP[provider].isUrl ? (
+                <Input
+                  value={apiKey}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setApiKey(e.target.value)}
+                  placeholder={KEY_MAP[provider].placeholder}
+                />
+              ) : (
+                <SensitiveInput
+                  value={apiKey}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setApiKey(e.target.value)}
+                  placeholder={KEY_MAP[provider].placeholder}
+                />
+              )}
             </div>
             <div className="flex items-center gap-2">
               <Button variant="primary" size="sm" disabled={loading} onClick={() => handleStart()}>
