@@ -67,7 +67,6 @@ export default function SettingsPage() {
   // OpenClaw state
   const [ocEnabled, setOcEnabled] = useState(false);
   const [ocStatus, setOcStatus] = useState<{ state: string }>({ state: "not_found" });
-  const [ocSaving, setOcSaving] = useState(false);
 
   useEffect(() => {
     setBrandAppName(appName);
@@ -836,38 +835,11 @@ export default function SettingsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium">Enable OpenClaw</p>
-                <p className="text-xs text-muted-foreground">Personal AI assistant gateway</p>
-              </div>
-              <Switch
-                checked={ocEnabled}
-                onChange={async () => {
-                  const next = !ocEnabled;
-                  setOcEnabled(next);
-                  setOcSaving(true);
-                  const res = await api.updateOpenClawSettings({ enabled: next });
-                  if (res.ok) {
-                    toast(next ? "OpenClaw enabled" : "OpenClaw disabled", { variant: "success" });
-                    setTimeout(() => loadOpenClaw(), 2000);
-                  } else {
-                    toast(res.error ?? "Failed", { variant: "error" });
-                    setOcEnabled(!next);
-                  }
-                  setOcSaving(false);
-                }}
-              />
-            </div>
-            {ocEnabled && (
-              <Link href="/openclaw">
-                <Button variant="secondary" size="sm" leftIcon={<BrainCircuit size={14} />}>
-                  Open Dashboard
-                </Button>
-              </Link>
-            )}
-          </div>
+          <Link href="/openclaw">
+            <Button variant="secondary" size="sm" leftIcon={<BrainCircuit size={14} />}>
+              {ocEnabled ? "Open Dashboard" : "Set Up OpenClaw"}
+            </Button>
+          </Link>
         </CardContent>
       </Card>}
 
