@@ -594,7 +594,7 @@ export default function SettingsPage() {
                 <Bell size={18} className="text-point" />
               </div>
               <div>
-                <h2 className="text-sm font-semibold">Notifications</h2>
+                <h2 className="text-sm font-semibold">Messenger</h2>
                 <p className="text-xs text-muted-foreground">Configure Slack and Telegram channels</p>
               </div>
             </div>
@@ -738,7 +738,7 @@ export default function SettingsPage() {
             {notifLoading ? (
               <p className="text-sm text-muted-foreground">Loading...</p>
             ) : notifChannels.length === 0 && !showAddChannel ? (
-              <p className="text-sm text-muted-foreground">No notification channels configured.</p>
+              <p className="text-sm text-muted-foreground">No messenger channels configured.</p>
             ) : (
               notifChannels.map((ch) => (
                 <div key={ch.id} className="border border-border rounded-lg p-3 space-y-2">
