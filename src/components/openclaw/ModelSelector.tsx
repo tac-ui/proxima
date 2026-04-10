@@ -115,7 +115,10 @@ export function ModelSelector({ gateway }: ModelSelectorProps) {
           </Button>
         </div>
       )}
-      {currentModel && (
+      {!gateway.connected && (
+        <p className="text-[10px] text-muted-foreground">Gateway not connected. Start OpenClaw to select a model.</p>
+      )}
+      {gateway.connected && currentModel && (
         <p className="text-[10px] text-muted-foreground">
           Using <span className="font-medium">{MODELS.find(m => m.value === currentModel)?.label ?? currentModel}</span>
         </p>

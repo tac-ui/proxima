@@ -21,10 +21,12 @@ function getOpenClawBin(): string {
   const candidates = [
     path.resolve(process.cwd(), "node_modules", "openclaw", "openclaw.mjs"),
     path.resolve(process.cwd(), "node_modules", ".bin", "openclaw"),
-    path.resolve(__dirname, "..", "..", "..", "node_modules", "openclaw", "openclaw.mjs"),
+    "/app/node_modules/openclaw/openclaw.mjs",
   ];
   for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
+    try {
+      if (fs.existsSync(p)) return p;
+    } catch { /* ignore */ }
   }
   return "openclaw";
 }

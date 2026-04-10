@@ -119,10 +119,8 @@ export function ChannelSetup({ gateway, channels, onRefresh }: ChannelSetupProps
           const ok = await patchConfig({ channels: { telegram: { botToken: ch.config.botToken, enabled: true } } });
           if (ok) imported++;
         }
-        if (ch.type === "discord" && ch.config.botToken) {
-          const ok = await patchConfig({ channels: { discord: { token: ch.config.botToken, enabled: true } } });
-          if (ok) imported++;
-        }
+        // Note: Proxima Discord uses webhookUrl (notifications only),
+        // but OpenClaw Discord needs a real bot token. Import not compatible.
       }
 
       if (imported > 0) {

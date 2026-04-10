@@ -22,7 +22,7 @@ export function ConfigEditor({ gateway }: ConfigEditorProps) {
   const [rawJsonError, setRawJsonError] = useState("");
 
   const loadConfig = useCallback(async () => {
-    if (!gateway.connected) return;
+    if (!gateway.connected) { setLoading(false); return; }
     setLoading(true);
     try {
       const result = await gateway.request<ConfigState>("config.get");
@@ -60,6 +60,10 @@ export function ConfigEditor({ gateway }: ConfigEditorProps) {
     }
     setSaving(false);
   };
+
+  if (!gateway.connected) {
+    return <p className="text-sm text-muted-foreground text-center py-4">Gateway not connected. Start OpenClaw to edit configuration.</p>;
+  }
 
   if (loading) {
     return <p className="text-sm text-muted-foreground text-center py-4">Loading...</p>;

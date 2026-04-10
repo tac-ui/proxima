@@ -35,7 +35,7 @@ export default function OpenClawChatPage() {
 
   // Load chat history
   useEffect(() => {
-    if (!gateway.connected) return;
+    if (!gateway.connected) { setLoading(false); return; }
     let cancelled = false;
 
     const load = async () => {
