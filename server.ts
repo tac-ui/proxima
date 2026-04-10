@@ -99,7 +99,7 @@ async function main() {
 
   httpServer.on("upgrade", (req, socket, head) => {
     const { pathname } = parse(req.url ?? "/");
-    logger.debug("server", `WebSocket upgrade request: ${pathname}`);
+    logger.info("server", `WebSocket upgrade request: ${pathname}`);
 
     if (pathname === "/api/terminal") {
       wss.handleUpgrade(req, socket, head, (ws) => {
@@ -111,6 +111,7 @@ async function main() {
       try {
         const settings = getOpenClawSettings();
         const port = settings.gatewayPort || 20242;
+        logger.info("server", `Proxying OpenClaw WS to ws://127.0.0.1:${port}`);
         const upstream = new WsClient(`ws://127.0.0.1:${port}`);
 
         wss.handleUpgrade(req, socket, head, (client) => {

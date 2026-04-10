@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useOpenClaw } from "@/contexts/OpenClawContext";
 import { api } from "@/lib/api";
 import { Card, CardHeader, CardContent, Button, Badge, Input, SensitiveInput, Select, Tabs, TabsList, TabTrigger, TabContent, pageEntrance, useToast } from "@tac-ui/web";
-import { BrainCircuit, MessageSquare, Wifi, Cpu, Shield, FileText, Settings } from "@tac-ui/icon";
+import { BrainCircuit, MessageSquare, Wifi, Cpu, Shield, FileText, Settings, RotateCw, Power } from "@tac-ui/icon";
 import { useConfirm } from "@/hooks/useConfirm";
 import { SessionList } from "@/components/openclaw/SessionList";
 import { ChannelSetup } from "@/components/openclaw/ChannelSetup";
@@ -134,6 +134,7 @@ export default function OpenClawPage() {
   const confirm = useConfirm();
   const { gateway, enabled, settings, sessions, channels, refreshSessions, refreshChannels, refreshSettings } = useOpenClaw();
   const [creatingSession, setCreatingSession] = useState(false);
+  const [busy, setBusy] = useState<"start" | "stop" | "restart" | null>(null);
 
   if (!enabled) {
     return <Onboarding onComplete={() => { refreshSettings(); }} />;
@@ -150,6 +151,32 @@ export default function OpenClawPage() {
       toast(err instanceof Error ? err.message : "Failed to create session", { variant: "error" });
     }
     setCreatingSession(false);
+  };
+
+  const handleAction = async (action: "start" | "stop" | "restart") => {
+    if (action === "stop" || action === "restart") {
+      const ok = await confirm({
+        title: action === "stop" ? "Stop OpenClaw" : "Restart OpenClaw",
+        message: action === "stop"
+          ? "Stop the gateway? Active sessions will be disconnected."
+          : "Restart the gateway? Active sessions will be briefly disconnected.",
+        confirmLabel: action === "stop" ? "Stop" : "Restart",
+        variant: "destructive",
+      });
+      if (!ok) return;
+    }
+    setBusy(action);
+    try {
+      const res = await api.openclawAction(action);
+      if (res.ok && res.data?.success) {
+        toast(`OpenClaw ${action === "start" ? "started" : action === "stop" ? "stopped" : "restarted"}`, { variant: "success" });
+      } else {
+        toast(res.data?.error || res.error || `Failed to ${action}`, { variant: "error" });
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : `Failed to ${action}`, { variant: "error" });
+    }
+    setBusy(null);
   };
 
   const handleDeleteSession = async (key: string) => {
@@ -178,7 +205,7 @@ export default function OpenClawPage() {
         <div className="w-10 h-10 rounded-xl bg-point/15 flex items-center justify-center">
           <BrainCircuit size={20} className="text-point" />
         </div>
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <h1 className="text-base font-semibold">OpenClaw</h1>
             <Badge variant={gateway.connected ? "success" : "secondary"}>
@@ -187,6 +214,28 @@ export default function OpenClawPage() {
           </div>
           <p className="text-xs text-muted-foreground">AI Assistant Gateway</p>
         </div>
+        {isManager && (
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy !== null}
+              onClick={() => handleAction("restart")}
+              title="Restart gateway"
+            >
+              <RotateCw size={14} className={busy === "restart" ? "animate-spin" : ""} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy !== null}
+              onClick={() => handleAction(gateway.connected ? "stop" : "start")}
+              title={gateway.connected ? "Stop gateway" : "Start gateway"}
+            >
+              <Power size={14} className={gateway.connected ? "text-error" : "text-success"} />
+            </Button>
+          </div>
+        )}
       </div>
 
       <Tabs defaultValue="sessions">

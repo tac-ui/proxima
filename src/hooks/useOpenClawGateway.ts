@@ -128,14 +128,28 @@ export function useOpenClawGateway(): OpenClawGateway {
               maxProtocol: 3,
               auth: { token },
               client: {
-                id: "proxima-ui",
+                id: "openclaw-control-ui",
+                displayName: "Proxima",
                 version: "1.0.0",
-                mode: "browser",
+                platform: typeof navigator !== "undefined" ? (navigator.platform || "web") : "web",
+                mode: "webchat",
                 instanceId: nextId(),
               },
               role: "operator",
-              scopes: ["operator.admin", "operator.read", "operator.write"],
-              caps: ["chat-streaming"],
+              scopes: [
+                "operator.read",
+                "operator.write",
+                "operator.chat",
+                "operator.sessions",
+                "operator.config",
+                "operator.channels",
+                "operator.logs",
+              ],
+              caps: ["tool-events"],
+              ...(typeof navigator !== "undefined" ? {
+                userAgent: navigator.userAgent,
+                locale: navigator.language,
+              } : {}),
             },
           };
           ws.send(JSON.stringify(authMsg));
