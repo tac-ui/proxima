@@ -2,12 +2,11 @@
 
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOpenClaw } from "@/contexts/OpenClawContext";
 import { api } from "@/lib/api";
 import { Card, CardHeader, CardContent, Button, Badge, Input, SensitiveInput, Select, pageEntrance, useToast } from "@tac-ui/web";
-import { BrainCircuit, Settings, MessageSquare, Wifi, Key } from "@tac-ui/icon";
+import { BrainCircuit, Settings, Wifi, Key, FileText } from "@tac-ui/icon";
 import { useConfirm } from "@/hooks/useConfirm";
 import { SessionList } from "@/components/openclaw/SessionList";
 import { ChannelSetup } from "@/components/openclaw/ChannelSetup";
@@ -184,13 +183,6 @@ export default function OpenClawPage() {
               </div>
               <p className="text-xs text-muted-foreground">AI Assistant</p>
             </div>
-            {isManager && (
-              <Link href="/settings">
-                <Button variant="ghost" size="sm" leftIcon={<Settings size={14} />}>
-                  Settings
-                </Button>
-              </Link>
-            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -266,7 +258,7 @@ export default function OpenClawPage() {
           <CardHeader>
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center">
-                <Settings size={18} className="text-muted-foreground" />
+                <FileText size={18} className="text-muted-foreground" />
               </div>
               <div>
                 <h2 className="text-sm font-semibold">Files</h2>
