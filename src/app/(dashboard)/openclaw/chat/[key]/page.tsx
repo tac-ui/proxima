@@ -98,22 +98,32 @@ export default function OpenClawChatPage() {
         setStreaming(false);
         setCurrentRunId(null);
         streamingContentRef.current = "";
-        // Replace stream message with final
-        if (evt.message?.content) {
-          setMessages((prev) => {
-            const idx = prev.findIndex((m) => m.id === `stream-${evt.runId}`);
-            if (idx >= 0) {
-              const updated = [...prev];
-              updated[idx] = {
-                ...updated[idx],
-                id: evt.runId,
-                content: typeof evt.message!.content === "string" ? evt.message!.content : updated[idx].content,
-              };
-              return updated;
-            }
-            return prev;
-          });
-        }
+        setMessages((prev) => {
+          // Remove any thinking placeholders
+          const cleaned = prev.filter(m => !m.id?.startsWith("thinking-"));
+          const idx = cleaned.findIndex((m) => m.id === `stream-${evt.runId}`);
+          const finalContent = typeof evt.message?.content === "string" ? evt.message.content : "";
+          if (idx >= 0) {
+            // Replace streaming message with final
+            const updated = [...cleaned];
+            updated[idx] = {
+              ...updated[idx],
+              id: evt.runId,
+              content: finalContent || updated[idx].content,
+            };
+            return updated;
+          }
+          // No prior stream — append final message
+          if (finalContent) {
+            return [...cleaned, {
+              id: evt.runId,
+              role: "assistant" as const,
+              content: finalContent,
+              timestamp: Date.now(),
+            }];
+          }
+          return cleaned;
+        });
         scrollToBottom();
       }
 
@@ -121,6 +131,10 @@ export default function OpenClawChatPage() {
         setStreaming(false);
         setCurrentRunId(null);
         streamingContentRef.current = "";
+        // Remove thinking and streaming placeholders
+        setMessages((prev) => prev.filter(m =>
+          !m.id?.startsWith("thinking-") && m.id !== `stream-${evt.runId}`
+        ));
         toast(evt.errorMessage ?? "Chat error", { variant: "error" });
       }
 
@@ -128,6 +142,10 @@ export default function OpenClawChatPage() {
         setStreaming(false);
         setCurrentRunId(null);
         streamingContentRef.current = "";
+        // Remove thinking and streaming placeholders
+        setMessages((prev) => prev.filter(m =>
+          !m.id?.startsWith("thinking-") && m.id !== `stream-${evt.runId}`
+        ));
       }
     });
 

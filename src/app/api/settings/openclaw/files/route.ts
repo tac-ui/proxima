@@ -1,5 +1,5 @@
 import { type NextRequest } from "next/server";
-import { requireAuth, requireManager, errorResponse, ok, ValidationError } from "../../../_lib/auth";
+import { requireManager, errorResponse, ok, ValidationError } from "../../../_lib/auth";
 import { ensureDb } from "../../../_lib/db";
 import fs from "node:fs";
 import path from "node:path";
@@ -11,11 +11,15 @@ function getOpenClawDir(): string {
   return dir;
 }
 
-const ALLOWED_EXT = [".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".env"];
+const ALLOWED_EXT = [".md", ".txt", ".json", ".yaml", ".yml", ".toml"];
+const BLOCKED_FILES = new Set(["auth-profiles.json", "auth-state.json", "openclaw.json", ".env"]);
 
 function validateFilename(name: string): string {
   if (!name || name.includes("..") || name.includes("/") || name.includes("\\")) {
     throw new ValidationError("Invalid filename");
+  }
+  if (BLOCKED_FILES.has(name)) {
+    throw new ValidationError("This file is protected and cannot be accessed");
   }
   const ext = path.extname(name).toLowerCase();
   if (!ALLOWED_EXT.includes(ext) && ext !== "") {
@@ -28,11 +32,11 @@ function validateFilename(name: string): string {
 export async function GET(req: NextRequest) {
   try {
     ensureDb();
-    requireAuth(req);
+    requireManager(req);
     const dir = getOpenClawDir();
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     const files = entries
-      .filter(e => e.isFile() && !e.name.startsWith("."))
+      .filter(e => e.isFile() && !e.name.startsWith(".") && !BLOCKED_FILES.has(e.name))
       .map(e => ({ name: e.name, size: fs.statSync(path.join(dir, e.name)).size }));
     return ok(files);
   } catch (err) {
@@ -61,7 +65,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     ensureDb();
-    requireAuth(req);
+    requireManager(req);
     const body = await req.json();
     const { name } = body as { name: string };
     if (!name) throw new ValidationError("Filename is required");

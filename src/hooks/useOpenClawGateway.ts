@@ -51,46 +51,53 @@ export function useOpenClawGateway(): OpenClawGateway {
   const pendingRef = useRef<Map<string, PendingRequest>>(new Map());
   const listenersRef = useRef<Map<string, Set<(payload: unknown) => void>>>(new Map());
   const authRef = useRef<{ token: string; port: number } | null>(null);
+  const connectIdRef = useRef<string | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectDelay = useRef(1000);
   const mountedRef = useRef(true);
   const connectingRef = useRef(false);
+
+  const cleanupConnection = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.onclose = null;
+      wsRef.current.onerror = null;
+      wsRef.current.onmessage = null;
+      wsRef.current.onopen = null;
+      try { wsRef.current.close(); } catch { /* ignore */ }
+      wsRef.current = null;
+    }
+    for (const [, pending] of pendingRef.current) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error("Connection closed"));
+    }
+    pendingRef.current.clear();
+    connectIdRef.current = null;
+    connectingRef.current = false;
+  }, []);
 
   const cleanup = useCallback(() => {
     if (reconnectTimer.current) {
       clearTimeout(reconnectTimer.current);
       reconnectTimer.current = null;
     }
-    if (wsRef.current) {
-      wsRef.current.onclose = null;
-      wsRef.current.onerror = null;
-      wsRef.current.onmessage = null;
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-    // Reject all pending requests
-    for (const [, pending] of pendingRef.current) {
-      clearTimeout(pending.timer);
-      pending.reject(new Error("Connection closed"));
-    }
-    pendingRef.current.clear();
+    cleanupConnection();
+    // Clear auth cache so next connect re-fetches the token
+    authRef.current = null;
     setConnected(false);
-  }, []);
+  }, [cleanupConnection]);
 
   const connect = useCallback(async () => {
     if (connectingRef.current || wsRef.current?.readyState === WebSocket.OPEN) return;
     connectingRef.current = true;
 
     try {
-      // Fetch token from Proxima backend
-      if (!authRef.current) {
-        const res = await api.getOpenClawToken();
-        if (!res.ok || !res.data) {
-          connectingRef.current = false;
-          return;
-        }
-        authRef.current = res.data;
+      // Always re-fetch token (in case it was rotated or gateway restarted)
+      const res = await api.getOpenClawToken();
+      if (!res.ok || !res.data || !res.data.token) {
+        connectingRef.current = false;
+        return;
       }
+      authRef.current = res.data;
 
       const { token, port } = authRef.current;
       const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
@@ -98,10 +105,6 @@ export function useOpenClawGateway(): OpenClawGateway {
       const wsUrl = `${protocol}://${host}:${port}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
-
-      ws.onopen = () => {
-        // Wait for connect.challenge event from server
-      };
 
       ws.onmessage = (ev) => {
         let msg: WsMessage;
@@ -111,11 +114,13 @@ export function useOpenClawGateway(): OpenClawGateway {
           return;
         }
 
-        // Handle server challenge → send auth
+        // Handle server challenge → send auth with a tracked id
         if (msg.type === "event" && (msg as RpcEvent).event === "connect.challenge") {
+          const connectId = nextId();
+          connectIdRef.current = connectId;
           const authMsg: RpcRequest = {
             type: "req",
-            id: nextId(),
+            id: connectId,
             method: "connect",
             params: {
               minProtocol: 3,
@@ -136,15 +141,21 @@ export function useOpenClawGateway(): OpenClawGateway {
           return;
         }
 
-        // Handle connect response
         if (msg.type === "res") {
           const res = msg as RpcResponse;
 
-          // Check if this is the connect response (hello-ok)
-          if (res.ok && !connected && pendingRef.current.size === 0) {
-            setConnected(true);
-            reconnectDelay.current = 1000;
-            connectingRef.current = false;
+          // Connect response: match by tracked id
+          if (connectIdRef.current && res.id === connectIdRef.current) {
+            connectIdRef.current = null;
+            if (res.ok) {
+              setConnected(true);
+              reconnectDelay.current = 1000;
+              connectingRef.current = false;
+            } else {
+              // Auth failed - clear token cache and schedule reconnect
+              authRef.current = null;
+              try { ws.close(); } catch { /* ignore */ }
+            }
             return;
           }
 
@@ -184,6 +195,9 @@ export function useOpenClawGateway(): OpenClawGateway {
         setConnected(false);
         connectingRef.current = false;
         wsRef.current = null;
+        // Clear auth cache so next reconnect re-fetches fresh token
+        authRef.current = null;
+        connectIdRef.current = null;
 
         // Reject pending requests
         for (const [, pending] of pendingRef.current) {
@@ -203,7 +217,7 @@ export function useOpenClawGateway(): OpenClawGateway {
     } catch {
       connectingRef.current = false;
     }
-  }, [connected, cleanup]);
+  }, []);
 
   const request = useCallback(<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T> => {
     return new Promise((resolve, reject) => {

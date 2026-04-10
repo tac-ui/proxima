@@ -5,8 +5,8 @@ import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOpenClaw } from "@/contexts/OpenClawContext";
 import { api } from "@/lib/api";
-import { Card, CardHeader, CardContent, Button, Badge, Input, SensitiveInput, Select, pageEntrance, useToast } from "@tac-ui/web";
-import { BrainCircuit, Settings, Wifi, Key, FileText, KeyRound } from "@tac-ui/icon";
+import { Card, CardHeader, CardContent, Button, Badge, Input, SensitiveInput, Select, Tabs, TabsList, TabTrigger, TabContent, pageEntrance, useToast } from "@tac-ui/web";
+import { BrainCircuit, MessageSquare, Wifi, Cpu, Shield, FileText, Settings } from "@tac-ui/icon";
 import { useConfirm } from "@/hooks/useConfirm";
 import { SessionList } from "@/components/openclaw/SessionList";
 import { ChannelSetup } from "@/components/openclaw/ChannelSetup";
@@ -26,6 +26,11 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
   const [apiKey, setApiKey] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const handleProviderChange = (value: string) => {
+    setProvider(value);
+    setApiKey("");
+  };
+
   const PROVIDERS = [
     { value: "anthropic", label: "Anthropic (Claude)" },
     { value: "openai", label: "OpenAI (GPT)" },
@@ -44,10 +49,10 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
     ollama: { field: "ollamaBaseUrl", placeholder: "http://localhost:11434", isUrl: true },
   };
 
-  const handleStart = async (skipKey = false) => {
+  const handleStart = async () => {
     setLoading(true);
     try {
-      const models = !skipKey && apiKey.trim()
+      const models = apiKey.trim()
         ? { [KEY_MAP[provider].field]: apiKey.trim() } as Record<string, string>
         : undefined;
       const res = await api.updateOpenClawSettings({
@@ -86,7 +91,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium block mb-1.5">Provider</label>
-              <Select options={PROVIDERS} value={provider} onChange={setProvider} />
+              <Select options={PROVIDERS} value={provider} onChange={handleProviderChange} />
             </div>
             <div>
               <label className="text-sm font-medium block mb-1.5">{KEY_MAP[provider].isUrl ? "Base URL" : "API Key"}</label>
@@ -105,7 +110,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="primary" size="sm" disabled={loading} onClick={() => handleStart()}>
+              <Button variant="primary" size="sm" disabled={loading} onClick={handleStart}>
                 {loading ? "Starting..." : apiKey.trim() ? "Start OpenClaw" : "Start without API Key"}
               </Button>
             </div>
@@ -168,150 +173,179 @@ export default function OpenClawPage() {
 
   return (
     <motion.div className="max-w-screen-md mx-auto space-y-6" {...pageEntrance}>
-      {/* Sessions */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-point/15 flex items-center justify-center">
-              <BrainCircuit size={18} className="text-point" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold">OpenClaw</h2>
-                <Badge variant={gateway.connected ? "success" : "secondary"}>
-                  {gateway.connected ? "Connected" : "Disconnected"}
-                </Badge>
-              </div>
-              <p className="text-xs text-muted-foreground">AI Assistant</p>
-            </div>
+      {/* Page header with single status indicator */}
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-point/15 flex items-center justify-center">
+          <BrainCircuit size={20} className="text-point" />
+        </div>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <h1 className="text-base font-semibold">OpenClaw</h1>
+            <Badge variant={gateway.connected ? "success" : "secondary"}>
+              {gateway.connected ? "Connected" : "Disconnected"}
+            </Badge>
           </div>
-        </CardHeader>
-        <CardContent>
-          <SessionList
-            sessions={sessions}
-            onCreateSession={handleCreateSession}
-            onDeleteSession={handleDeleteSession}
-            creating={creatingSession}
-            connected={gateway.connected}
-          />
-        </CardContent>
-      </Card>
+          <p className="text-xs text-muted-foreground">AI Assistant Gateway</p>
+        </div>
+      </div>
 
-      {/* Channels */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-success/15 flex items-center justify-center">
-              <Wifi size={18} className="text-success" />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold">Channels</h2>
-              <p className="text-xs text-muted-foreground">Connect messaging platforms</p>
-            </div>
+      <Tabs defaultValue="sessions">
+        <TabsList>
+          <TabTrigger value="sessions">Sessions</TabTrigger>
+          <TabTrigger value="setup">Setup</TabTrigger>
+          {isManager && <TabTrigger value="credentials">Credentials</TabTrigger>}
+          {isManager && <TabTrigger value="advanced">Advanced</TabTrigger>}
+        </TabsList>
+
+        {/* Sessions Tab */}
+        <TabContent value="sessions">
+          <div className="pt-4">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-point/15 flex items-center justify-center">
+                    <MessageSquare size={18} className="text-point" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-semibold">Chat Sessions</h2>
+                    <p className="text-xs text-muted-foreground">Start conversations with your AI assistant</p>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <SessionList
+                  sessions={sessions}
+                  onCreateSession={handleCreateSession}
+                  onDeleteSession={handleDeleteSession}
+                  creating={creatingSession}
+                  connected={gateway.connected}
+                />
+              </CardContent>
+            </Card>
           </div>
-        </CardHeader>
-        <CardContent>
-          <ChannelSetup gateway={gateway} channels={channels} onRefresh={refreshChannels} />
-        </CardContent>
-      </Card>
+        </TabContent>
 
-      {/* Model */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-warning/15 flex items-center justify-center">
-              <BrainCircuit size={18} className="text-warning" />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold">Model</h2>
-              <p className="text-xs text-muted-foreground">Default AI model for conversations</p>
-            </div>
+        {/* Setup Tab */}
+        <TabContent value="setup">
+          <div className="pt-4 space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-warning/15 flex items-center justify-center">
+                    <Cpu size={18} className="text-warning" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-semibold">Model</h2>
+                    <p className="text-xs text-muted-foreground">Default AI model for conversations</p>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <ModelSelector gateway={gateway} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-success/15 flex items-center justify-center">
+                    <Wifi size={18} className="text-success" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-semibold">Channels</h2>
+                    <p className="text-xs text-muted-foreground">Connect messaging platforms</p>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <ChannelSetup gateway={gateway} channels={channels} onRefresh={refreshChannels} />
+              </CardContent>
+            </Card>
           </div>
-        </CardHeader>
-        <CardContent>
-          <ModelSelector gateway={gateway} />
-        </CardContent>
-      </Card>
+        </TabContent>
 
-      {/* API Keys */}
-      {isManager && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center">
-                <Key size={18} className="text-muted-foreground" />
-              </div>
-              <div>
-                <h2 className="text-sm font-semibold">API Keys</h2>
-                <p className="text-xs text-muted-foreground">Manage model provider credentials</p>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ModelManager settings={settings} onSaved={refreshSettings} />
-          </CardContent>
-        </Card>
-      )}
+        {/* Credentials Tab */}
+        {isManager && (
+          <TabContent value="credentials">
+            <div className="pt-4 space-y-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-point/15 flex items-center justify-center">
+                      <BrainCircuit size={18} className="text-point" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-semibold">API Keys</h2>
+                      <p className="text-xs text-muted-foreground">Standard model provider credentials</p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <ModelManager settings={settings} onSaved={refreshSettings} />
+                </CardContent>
+              </Card>
 
-      {/* Token Providers */}
-      {isManager && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center">
-                <KeyRound size={18} className="text-muted-foreground" />
-              </div>
-              <div>
-                <h2 className="text-sm font-semibold">Token Providers</h2>
-                <p className="text-xs text-muted-foreground">Custom token providers (OAuth, openai-codex, etc.)</p>
-              </div>
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-info/15 flex items-center justify-center">
+                      <Shield size={18} className="text-info" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-semibold">Token Providers</h2>
+                      <p className="text-xs text-muted-foreground">Custom OAuth tokens and provider auth profiles</p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <TokenProviderManager />
+                </CardContent>
+              </Card>
             </div>
-          </CardHeader>
-          <CardContent>
-            <TokenProviderManager />
-          </CardContent>
-        </Card>
-      )}
+          </TabContent>
+        )}
 
-      {/* Files */}
-      {isManager && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center">
-                <FileText size={18} className="text-muted-foreground" />
-              </div>
-              <div>
-                <h2 className="text-sm font-semibold">Files</h2>
-                <p className="text-xs text-muted-foreground">USER.md, CLAUDE.md and other configuration files</p>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <FileManager />
-          </CardContent>
-        </Card>
-      )}
+        {/* Advanced Tab */}
+        {isManager && (
+          <TabContent value="advanced">
+            <div className="pt-4 space-y-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center">
+                      <FileText size={18} className="text-muted-foreground" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-semibold">Harness Files</h2>
+                      <p className="text-xs text-muted-foreground">USER.md, CLAUDE.md and other configuration files</p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <FileManager />
+                </CardContent>
+              </Card>
 
-      {/* Advanced Config */}
-      {isManager && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center">
-                <Settings size={18} className="text-muted-foreground" />
-              </div>
-              <div>
-                <h2 className="text-sm font-semibold">Advanced Config</h2>
-                <p className="text-xs text-muted-foreground">Full OpenClaw configuration</p>
-              </div>
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center">
+                      <Settings size={18} className="text-muted-foreground" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-semibold">Raw Config</h2>
+                      <p className="text-xs text-muted-foreground">Full OpenClaw JSON configuration</p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <ConfigEditor gateway={gateway} />
+                </CardContent>
+              </Card>
             </div>
-          </CardHeader>
-          <CardContent>
-            <ConfigEditor gateway={gateway} />
-          </CardContent>
-        </Card>
-      )}
+          </TabContent>
+        )}
+      </Tabs>
     </motion.div>
   );
 }

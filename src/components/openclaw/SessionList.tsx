@@ -42,12 +42,6 @@ export function SessionList({ sessions, onCreateSession, onDeleteSession, creati
         </Button>
       </div>
 
-      {!connected && (
-        <div className="text-xs text-warning bg-warning/10 border border-warning/20 rounded-lg px-3 py-2">
-          Gateway disconnected. Reconnecting...
-        </div>
-      )}
-
       {sorted.length === 0 ? (
         <EmptyState
           icon={<MessageSquare size={32} />}

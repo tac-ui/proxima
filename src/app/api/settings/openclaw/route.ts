@@ -57,15 +57,17 @@ export async function PUT(req: NextRequest) {
       update.gatewayToken = ensureGatewayToken();
     }
 
-    // Models: only update keys that aren't masked
+    // Models: accept non-masked strings; empty string means remove the key
     if (body.models && typeof body.models === "object") {
       const models: Record<string, string | undefined> = {};
+      let hasChange = false;
       for (const [key, val] of Object.entries(body.models)) {
-        if (typeof val === "string" && val && !val.includes("••")) {
-          models[key] = val;
+        if (typeof val === "string" && !val.includes("••")) {
+          models[key] = val; // may be "" to signal removal
+          hasChange = true;
         }
       }
-      if (Object.keys(models).length > 0) {
+      if (hasChange) {
         update.models = models as typeof current.models;
       }
     }

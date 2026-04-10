@@ -69,7 +69,14 @@ export function saveOpenClawSettings(data: Partial<OpenClawSettings>): OpenClawS
     dbHelpers.setSetting(db, "openclaw:image", data.image);
   }
   if (data.models !== undefined) {
-    const merged = { ...current.models, ...data.models };
+    const merged: Record<string, string> = { ...current.models as Record<string, string> };
+    for (const [key, val] of Object.entries(data.models)) {
+      if (val === "" || val === undefined) {
+        delete merged[key];
+      } else if (typeof val === "string") {
+        merged[key] = val;
+      }
+    }
     dbHelpers.setSetting(db, "openclaw:models", JSON.stringify(merged));
   }
   if (data.sshKeyId !== undefined) {
