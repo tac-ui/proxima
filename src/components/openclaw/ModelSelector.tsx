@@ -27,6 +27,10 @@ const MODELS = [
   { value: "deepseek/deepseek-chat", label: "DeepSeek V3" },
   { value: "deepseek/deepseek-reasoner", label: "DeepSeek R1" },
   { value: "xai/grok-3", label: "Grok 3" },
+  { value: "zai/glm-4-plus", label: "GLM-4 Plus" },
+  { value: "zai/glm-4-air", label: "GLM-4 Air" },
+  { value: "zai/glm-4-flash", label: "GLM-4 Flash" },
+  { value: "zai/glm-z1-plus", label: "GLM-Z1 Plus" },
   { value: "openrouter/auto", label: "OpenRouter Auto" },
 ];
 

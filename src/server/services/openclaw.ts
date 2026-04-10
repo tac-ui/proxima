@@ -169,6 +169,7 @@ export async function startOpenClaw(): Promise<void> {
   if (models.openrouterApiKey) env.OPENROUTER_API_KEY = models.openrouterApiKey;
   if (models.deepseekApiKey) env.DEEPSEEK_API_KEY = models.deepseekApiKey;
   if (models.xaiApiKey) env.XAI_API_KEY = models.xaiApiKey;
+  if (models.zaiApiKey) env.ZAI_API_KEY = models.zaiApiKey;
   if (models.groqApiKey) env.GROQ_API_KEY = models.groqApiKey;
   if (models.mistralApiKey) env.MISTRAL_API_KEY = models.mistralApiKey;
   if (models.fireworksApiKey) env.FIREWORKS_API_KEY = models.fireworksApiKey;

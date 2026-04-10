@@ -16,6 +16,7 @@ const PROVIDERS = [
   { key: "anthropicApiKey" as keyof OpenClawModels, label: "Anthropic", placeholder: "sk-ant-...", color: "bg-[#d4a574]/15 text-[#d4a574]" },
   { key: "geminiApiKey" as keyof OpenClawModels, label: "Gemini", placeholder: "AI...", color: "bg-[#4285f4]/15 text-[#4285f4]" },
   { key: "openrouterApiKey" as keyof OpenClawModels, label: "OpenRouter", placeholder: "sk-or-...", color: "bg-[#8b5cf6]/15 text-[#8b5cf6]" },
+  { key: "zaiApiKey" as keyof OpenClawModels, label: "ZAI (GLM)", placeholder: "...", color: "bg-[#0052cc]/15 text-[#0052cc]" },
 ];
 
 export function ModelManager({ settings, onSaved }: ModelManagerProps) {

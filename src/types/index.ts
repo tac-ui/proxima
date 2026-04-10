@@ -411,6 +411,7 @@ export interface OpenClawModels {
   // Additional providers
   deepseekApiKey?: string;
   xaiApiKey?: string;
+  zaiApiKey?: string;
   groqApiKey?: string;
   mistralApiKey?: string;
   fireworksApiKey?: string;
