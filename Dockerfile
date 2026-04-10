@@ -39,7 +39,7 @@ ENV PXM_DATA_DIR=/data
 ENV PXM_STACKS_DIR=/data/stacks
 
 # Create data directories
-RUN mkdir -p /data/stacks /data/db
+RUN mkdir -p /data/stacks /data/db /data/openclaw
 
 # Copy built application
 COPY --from=builder /app/.next/standalone ./
@@ -52,7 +52,7 @@ COPY --from=builder /app/src ./src
 # Copy full node_modules for native modules (node-pty, better-sqlite3) and tsx
 COPY --from=deps /app/node_modules ./node_modules
 
-EXPOSE 20222
+EXPOSE 20222 20242
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \

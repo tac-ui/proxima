@@ -7,7 +7,7 @@ import { getDb, dbHelpers, schema } from "../db";
 import { eq } from "drizzle-orm";
 import type { OpenClawSettings, OpenClawModels, OpenClawStatus } from "@/types";
 
-const DEFAULT_PORT = 18789;
+const DEFAULT_PORT = 20242;
 
 const MAX_RESTARTS = 5;
 

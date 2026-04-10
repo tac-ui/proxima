@@ -30,6 +30,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
     { value: "openai", label: "OpenAI (GPT)" },
     { value: "google", label: "Google (Gemini)" },
     { value: "openrouter", label: "OpenRouter" },
+    { value: "zai", label: "ZAI (GLM)" },
   ];
 
   const KEY_MAP: Record<string, { field: string; placeholder: string }> = {
@@ -37,6 +38,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
     openai: { field: "openaiApiKey", placeholder: "sk-..." },
     google: { field: "geminiApiKey", placeholder: "AI..." },
     openrouter: { field: "openrouterApiKey", placeholder: "sk-or-..." },
+    zai: { field: "zaiApiKey", placeholder: "..." },
   };
 
   const handleStart = async (skipKey = false) => {
@@ -47,7 +49,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
         : undefined;
       const res = await api.updateOpenClawSettings({
         enabled: true,
-        gatewayPort: 18789,
+        gatewayPort: 20242,
         ...(models ? { models } : {}),
       });
       if (res.ok) {
