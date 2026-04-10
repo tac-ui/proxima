@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { useOpenClawGateway, type OpenClawGateway } from "@/hooks/useOpenClawGateway";
 import { api } from "@/lib/api";
-import type { OpenClawSession, OpenClawChannel, OpenClawUsage, OpenClawSettings } from "@/types";
+import type { OpenClawSession, OpenClawChannel, OpenClawSettings } from "@/types";
 
 interface OpenClawContextValue {
   gateway: OpenClawGateway;
@@ -11,10 +11,8 @@ interface OpenClawContextValue {
   settings: OpenClawSettings | null;
   sessions: OpenClawSession[];
   channels: OpenClawChannel[];
-  usage: OpenClawUsage | null;
   refreshSessions: () => Promise<void>;
   refreshChannels: () => Promise<void>;
-  refreshUsage: () => Promise<void>;
   refreshSettings: () => Promise<void>;
 }
 
@@ -32,7 +30,6 @@ export function OpenClawProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<OpenClawSettings | null>(null);
   const [sessions, setSessions] = useState<OpenClawSession[]>([]);
   const [channels, setChannels] = useState<OpenClawChannel[]>([]);
-  const [usage, setUsage] = useState<OpenClawUsage | null>(null);
   const initialLoadDone = useRef(false);
 
   const refreshSettings = useCallback(async () => {
@@ -47,11 +44,8 @@ export function OpenClawProvider({ children }: { children: React.ReactNode }) {
     if (!gateway.connected) return;
     try {
       const result = await gateway.request<OpenClawSession[]>("sessions.list");
-      if (Array.isArray(result)) {
-        setSessions(result);
-      }
+      if (Array.isArray(result)) setSessions(result);
     } catch {
-      // Gateway may not support this method yet
       setSessions([]);
     }
   }, [gateway]);
@@ -59,73 +53,37 @@ export function OpenClawProvider({ children }: { children: React.ReactNode }) {
   const refreshChannels = useCallback(async () => {
     if (!gateway.connected) return;
     try {
-      const result = await gateway.request<Record<string, { status: string; name?: string; lastSeen?: number }>>("channels.status");
+      const result = await gateway.request<Record<string, { status: string; name?: string }>>("channels.status");
       if (result && typeof result === "object") {
-        const list: OpenClawChannel[] = Object.entries(result).map(([type, info]) => ({
+        setChannels(Object.entries(result).map(([type, info]) => ({
           type,
           status: (info.status === "connected" ? "connected" : "disconnected") as OpenClawChannel["status"],
           name: info.name,
-          lastSeen: info.lastSeen,
-        }));
-        setChannels(list);
+        })));
       }
     } catch {
       setChannels([]);
     }
   }, [gateway]);
 
-  const refreshUsage = useCallback(async () => {
-    if (!gateway.connected) return;
-    try {
-      const result = await gateway.request<OpenClawUsage>("usage.status");
-      if (result) setUsage(result);
-    } catch {
-      setUsage(null);
-    }
-  }, [gateway]);
+  useEffect(() => { refreshSettings(); }, [refreshSettings]);
 
-  // Load settings on mount
-  useEffect(() => {
-    refreshSettings();
-  }, [refreshSettings]);
-
-  // Load gateway data when connected
   useEffect(() => {
     if (gateway.connected && !initialLoadDone.current) {
       initialLoadDone.current = true;
       refreshSessions();
       refreshChannels();
-      refreshUsage();
     }
-    if (!gateway.connected) {
-      initialLoadDone.current = false;
-    }
-  }, [gateway.connected, refreshSessions, refreshChannels, refreshUsage]);
+    if (!gateway.connected) initialLoadDone.current = false;
+  }, [gateway.connected, refreshSessions, refreshChannels]);
 
-  // Subscribe to session changes
   useEffect(() => {
     if (!gateway.connected) return;
-    const unsub = gateway.subscribe("sessions.changed", () => {
-      refreshSessions();
-    });
-    return unsub;
+    return gateway.subscribe("sessions.changed", () => { refreshSessions(); });
   }, [gateway, refreshSessions]);
 
   return (
-    <OpenClawContext.Provider
-      value={{
-        gateway,
-        enabled,
-        settings,
-        sessions,
-        channels,
-        usage,
-        refreshSessions,
-        refreshChannels,
-        refreshUsage,
-        refreshSettings,
-      }}
-    >
+    <OpenClawContext.Provider value={{ gateway, enabled, settings, sessions, channels, refreshSessions, refreshChannels, refreshSettings }}>
       {children}
     </OpenClawContext.Provider>
   );
