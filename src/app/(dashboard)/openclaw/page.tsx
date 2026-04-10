@@ -14,6 +14,7 @@ import { ChannelSetup } from "@/components/openclaw/ChannelSetup";
 import { ModelManager } from "@/components/openclaw/ModelManager";
 import { ModelSelector } from "@/components/openclaw/ModelSelector";
 import { ConfigEditor } from "@/components/openclaw/ConfigEditor";
+import { FileManager } from "@/components/openclaw/FileManager";
 
 // ---------------------------------------------------------------------------
 // Onboarding
@@ -245,6 +246,26 @@ export default function OpenClawPage() {
           </CardHeader>
           <CardContent>
             <ModelManager settings={settings} onSaved={refreshSettings} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Files */}
+      {isManager && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center">
+                <Settings size={18} className="text-muted-foreground" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold">Files</h2>
+                <p className="text-xs text-muted-foreground">USER.md, CLAUDE.md and other configuration files</p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <FileManager />
           </CardContent>
         </Card>
       )}

@@ -239,6 +239,10 @@ export const api = {
   // OpenClaw
   getOpenClawToken: () => request<{ token: string; port: number }>("GET", "/api/settings/openclaw/token"),
   getOpenClawImportChannels: () => request<{ type: string; name: string; config: Record<string, string> }[]>("GET", "/api/settings/openclaw/import-channels"),
+  getOpenClawFiles: () => request<{ name: string; size: number }[]>("GET", "/api/settings/openclaw/files"),
+  readOpenClawFile: (name: string) => request<{ name: string; content: string }>("PUT", "/api/settings/openclaw/files", { name }),
+  writeOpenClawFile: (name: string, content: string) => request<{ name: string }>("POST", "/api/settings/openclaw/files", { name, content }),
+  deleteOpenClawFile: (name: string) => request("DELETE", "/api/settings/openclaw/files", { name }),
   getOpenClawSettings: () => request<OpenClawSettings>("GET", "/api/settings/openclaw"),
   updateOpenClawSettings: (data: Partial<OpenClawSettings>) => request<OpenClawSettings>("PUT", "/api/settings/openclaw", data),
   getOpenClawStatus: () => request<OpenClawStatus>("GET", "/api/settings/openclaw/status"),
