@@ -3,11 +3,14 @@
 import React, { useState, useEffect } from "react";
 import { Select, Input, Button, useToast } from "@tac-ui/web";
 import { BrainCircuit } from "@tac-ui/icon";
+import { api } from "@/lib/api";
 import type { OpenClawGateway } from "@/hooks/useOpenClawGateway";
 
 interface ModelSelectorProps {
   gateway: OpenClawGateway;
 }
+
+interface AuthProfile { profileId: string; provider: string; }
 
 const MODELS = [
   { value: "", label: "Select a model...", disabled: true },
@@ -41,6 +44,17 @@ export function ModelSelector({ gateway }: ModelSelectorProps) {
   const [saving, setSaving] = useState(false);
   const [customMode, setCustomMode] = useState(false);
   const [customModel, setCustomModel] = useState("");
+  const [customProviders, setCustomProviders] = useState<string[]>([]);
+
+  // Load custom providers from auth profiles (independent of gateway)
+  useEffect(() => {
+    api.getOpenClawAuthProfiles().then((res) => {
+      if (res.ok && res.data) {
+        const unique = [...new Set(res.data.map(p => p.provider))];
+        setCustomProviders(unique);
+      }
+    }).catch(() => { /* ignore */ });
+  }, []);
 
   useEffect(() => {
     if (!gateway.connected) return;
@@ -80,11 +94,27 @@ export function ModelSelector({ gateway }: ModelSelectorProps) {
 
   const handleChange = (value: string) => {
     if (value === "__custom") { setCustomMode(true); return; }
+    if (value.startsWith("__provider:")) {
+      const provider = value.slice("__provider:".length);
+      setCustomMode(true);
+      setCustomModel(`${provider}/`);
+      return;
+    }
     if (!value || value.startsWith("__g_")) return;
     applyModel(value);
   };
 
-  const isPreset = MODELS.some(m => m.value === currentModel && !m.disabled);
+  // Build options with custom providers group (from auth profiles)
+  const allOptions = [
+    ...MODELS.slice(0, -1), // all except "Custom model..."
+    ...(customProviders.length > 0 ? [
+      { value: "__g_custom_providers", label: "── Custom Providers ──", disabled: true },
+      ...customProviders.map(p => ({ value: `__provider:${p}`, label: `${p}/... (enter model)` })),
+    ] : []),
+    MODELS[MODELS.length - 1], // "Custom model..."
+  ];
+
+  const isPreset = allOptions.some(m => m.value === currentModel && !(m as { disabled?: boolean }).disabled);
 
   return (
     <div className="space-y-3">
@@ -93,7 +123,7 @@ export function ModelSelector({ gateway }: ModelSelectorProps) {
         <p className="text-sm font-medium">Default Model</p>
       </div>
       <Select
-        options={MODELS}
+        options={allOptions}
         value={isPreset ? currentModel : "__custom"}
         onChange={handleChange}
         placeholder="Select a model..."
