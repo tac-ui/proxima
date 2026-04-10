@@ -30,7 +30,7 @@ export async function GET(
     const changes = await gitService.getChangedFiles(repo.path);
 
     // Check if env files are tracked by git
-    let envFiles: { path: string; tracked: boolean }[] = [];
+    const envFiles: { path: string; tracked: boolean }[] = [];
     try {
       const parsed = JSON.parse(repo.envFiles || "[]") as { name: string; path: string }[];
       for (const ef of parsed) {
