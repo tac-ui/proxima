@@ -6,8 +6,8 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOpenClaw } from "@/contexts/OpenClawContext";
 import { api } from "@/lib/api";
-import { Card, CardHeader, CardContent, Button, Badge, SensitiveInput, Select, EmptyState, pageEntrance, useToast } from "@tac-ui/web";
-import { BrainCircuit, Settings, MessageSquare, Wifi, Key, BarChart3 } from "@tac-ui/icon";
+import { Card, CardHeader, CardContent, Button, Badge, SensitiveInput, Select, pageEntrance, useToast } from "@tac-ui/web";
+import { BrainCircuit, Settings, MessageSquare, Wifi, Key } from "@tac-ui/icon";
 import { useConfirm } from "@/hooks/useConfirm";
 import { SessionList } from "@/components/openclaw/SessionList";
 import { ChannelSetup } from "@/components/openclaw/ChannelSetup";
@@ -77,7 +77,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4 max-w-sm">
+          <div className="space-y-4">
             <div>
               <label className="text-sm font-medium block mb-1.5">Provider</label>
               <Select options={PROVIDERS} value={provider} onChange={setProvider} />
@@ -90,12 +90,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
                 placeholder={KEY_MAP[provider].placeholder}
               />
             </div>
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={!apiKey.trim() || loading}
-              onClick={handleStart}
-            >
+            <Button variant="primary" size="sm" disabled={!apiKey.trim() || loading} onClick={handleStart}>
               {loading ? "Starting..." : "Start OpenClaw"}
             </Button>
             <p className="text-[10px] text-muted-foreground">
@@ -116,7 +111,7 @@ export default function OpenClawPage() {
   const { isManager } = useAuth();
   const { toast } = useToast();
   const confirm = useConfirm();
-  const { gateway, enabled, settings, sessions, channels, usage, refreshSessions, refreshChannels, refreshSettings } = useOpenClaw();
+  const { gateway, enabled, settings, sessions, channels, refreshSessions, refreshChannels, refreshSettings } = useOpenClaw();
   const [creatingSession, setCreatingSession] = useState(false);
 
   if (!enabled) {
@@ -225,67 +220,9 @@ export default function OpenClawPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <ModelSelector
-            gateway={gateway}
-            configuredProviders={settings?.models ? Object.entries(settings.models)
-              .filter(([, v]) => v && v.length > 0)
-              .map(([k]) => k.replace("ApiKey", "").replace("AiGw", "").replace("BaseUrl", "").replace("Endpoint", ""))
-              .map(k => k.toLowerCase())
-            : undefined}
-          />
+          <ModelSelector gateway={gateway} />
         </CardContent>
       </Card>
-
-      {/* Usage */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-info/15 flex items-center justify-center">
-              <BarChart3 size={18} className="text-info" />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold">Usage</h2>
-              <p className="text-xs text-muted-foreground">Token usage and costs</p>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {usage ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">Tokens</p>
-                <span className="text-sm font-medium">{usage.totalTokens.toLocaleString()}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">Cost</p>
-                <span className="text-sm font-medium">${usage.totalCost.toFixed(4)}</span>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Start chatting to track usage</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Configuration */}
-      {isManager && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center">
-                <Settings size={18} className="text-muted-foreground" />
-              </div>
-              <div>
-                <h2 className="text-sm font-semibold">Configuration</h2>
-                <p className="text-xs text-muted-foreground">Agent behavior, channel policies, and advanced settings</p>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ConfigEditor gateway={gateway} settings={settings} onSettingsSaved={refreshSettings} />
-          </CardContent>
-        </Card>
-      )}
 
       {/* API Keys */}
       {isManager && (
@@ -303,6 +240,26 @@ export default function OpenClawPage() {
           </CardHeader>
           <CardContent>
             <ModelManager settings={settings} onSaved={refreshSettings} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Advanced Config */}
+      {isManager && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center">
+                <Settings size={18} className="text-muted-foreground" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold">Advanced Config</h2>
+                <p className="text-xs text-muted-foreground">Full OpenClaw configuration</p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ConfigEditor gateway={gateway} />
           </CardContent>
         </Card>
       )}
