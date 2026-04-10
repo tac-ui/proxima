@@ -141,12 +141,19 @@ export class GitService {
       await git.fetch(["--unshallow"]);
     }
 
-    await git.fetch(["origin"]);
+    // Fetch all remote refs (including the target branch explicitly)
+    await git.fetch(["origin", branch]).catch(() => git.fetch(["origin"]));
     // Try local checkout first; if branch doesn't exist locally, create from remote
     try {
       await git.checkout(branch);
     } catch {
-      await git.checkout(["-b", branch, `origin/${branch}`]);
+      try {
+        await git.checkout(["-b", branch, `origin/${branch}`]);
+      } catch {
+        // Last resort: fetch the specific branch and retry
+        await git.fetch(["origin", `${branch}:refs/remotes/origin/${branch}`]);
+        await git.checkout(["-b", branch, `origin/${branch}`]);
+      }
     }
     const result = await git.pull("origin", branch);
     logger.info("git", `Checkout ${branch} in ${repoPath}`);

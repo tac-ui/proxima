@@ -164,7 +164,7 @@ export default function ProjectDetailPage() {
         const id = res.data.id;
         if (id > 0) {
           setCommitsRefreshing(true);
-          api.getRepoCommits(id, 20).then((cr) => {
+          api.getRepoCommits(id, 5).then((cr) => {
             if (cr.ok && cr.data) setCommits(cr.data.commits);
             setCommitsRefreshing(false);
           });
@@ -182,7 +182,7 @@ export default function ProjectDetailPage() {
   const fetchCommits = useCallback(() => {
     if (repoId <= 0) return;
     setCommitsRefreshing(true);
-    api.getRepoCommits(repoId, 20).then((res) => {
+    api.getRepoCommits(repoId, 5).then((res) => {
       if (res.ok && res.data) setCommits(res.data.commits);
       setCommitsRefreshing(false);
     });
