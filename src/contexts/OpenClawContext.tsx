@@ -53,14 +53,46 @@ export function OpenClawProvider({ children }: { children: React.ReactNode }) {
   const refreshChannels = useCallback(async () => {
     if (!gateway.connected) return;
     try {
-      const result = await gateway.request<Record<string, { status: string; name?: string }>>("channels.status");
-      if (result && typeof result === "object") {
-        setChannels(Object.entries(result).map(([type, info]) => ({
-          type,
-          status: (info.status === "connected" ? "connected" : "disconnected") as OpenClawChannel["status"],
-          name: info.name,
-        })));
+      interface AccountSnapshot {
+        accountId: string;
+        configured?: boolean;
+        connected?: boolean;
+        enabled?: boolean;
+        running?: boolean;
+        lastError?: string;
+        name?: string;
       }
+      interface ChannelsStatusResponse {
+        channelOrder?: string[];
+        channelLabels?: Record<string, string>;
+        channelAccounts?: Record<string, AccountSnapshot[]>;
+        channelDefaultAccountId?: Record<string, string>;
+      }
+      const result = await gateway.request<ChannelsStatusResponse>("channels.status");
+      const order = result.channelOrder ?? Object.keys(result.channelAccounts ?? {});
+      const next: OpenClawChannel[] = order.map((type) => {
+        const accounts = result.channelAccounts?.[type] ?? [];
+        const defaultId = result.channelDefaultAccountId?.[type];
+        const account = accounts.find(a => a.accountId === defaultId) ?? accounts[0];
+        const configured = account?.configured === true;
+        const enabled = account?.enabled !== false;
+        const running = account?.running === true || account?.connected === true;
+        const status: OpenClawChannel["status"] = account?.lastError
+          ? "error"
+          : running
+            ? "connected"
+            : "disconnected";
+        return {
+          type,
+          status,
+          configured,
+          enabled,
+          label: result.channelLabels?.[type],
+          name: account?.name,
+          lastError: account?.lastError,
+        };
+      });
+      setChannels(next);
     } catch {
       setChannels([]);
     }

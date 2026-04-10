@@ -472,7 +472,11 @@ export interface OpenClawMessage {
 export interface OpenClawChannel {
   type: string;
   status: "connected" | "disconnected" | "error";
+  configured?: boolean;
+  enabled?: boolean;
+  label?: string;
   name?: string;
+  lastError?: string;
   lastSeen?: number;
 }
 

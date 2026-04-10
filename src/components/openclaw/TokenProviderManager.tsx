@@ -101,6 +101,18 @@ export function TokenProviderManager() {
         )}
       </div>
 
+      <div className="rounded-md border border-border bg-muted/30 p-3 text-[11px] text-muted-foreground leading-relaxed">
+        <p className="font-medium text-foreground mb-1">How to use a registered provider</p>
+        <ol className="list-decimal ml-4 space-y-0.5">
+          <li>Add the provider below with the API key or OAuth token.</li>
+          <li>Go to <span className="font-medium text-foreground">Setup → Model</span> and open the dropdown.</li>
+          <li>
+            The provider appears under <span className="font-medium text-foreground">Custom Providers</span>.
+            Pick it, then enter the model ID (e.g. <code className="font-mono text-foreground">{"<provider>/<model-name>"}</code>).
+          </li>
+        </ol>
+      </div>
+
       {adding && (
         <div className="border border-border rounded-lg p-4 space-y-3">
           <div>

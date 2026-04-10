@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button, SensitiveInput, Input, Badge, Switch, useToast } from "@tac-ui/web";
-import { Wifi, WifiOff, Download } from "@tac-ui/icon";
+import { Download, ChevronDown } from "@tac-ui/icon";
 import { api } from "@/lib/api";
 import type { OpenClawGateway } from "@/hooks/useOpenClawGateway";
 import type { OpenClawChannel } from "@/types";
@@ -41,38 +42,122 @@ const DC_ICON = "M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 0
 
 const CHANNELS: ChannelDef[] = [
   {
-    type: "telegram", label: "Telegram",
+    type: "telegram",
+    label: "Telegram",
     icon: <SvgIcon d={TG_ICON} />,
-    color: "bg-[#26A5E4]/15 text-[#26A5E4]", borderColor: "border-[#26A5E4]/30 bg-[#26A5E4]/5",
+    color: "bg-[#26A5E4]/15 text-[#26A5E4]",
+    borderColor: "border-[#26A5E4]/30",
     fields: [
-      { key: "botToken", label: "Bot Token", placeholder: "123456789:ABCdefGHI...", sensitive: true, required: true },
-      { key: "allowFrom", label: "Allowed User IDs", placeholder: "123456789, 987654321", sensitive: false, required: false, helpText: "Find your ID via @userinfobot" },
+      {
+        key: "botToken",
+        label: "Bot Token",
+        placeholder: "123456789:ABCdefGHI...",
+        sensitive: true,
+        required: true,
+        helpText: "Create a bot with @BotFather on Telegram and paste the token here.",
+      },
+      {
+        key: "allowFrom",
+        label: "Allowed User IDs",
+        placeholder: "123456789, 987654321",
+        sensitive: false,
+        required: false,
+        helpText: "Comma-separated Telegram numeric IDs. Find yours via @userinfobot. Leave empty to allow anyone.",
+      },
     ],
-    guide: ["Open Telegram, search @BotFather", "Send /newbot and follow prompts", "Copy the bot token"],
+    guide: [
+      "Open Telegram → search @BotFather",
+      "Send /newbot, pick a name",
+      "Copy the HTTP API token",
+    ],
   },
   {
-    type: "discord", label: "Discord",
+    type: "discord",
+    label: "Discord",
     icon: <SvgIcon d={DC_ICON} />,
-    color: "bg-[#5865F2]/15 text-[#5865F2]", borderColor: "border-[#5865F2]/30 bg-[#5865F2]/5",
+    color: "bg-[#5865F2]/15 text-[#5865F2]",
+    borderColor: "border-[#5865F2]/30",
     fields: [
-      { key: "token", label: "Bot Token", placeholder: "MTk4NjIz...", sensitive: true, required: true },
+      {
+        key: "token",
+        label: "Bot Token",
+        placeholder: "MTk4NjIz...",
+        sensitive: true,
+        required: true,
+        helpText: "From Discord Developer Portal → Bot → Reset Token.",
+      },
     ],
-    guide: ["Go to Discord Developer Portal", "Create New Application → Bot section", "Reset Token, copy it, enable Message Content Intent"],
+    guide: [
+      "discord.com/developers/applications → New Application",
+      "Bot section → Reset Token, copy it",
+      "Enable 'Message Content Intent' under Privileged Gateway Intents",
+      "OAuth2 → URL Generator → scope: bot → paste URL in browser to invite",
+    ],
   },
 ];
 
 interface ConfigState { hash: string; config: Record<string, unknown>; }
+interface FormState { fields: Record<string, string>; enabled: boolean; }
+
+function statusBadge(ch: OpenClawChannel | undefined) {
+  if (!ch) return { label: "Not configured", variant: "secondary" as const };
+  if (ch.status === "error") return { label: "Error", variant: "error" as const };
+  if (!ch.configured) return { label: "Not configured", variant: "secondary" as const };
+  if (ch.enabled === false) return { label: "Disabled", variant: "secondary" as const };
+  if (ch.status === "connected") return { label: "Connected", variant: "success" as const };
+  return { label: "Disconnected", variant: "warning" as const };
+}
 
 export function ChannelSetup({ gateway, channels, onRefresh }: ChannelSetupProps) {
   const { toast } = useToast();
-  const [adding, setAdding] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const [forms, setForms] = useState<Record<string, FormState>>({});
+
+  // Seed "enabled" toggle from the server state when channels refresh.
+  useEffect(() => {
+    setForms(prev => {
+      const next: Record<string, FormState> = { ...prev };
+      for (const def of CHANNELS) {
+        const ch = channels.find(c => c.type === def.type);
+        const existing = next[def.type];
+        next[def.type] = {
+          fields: existing?.fields ?? {},
+          enabled: existing?.enabled ?? (ch?.enabled !== false && ch?.configured === true),
+        };
+      }
+      return next;
+    });
+  }, [channels]);
+
+  const updateField = (channelType: string, fieldKey: string, value: string) => {
+    setForms(prev => ({
+      ...prev,
+      [channelType]: {
+        fields: { ...(prev[channelType]?.fields ?? {}), [fieldKey]: value },
+        enabled: prev[channelType]?.enabled ?? false,
+      },
+    }));
+  };
+
+  const setEnabled = (channelType: string, enabled: boolean) => {
+    setForms(prev => ({
+      ...prev,
+      [channelType]: {
+        fields: prev[channelType]?.fields ?? {},
+        enabled,
+      },
+    }));
+  };
 
   const patchConfig = async (patch: Record<string, unknown>): Promise<boolean> => {
     try {
       const state = await gateway.request<ConfigState>("config.get");
-      await gateway.request("config.patch", { raw: JSON.stringify(patch), baseHash: state.hash, restartDelayMs: 1000 });
+      await gateway.request("config.patch", {
+        raw: JSON.stringify(patch),
+        baseHash: state.hash,
+        restartDelayMs: 1000,
+      });
       return true;
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to update config", { variant: "error" });
@@ -80,135 +165,221 @@ export function ChannelSetup({ gateway, channels, onRefresh }: ChannelSetupProps
     }
   };
 
-  const handleConnect = async (channel: ChannelDef) => {
-    for (const f of channel.fields) {
-      if (f.required && !fieldValues[f.key]?.trim()) { toast(`${f.label} is required`, { variant: "error" }); return; }
-    }
-    setSaving(true);
-    const config: Record<string, unknown> = { enabled: true };
-    for (const f of channel.fields) {
-      const val = fieldValues[f.key]?.trim();
-      if (val) {
-        if (f.key === "allowFrom") {
-          const ids = val.split(",").map(s => Number(s.trim())).filter(n => !isNaN(n) && n > 0);
-          if (ids.length > 0) { config.allowFrom = ids; config.dmPolicy = "allowlist"; }
-        } else { config[f.key] = val; }
+  const handleSave = async (def: ChannelDef) => {
+    const form = forms[def.type] ?? { fields: {}, enabled: true };
+    const ch = channels.find(c => c.type === def.type);
+    const alreadyConfigured = ch?.configured === true;
+
+    // Require inputs only if not yet configured; otherwise empty fields
+    // keep the existing value server-side.
+    for (const f of def.fields) {
+      const val = form.fields[f.key]?.trim();
+      if (f.required && !alreadyConfigured && !val) {
+        toast(`${f.label} is required`, { variant: "error" });
+        return;
       }
     }
-    const ok = await patchConfig({ channels: { [channel.type]: config } });
-    if (ok) { toast(`${channel.label} connected!`, { variant: "success" }); setAdding(null); setFieldValues({}); setTimeout(onRefresh, 2000); }
-    setSaving(false);
+
+    setSaving(def.type);
+    const channelConfig: Record<string, unknown> = { enabled: form.enabled };
+    for (const f of def.fields) {
+      const val = form.fields[f.key]?.trim();
+      if (!val) continue;
+      if (f.key === "allowFrom") {
+        const ids = val.split(",").map(s => Number(s.trim())).filter(n => !isNaN(n) && n > 0);
+        if (ids.length > 0) {
+          channelConfig.allowFrom = ids;
+          channelConfig.dmPolicy = "allowlist";
+        }
+      } else {
+        channelConfig[f.key] = val;
+      }
+    }
+
+    const ok = await patchConfig({ channels: { [def.type]: channelConfig } });
+    if (ok) {
+      toast(`${def.label} saved`, { variant: "success" });
+      // Clear sensitive fields after save so they aren't lingering in memory
+      setForms(prev => ({
+        ...prev,
+        [def.type]: { fields: {}, enabled: form.enabled },
+      }));
+      setTimeout(onRefresh, 1500);
+    }
+    setSaving(null);
   };
 
-  const handleToggle = async (type: string, enabled: boolean) => {
-    setSaving(true);
-    const ok = await patchConfig({ channels: { [type]: { enabled } } });
-    if (ok) { toast(`Channel ${enabled ? "enabled" : "disabled"}`, { variant: "success" }); setTimeout(onRefresh, 2000); }
-    setSaving(false);
+  const handleRemove = async (def: ChannelDef) => {
+    setSaving(def.type);
+    const clearConfig: Record<string, unknown> = { enabled: false };
+    for (const f of def.fields) {
+      clearConfig[f.key] = null;
+    }
+    const ok = await patchConfig({ channels: { [def.type]: clearConfig } });
+    if (ok) {
+      toast(`${def.label} cleared`, { variant: "success" });
+      setForms(prev => ({ ...prev, [def.type]: { fields: {}, enabled: false } }));
+      setTimeout(onRefresh, 1500);
+    }
+    setSaving(null);
   };
 
   const handleImportFromProxima = async () => {
-    setSaving(true);
+    setSaving("__import");
     try {
       const res = await api.getOpenClawImportChannels();
-      if (!res.ok || !res.data?.length) { toast("No Proxima notification channels found", { variant: "warning" }); setSaving(false); return; }
-
+      if (!res.ok || !res.data?.length) {
+        toast("No Proxima notification channels found", { variant: "warning" });
+        setSaving(null);
+        return;
+      }
       let imported = 0;
       for (const ch of res.data) {
         if (ch.type === "telegram" && ch.config.botToken) {
-          const ok = await patchConfig({ channels: { telegram: { botToken: ch.config.botToken, enabled: true } } });
+          const ok = await patchConfig({
+            channels: { telegram: { botToken: ch.config.botToken, enabled: true } },
+          });
           if (ok) imported++;
         }
-        // Note: Proxima Discord uses webhookUrl (notifications only),
-        // but OpenClaw Discord needs a real bot token. Import not compatible.
+        // Discord notification channels in Proxima use webhook URLs, which
+        // aren't compatible with OpenClaw's bot-token requirement.
       }
-
       if (imported > 0) {
         toast(`Imported ${imported} channel(s) from Proxima`, { variant: "success" });
-        setTimeout(onRefresh, 2000);
+        setTimeout(onRefresh, 1500);
       } else {
-        toast("No compatible channels to import (Telegram/Discord only)", { variant: "warning" });
+        toast("Only Telegram bot tokens can be imported", { variant: "warning" });
       }
     } catch {
       toast("Failed to import channels", { variant: "error" });
     }
-    setSaving(false);
+    setSaving(null);
   };
-
-  const addingChannel = CHANNELS.find(c => c.type === adding);
-  const existingTypes = new Set(channels.map(c => c.type));
 
   return (
     <div className="space-y-3">
-      {channels.map((ch) => {
-        const def = CHANNELS.find(c => c.type === ch.type);
+      {CHANNELS.map((def) => {
+        const ch = channels.find(c => c.type === def.type);
+        const badge = statusBadge(ch);
+        const form = forms[def.type] ?? { fields: {}, enabled: false };
+        const isOpen = open === def.type;
+        const isSaving = saving === def.type;
+        const alreadyConfigured = ch?.configured === true;
+
         return (
-          <div key={ch.type} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between p-3 rounded-lg border border-border">
-            <div className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${def?.color ?? "bg-muted text-muted-foreground"}`}>
-                {def?.icon ?? (ch.status === "connected" ? <Wifi size={16} /> : <WifiOff size={16} />)}
+          <div key={def.type} className={`border rounded-lg overflow-hidden ${def.borderColor}`}>
+            <button
+              type="button"
+              onClick={() => setOpen(isOpen ? null : def.type)}
+              className="w-full flex items-center gap-3 p-3 hover:bg-muted/30 transition-colors text-left"
+            >
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${def.color}`}>
+                {def.icon}
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium">{def?.label ?? ch.type}</p>
-                  <Badge variant={ch.status === "connected" ? "success" : "secondary"}>
-                    {ch.status === "connected" ? "Online" : "Offline"}
-                  </Badge>
-                </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">{def.label}</p>
+                {ch?.lastError && (
+                  <p className="text-[10px] text-error truncate" title={ch.lastError}>
+                    {ch.lastError}
+                  </p>
+                )}
               </div>
-            </div>
-            <Switch checked={ch.status === "connected"} onChange={() => handleToggle(ch.type, ch.status !== "connected")} disabled={saving} />
+              <Badge variant={badge.variant}>{badge.label}</Badge>
+              <motion.span
+                animate={{ rotate: isOpen ? 180 : 0 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="shrink-0 text-muted-foreground"
+              >
+                <ChevronDown size={14} />
+              </motion.span>
+            </button>
+
+            <AnimatePresence initial={false}>
+              {isOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  className="overflow-hidden"
+                >
+                  <div className="px-3 pb-3 pt-3 space-y-3 border-t border-border">
+                    <div className="bg-muted/30 rounded-md p-2.5">
+                      <ol className="text-[10px] text-muted-foreground space-y-0.5 list-decimal ml-3.5">
+                        {def.guide.map((s, i) => <li key={i}>{s}</li>)}
+                      </ol>
+                    </div>
+
+                    {def.fields.map((f) => (
+                      <div key={f.key}>
+                        <label className="text-xs font-medium block mb-1">
+                          {f.label}
+                          {!f.required && <span className="text-muted-foreground font-normal ml-1">(optional)</span>}
+                        </label>
+                        {f.sensitive ? (
+                          <SensitiveInput
+                            value={form.fields[f.key] ?? ""}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField(def.type, f.key, e.target.value)}
+                            placeholder={alreadyConfigured ? "•••••••• (leave blank to keep)" : f.placeholder}
+                          />
+                        ) : (
+                          <Input
+                            value={form.fields[f.key] ?? ""}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField(def.type, f.key, e.target.value)}
+                            placeholder={f.placeholder}
+                          />
+                        )}
+                        {f.helpText && <p className="text-[10px] text-muted-foreground mt-1">{f.helpText}</p>}
+                      </div>
+                    ))}
+
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={form.enabled}
+                          onChange={() => setEnabled(def.type, !form.enabled)}
+                        />
+                        <span className="text-xs text-muted-foreground">Enabled</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {alreadyConfigured && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-error hover:text-error"
+                            disabled={isSaving}
+                            onClick={() => handleRemove(def)}
+                          >
+                            Clear
+                          </Button>
+                        )}
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          disabled={isSaving}
+                          onClick={() => handleSave(def)}
+                        >
+                          {isSaving ? "Saving..." : "Save"}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         );
       })}
 
-      {addingChannel && (
-        <div className={`border rounded-xl p-5 space-y-4 ${addingChannel.borderColor}`}>
-          <div className="flex items-center gap-3">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${addingChannel.color}`}>{addingChannel.icon}</div>
-            <h3 className="text-sm font-semibold">Connect {addingChannel.label}</h3>
-          </div>
-          <div className="bg-background rounded-lg p-3">
-            <ol className="text-xs text-muted-foreground space-y-1 list-decimal ml-4">
-              {addingChannel.guide.map((s, i) => <li key={i}>{s}</li>)}
-            </ol>
-          </div>
-          {addingChannel.fields.map((f) => (
-            <div key={f.key}>
-              <label className="text-sm font-medium block mb-1.5">
-                {f.label} {!f.required && <span className="text-muted-foreground font-normal">(optional)</span>}
-              </label>
-              {f.sensitive ? (
-                <SensitiveInput value={fieldValues[f.key] ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFieldValues(prev => ({ ...prev, [f.key]: e.target.value }))} placeholder={f.placeholder} />
-              ) : (
-                <Input value={fieldValues[f.key] ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFieldValues(prev => ({ ...prev, [f.key]: e.target.value }))} placeholder={f.placeholder} />
-              )}
-              {f.helpText && <p className="text-[10px] text-muted-foreground mt-1">{f.helpText}</p>}
-            </div>
-          ))}
-          <div className="flex justify-between">
-            <Button variant="ghost" size="sm" onClick={() => { setAdding(null); setFieldValues({}); }}>Cancel</Button>
-            <Button variant="primary" size="sm" disabled={saving} onClick={() => handleConnect(addingChannel)}>
-              {saving ? "Connecting..." : `Connect ${addingChannel.label}`}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {!adding && (
-        <div className="flex gap-2 flex-wrap">
-          {CHANNELS.filter(c => !existingTypes.has(c.type)).map((ch) => (
-            <button key={ch.type} type="button" className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border border-dashed transition-all text-xs text-muted-foreground hover:text-foreground ${ch.borderColor}`} onClick={() => setAdding(ch.type)}>
-              <span className={`w-5 h-5 rounded flex items-center justify-center ${ch.color}`}>{ch.icon}</span>
-              {ch.label}
-            </button>
-          ))}
-          <button type="button" className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-dashed border-border transition-all text-xs text-muted-foreground hover:text-foreground hover:border-foreground/30" onClick={handleImportFromProxima} disabled={saving}>
-            <Download size={14} />
-            Import from Proxima
-          </button>
-        </div>
-      )}
+      <button
+        type="button"
+        className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-border transition-colors text-xs text-muted-foreground hover:text-foreground hover:border-foreground/30 disabled:opacity-50"
+        onClick={handleImportFromProxima}
+        disabled={saving !== null}
+      >
+        <Download size={14} />
+        {saving === "__import" ? "Importing..." : "Import Telegram bot token from Proxima"}
+      </button>
     </div>
   );
 }

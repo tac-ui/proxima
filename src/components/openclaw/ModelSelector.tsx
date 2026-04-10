@@ -10,8 +10,6 @@ interface ModelSelectorProps {
   gateway: OpenClawGateway;
 }
 
-interface AuthProfile { profileId: string; provider: string; }
-
 const MODELS = [
   { value: "", label: "Select a model...", disabled: true },
   { value: "__g_anthropic", label: "── Anthropic ──", disabled: true },
@@ -26,6 +24,9 @@ const MODELS = [
   { value: "__g_google", label: "── Google ──", disabled: true },
   { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
   { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+  { value: "__g_openrouter", label: "── OpenRouter ──", disabled: true },
+  { value: "openrouter/auto", label: "OpenRouter Auto (let OpenRouter pick)" },
+  { value: "__provider:openrouter", label: "Choose an OpenRouter model..." },
   { value: "__g_other", label: "── Other ──", disabled: true },
   { value: "deepseek/deepseek-chat", label: "DeepSeek V3" },
   { value: "deepseek/deepseek-reasoner", label: "DeepSeek R1" },
@@ -34,8 +35,7 @@ const MODELS = [
   { value: "zai/glm-4-air", label: "GLM-4 Air" },
   { value: "zai/glm-4-flash", label: "GLM-4 Flash" },
   { value: "zai/glm-z1-plus", label: "GLM-Z1 Plus" },
-  { value: "openrouter/auto", label: "OpenRouter Auto" },
-  { value: "__custom", label: "Custom model..." },
+  { value: "__custom", label: "Enter model ID manually..." },
 ];
 
 export function ModelSelector({ gateway }: ModelSelectorProps) {
@@ -46,11 +46,13 @@ export function ModelSelector({ gateway }: ModelSelectorProps) {
   const [customModel, setCustomModel] = useState("");
   const [customProviders, setCustomProviders] = useState<string[]>([]);
 
-  // Load custom providers from auth profiles (independent of gateway)
+  // Load custom providers from auth profiles (independent of gateway).
+  // Skip "openrouter" — it has its own built-in entry in the OpenRouter group.
   useEffect(() => {
     api.getOpenClawAuthProfiles().then((res) => {
       if (res.ok && res.data) {
-        const unique = [...new Set(res.data.map(p => p.provider))];
+        const unique = [...new Set(res.data.map(p => p.provider))]
+          .filter(p => p !== "openrouter");
         setCustomProviders(unique);
       }
     }).catch(() => { /* ignore */ });
@@ -116,6 +118,22 @@ export function ModelSelector({ gateway }: ModelSelectorProps) {
 
   const isPreset = allOptions.some(m => m.value === currentModel && !(m as { disabled?: boolean }).disabled);
 
+  // When currentModel isn't a preset, see if it matches a provider prefix
+  // (openrouter or a user-registered custom provider) so the Select still
+  // reflects *which* provider the free-form model belongs to, instead of
+  // falling back to the generic "Enter model ID manually..." entry.
+  const matchingProvider = !isPreset && currentModel
+    ? (currentModel.startsWith("openrouter/")
+        ? "openrouter"
+        : customProviders.find(p => currentModel.startsWith(`${p}/`)))
+    : undefined;
+
+  const selectValue = isPreset
+    ? currentModel
+    : matchingProvider
+      ? `__provider:${matchingProvider}`
+      : "__custom";
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
@@ -124,27 +142,39 @@ export function ModelSelector({ gateway }: ModelSelectorProps) {
       </div>
       <Select
         options={allOptions}
-        value={isPreset ? currentModel : "__custom"}
+        value={selectValue}
         onChange={handleChange}
         placeholder="Select a model..."
         disabled={!gateway.connected || saving}
       />
-      {customMode && (
-        <div className="flex items-center gap-2">
-          <Input
-            value={customModel}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomModel(e.target.value)}
-            placeholder="e.g. openrouter/z-ai/glm-4.5-air:free"
-            size="sm"
-          />
-          <Button variant="primary" size="sm" disabled={!customModel.trim() || saving} onClick={() => applyModel(customModel.trim())}>
-            Apply
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => { setCustomMode(false); setCustomModel(""); }}>
-            Cancel
-          </Button>
-        </div>
-      )}
+      {customMode && (() => {
+        const isOpenRouter = customModel.startsWith("openrouter/");
+        const placeholder = isOpenRouter
+          ? "openrouter/anthropic/claude-3.5-sonnet"
+          : "provider/model-id";
+        const hint = isOpenRouter
+          ? "Enter an OpenRouter model slug. Browse them at openrouter.ai/models."
+          : "Format: provider/model-id. Use this only for models not listed above.";
+        return (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <Input
+                value={customModel}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomModel(e.target.value)}
+                placeholder={placeholder}
+                size="sm"
+              />
+              <Button variant="primary" size="sm" disabled={!customModel.trim() || saving} onClick={() => applyModel(customModel.trim())}>
+                Apply
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => { setCustomMode(false); setCustomModel(""); }}>
+                Cancel
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground">{hint}</p>
+          </div>
+        );
+      })()}
       {gateway.connected && currentModel && (
         <p className="text-[10px] text-muted-foreground">
           Using <span className="font-medium">{MODELS.find(m => m.value === currentModel)?.label ?? currentModel}</span>
