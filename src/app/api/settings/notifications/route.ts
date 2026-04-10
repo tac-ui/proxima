@@ -41,8 +41,8 @@ export async function POST(req: NextRequest) {
     if (!body.type || !body.name || !body.config) {
       return errorResponse(new Error("Missing required fields"), "type, name, and config are required");
     }
-    if (body.type !== "slack" && body.type !== "telegram") {
-      return errorResponse(new Error("Invalid type"), "type must be 'slack' or 'telegram'");
+    if (body.type !== "slack" && body.type !== "telegram" && body.type !== "discord") {
+      return errorResponse(new Error("Invalid type"), "type must be 'slack', 'telegram', or 'discord'");
     }
 
     // Validate config based on type
@@ -50,6 +50,11 @@ export async function POST(req: NextRequest) {
       const url = body.config.webhookUrl;
       if (!url || !url.startsWith("https://hooks.slack.com/")) {
         return errorResponse(new Error("Invalid Slack webhook URL"), "Slack webhook URL must start with https://hooks.slack.com/");
+      }
+    } else if (body.type === "discord") {
+      const url = body.config.webhookUrl;
+      if (!url || !url.startsWith("https://discord.com/api/webhooks/")) {
+        return errorResponse(new Error("Invalid Discord webhook URL"), "Discord webhook URL must start with https://discord.com/api/webhooks/");
       }
     } else if (body.type === "telegram") {
       const { botToken, chatId } = body.config;

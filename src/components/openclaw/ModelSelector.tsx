@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Select, useToast } from "@tac-ui/web";
+import { Select, Input, Button, useToast } from "@tac-ui/web";
 import { BrainCircuit } from "@tac-ui/icon";
 import type { OpenClawGateway } from "@/hooks/useOpenClawGateway";
 
@@ -28,16 +28,16 @@ const MODELS = [
   { value: "deepseek/deepseek-reasoner", label: "DeepSeek R1" },
   { value: "xai/grok-3", label: "Grok 3" },
   { value: "zai/glm-4-plus", label: "GLM-4 Plus" },
-  { value: "zai/glm-4-air", label: "GLM-4 Air" },
-  { value: "zai/glm-4-flash", label: "GLM-4 Flash" },
-  { value: "zai/glm-z1-plus", label: "GLM-Z1 Plus" },
   { value: "openrouter/auto", label: "OpenRouter Auto" },
+  { value: "__custom", label: "Custom model..." },
 ];
 
 export function ModelSelector({ gateway }: ModelSelectorProps) {
   const { toast } = useToast();
   const [currentModel, setCurrentModel] = useState("");
   const [saving, setSaving] = useState(false);
+  const [customMode, setCustomMode] = useState(false);
+  const [customModel, setCustomModel] = useState("");
 
   useEffect(() => {
     if (!gateway.connected) return;
@@ -56,8 +56,8 @@ export function ModelSelector({ gateway }: ModelSelectorProps) {
     load();
   }, [gateway]);
 
-  const handleChange = async (value: string) => {
-    if (!value || value.startsWith("__g_")) return;
+  const applyModel = async (value: string) => {
+    if (!value) return;
     setSaving(true);
     try {
       const state = await gateway.request<{ config: Record<string, unknown>; hash: string }>("config.get");
@@ -66,12 +66,22 @@ export function ModelSelector({ gateway }: ModelSelectorProps) {
         baseHash: state.hash,
       });
       setCurrentModel(value);
+      setCustomMode(false);
+      setCustomModel("");
       toast("Model updated", { variant: "success" });
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to update model", { variant: "error" });
     }
     setSaving(false);
   };
+
+  const handleChange = (value: string) => {
+    if (value === "__custom") { setCustomMode(true); return; }
+    if (!value || value.startsWith("__g_")) return;
+    applyModel(value);
+  };
+
+  const isPreset = MODELS.some(m => m.value === currentModel && !m.disabled);
 
   return (
     <div className="space-y-3">
@@ -81,11 +91,27 @@ export function ModelSelector({ gateway }: ModelSelectorProps) {
       </div>
       <Select
         options={MODELS}
-        value={currentModel}
+        value={isPreset ? currentModel : "__custom"}
         onChange={handleChange}
         placeholder="Select a model..."
         disabled={!gateway.connected || saving}
       />
+      {customMode && (
+        <div className="flex gap-2">
+          <Input
+            value={customModel}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomModel(e.target.value)}
+            placeholder="e.g. openrouter/z-ai/glm-4.5-air:free"
+            size="sm"
+          />
+          <Button variant="primary" size="sm" disabled={!customModel.trim() || saving} onClick={() => applyModel(customModel.trim())}>
+            Apply
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => { setCustomMode(false); setCustomModel(""); }}>
+            Cancel
+          </Button>
+        </div>
+      )}
       {currentModel && (
         <p className="text-[10px] text-muted-foreground">
           Using <span className="font-medium">{MODELS.find(m => m.value === currentModel)?.label ?? currentModel}</span>

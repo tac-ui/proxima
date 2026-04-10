@@ -50,7 +50,7 @@ export default function SettingsPage() {
   const [notifChannels, setNotifChannels] = useState<{ id: number; type: string; name: string; configSummary: string; enabled: boolean; domainFilter: string[]; createdAt: string }[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
   const [showAddChannel, setShowAddChannel] = useState(false);
-  const [newChannelType, setNewChannelType] = useState<"slack" | "telegram">("slack");
+  const [newChannelType, setNewChannelType] = useState<"slack" | "telegram" | "discord">("slack");
   const [newChannelName, setNewChannelName] = useState("");
   const [newChannelWebhookUrl, setNewChannelWebhookUrl] = useState("");
   const [newChannelBotToken, setNewChannelBotToken] = useState("");
@@ -125,9 +125,9 @@ export default function SettingsPage() {
   const handleAddChannel = async () => {
     setAddingChannel(true);
     try {
-      const config: Record<string, string> = newChannelType === "slack"
-        ? { webhookUrl: newChannelWebhookUrl }
-        : { botToken: newChannelBotToken, chatId: newChannelChatId };
+      const config: Record<string, string> = newChannelType === "telegram"
+        ? { botToken: newChannelBotToken, chatId: newChannelChatId }
+        : { webhookUrl: newChannelWebhookUrl };
       const res = await api.addNotificationChannel({ type: newChannelType, name: newChannelName, config, domainFilter: newChannelDomainFilter });
       if (res.ok) {
         toast("Channel added", { variant: "success" });
@@ -613,6 +613,7 @@ export default function SettingsPage() {
                     options={[
                       { value: "slack", label: "Slack" },
                       { value: "telegram", label: "Telegram" },
+                      { value: "discord", label: "Discord" },
                     ]}
                     value={newChannelType}
                     onChange={(v) => setNewChannelType(v as "slack" | "telegram")}
@@ -631,6 +632,13 @@ export default function SettingsPage() {
                     value={newChannelWebhookUrl}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewChannelWebhookUrl(e.target.value)}
                     placeholder="https://hooks.slack.com/services/..."
+                  />
+                ) : newChannelType === "discord" ? (
+                  <Input
+                    label="Webhook URL"
+                    value={newChannelWebhookUrl}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewChannelWebhookUrl(e.target.value)}
+                    placeholder="https://discord.com/api/webhooks/..."
                   />
                 ) : (
                   <div className="space-y-3">
@@ -724,7 +732,7 @@ export default function SettingsPage() {
                   <Button
                     variant="primary"
                     size="sm"
-                    disabled={addingChannel || !newChannelName || (newChannelType === "slack" ? !newChannelWebhookUrl : (!newChannelBotToken || !newChannelChatId))}
+                    disabled={addingChannel || !newChannelName || (newChannelType === "telegram" ? (!newChannelBotToken || !newChannelChatId) : !newChannelWebhookUrl)}
                     onClick={handleAddChannel}
                   >
                     {addingChannel ? "Adding..." : "Add"}
@@ -743,7 +751,7 @@ export default function SettingsPage() {
                 <div key={ch.id} className="border border-border rounded-lg p-3 space-y-2">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
                     <div className="flex items-center gap-3 min-w-0">
-                      <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted shrink-0">{ch.type === "slack" ? "Slack" : "Telegram"}</span>
+                      <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted shrink-0">{ch.type === "slack" ? "Slack" : ch.type === "discord" ? "Discord" : "Telegram"}</span>
                       <span className="text-sm font-medium truncate">{ch.name}</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

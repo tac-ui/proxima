@@ -38,6 +38,10 @@ interface TelegramConfig {
   chatId: string;
 }
 
+interface DiscordConfig {
+  webhookUrl: string;
+}
+
 // ---------------------------------------------------------------------------
 // Event metadata
 // ---------------------------------------------------------------------------
@@ -158,6 +162,36 @@ async function sendTelegram(config: TelegramConfig, event: NotificationEvent): P
 }
 
 // ---------------------------------------------------------------------------
+// Discord delivery
+// ---------------------------------------------------------------------------
+
+async function sendDiscord(config: DiscordConfig, event: NotificationEvent): Promise<void> {
+  const meta = EVENT_META[event.type];
+  const description = buildDescription(event, meta);
+  const instance = getInstanceName();
+  const timestamp = formatTimestamp();
+
+  const payload = {
+    embeds: [{
+      title: `${meta.icon} ${meta.label}`,
+      description,
+      color: event.type.includes("failed") || event.type.includes("down") ? 0xED4245 : event.type.includes("success") || event.type.includes("recovered") || event.type.includes("started") ? 0x57F287 : 0xFEE75C,
+      footer: { text: `${instance} | ${timestamp}` },
+    }],
+  };
+
+  const res = await fetch(config.webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) {
+    throw new Error(`Discord webhook returned ${res.status}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -208,6 +242,8 @@ export async function notify(event: NotificationEvent): Promise<void> {
           await sendSlack(config as SlackConfig, event);
         } else if (ch.type === "telegram") {
           await sendTelegram(config as TelegramConfig, event);
+        } else if (ch.type === "discord") {
+          await sendDiscord(config as DiscordConfig, event);
         }
       } catch (err) {
         logger.error("notification", `Failed to send to channel "${ch.name}" (${ch.type}): ${err}`);
@@ -243,6 +279,8 @@ export async function sendTestNotification(channelId: number): Promise<void> {
     await sendSlack(config as SlackConfig, testEvent);
   } else if (ch.type === "telegram") {
     await sendTelegram(config as TelegramConfig, testEvent);
+  } else if (ch.type === "discord") {
+    await sendDiscord(config as DiscordConfig, testEvent);
   } else {
     throw new Error(`Unknown channel type: ${ch.type}`);
   }
