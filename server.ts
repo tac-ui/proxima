@@ -111,47 +111,153 @@ async function main() {
       try {
         const settings = getOpenClawSettings();
         const port = settings.gatewayPort || 20242;
-        logger.info("server", `Proxying OpenClaw WS to ws://127.0.0.1:${port}`);
-        // Set an explicit Origin header so the gateway's control-UI origin
-        // check accepts the proxied connection (since we tunnel through
-        // Proxima, the browser's original origin is not meaningful here).
-        const upstream = new WsClient(`ws://127.0.0.1:${port}`, {
-          headers: {
-            origin: `http://127.0.0.1:${port}`,
-          },
-        });
+        const upstreamUrl = `ws://127.0.0.1:${port}`;
 
+        // Accept the browser upgrade immediately so the client sees a stable
+        // WebSocket even while the gateway is still booting. Messages from
+        // the client are queued until the upstream connection is established.
         wss.handleUpgrade(req, socket, head, (client) => {
-          const messageQueue: { data: Buffer | string; isBinary: boolean }[] = [];
+          const messageQueue: { data: Buffer; isBinary: boolean }[] = [];
+          let upstream: WsClient | null = null;
           let upstreamOpen = false;
+          let clientClosed = false;
+
+          // --- Ping/pong keepalive ----------------------------------------
+          // WS protocol ping frames. The browser auto-pongs, so we can
+          // detect dead sockets by tracking `lastPongAt`. This catches
+          // middleboxes (Docker bridge, reverse proxies, firewalls) that
+          // silently drop idle TCP — they'd otherwise leave us with a
+          // half-open connection until the next send attempt.
+          const PING_INTERVAL_MS = 25_000;
+          const PONG_TIMEOUT_MS = 45_000;
+          let clientAlive = true;
+          let upstreamAlive = true;
+
+          client.on("pong", () => { clientAlive = true; });
+
+          const pingInterval = setInterval(() => {
+            if (clientClosed) return;
+            // Client side
+            if (!clientAlive) {
+              logger.warn("server", "OpenClaw WS client pong timeout — closing");
+              try { client.close(1011, "ping timeout"); } catch { /* ignore */ }
+              clearInterval(pingInterval);
+              return;
+            }
+            clientAlive = false;
+            try { client.ping(); } catch { /* ignore */ }
+
+            // Upstream side
+            if (upstream && upstream.readyState === WsClient.OPEN) {
+              if (!upstreamAlive) {
+                logger.warn("server", "OpenClaw WS upstream pong timeout — closing");
+                try { upstream.close(); } catch { /* ignore */ }
+                return;
+              }
+              upstreamAlive = false;
+              try { upstream.ping(); } catch { /* ignore */ }
+            }
+          }, PING_INTERVAL_MS);
+
+          // Pong timeout guard (if the remote never pongs at all)
+          const pongWatchdog = setInterval(() => {
+            if (clientClosed) return;
+            if (!clientAlive) {
+              // Will be handled on next ping tick; keep this as an explicit
+              // fast path so a totally silent remote still gets closed.
+            }
+          }, PONG_TIMEOUT_MS);
+
+          const cleanupKeepalive = () => {
+            clearInterval(pingInterval);
+            clearInterval(pongWatchdog);
+          };
+          // ----------------------------------------------------------------
 
           client.on("message", (data, isBinary) => {
             const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
-            if (upstreamOpen && upstream.readyState === WsClient.OPEN) {
+            if (upstream && upstreamOpen && upstream.readyState === WsClient.OPEN) {
               upstream.send(buf, { binary: isBinary });
             } else {
               messageQueue.push({ data: buf, isBinary });
             }
           });
-          client.on("close", () => { try { upstream.close(); } catch { /* ignore */ } });
-          client.on("error", () => { try { upstream.close(); } catch { /* ignore */ } });
+          client.on("close", () => {
+            clientClosed = true;
+            cleanupKeepalive();
+            try { upstream?.close(); } catch { /* ignore */ }
+          });
+          client.on("error", () => {
+            clientClosed = true;
+            cleanupKeepalive();
+            try { upstream?.close(); } catch { /* ignore */ }
+          });
 
-          upstream.on("open", () => {
-            upstreamOpen = true;
-            // Flush queued messages
-            while (messageQueue.length > 0) {
-              const msg = messageQueue.shift()!;
-              upstream.send(msg.data, { binary: msg.isBinary });
+          // Retry upstream connection during gateway boot. 30 retries ×
+          // 500ms = 15s window, which covers openclaw's typical cold-start
+          // (load config → resolve auth → start → bind port).
+          const MAX_RETRIES = 30;
+          const RETRY_INTERVAL_MS = 500;
+          let retries = 0;
+          let loggedProxyStart = false;
+
+          const tryConnectUpstream = () => {
+            if (clientClosed) return;
+            if (!loggedProxyStart) {
+              loggedProxyStart = true;
+              logger.info("server", `Proxying OpenClaw WS to ${upstreamUrl}`);
             }
-          });
-          upstream.on("message", (data, isBinary) => {
-            if (client.readyState === WsClient.OPEN) client.send(data, { binary: isBinary });
-          });
-          upstream.on("close", () => { try { client.close(); } catch { /* ignore */ } });
-          upstream.on("error", (err) => {
-            logger.warn("server", `OpenClaw WS upstream error: ${err.message}`);
-            try { client.close(1011, "Upstream error"); } catch { /* ignore */ }
-          });
+
+            const attempt = new WsClient(upstreamUrl, {
+              headers: { origin: `http://127.0.0.1:${port}` },
+            });
+
+            attempt.once("open", () => {
+              if (clientClosed) { try { attempt.close(); } catch { /* ignore */ } return; }
+              upstream = attempt;
+              upstreamOpen = true;
+              // Reset alive flags now that the upstream is live so the first
+              // tick of the ping interval doesn't trip the pong-timeout.
+              upstreamAlive = true;
+
+              // Flush any frames the client sent while we were retrying.
+              while (messageQueue.length > 0) {
+                const msg = messageQueue.shift()!;
+                attempt.send(msg.data, { binary: msg.isBinary });
+              }
+
+              attempt.on("pong", () => { upstreamAlive = true; });
+
+              attempt.on("message", (data, isBinary) => {
+                if (client.readyState === WsClient.OPEN) client.send(data, { binary: isBinary });
+              });
+              attempt.on("close", () => { try { client.close(); } catch { /* ignore */ } });
+              attempt.on("error", (err) => {
+                logger.warn("server", `OpenClaw WS upstream error: ${err.message}`);
+                try { client.close(1011, "Upstream error"); } catch { /* ignore */ }
+              });
+            });
+
+            attempt.once("error", (err) => {
+              // Swallow the error; we'll retry unless we're out of attempts.
+              attempt.removeAllListeners();
+              try { attempt.close(); } catch { /* ignore */ }
+
+              if (clientClosed) return;
+              retries++;
+              if (retries >= MAX_RETRIES) {
+                logger.warn(
+                  "server",
+                  `OpenClaw WS upstream unavailable after ${(retries * RETRY_INTERVAL_MS) / 1000}s: ${err.message}`,
+                );
+                try { client.close(1013, "Gateway unavailable"); } catch { /* ignore */ }
+                return;
+              }
+              setTimeout(tryConnectUpstream, RETRY_INTERVAL_MS);
+            });
+          };
+
+          tryConnectUpstream();
         });
       } catch (err) {
         logger.error("server", `OpenClaw WS proxy setup failed: ${err}`);

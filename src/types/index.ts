@@ -412,6 +412,7 @@ export interface OpenClawModels {
   deepseekApiKey?: string;
   xaiApiKey?: string;
   zaiApiKey?: string;
+  moonshotApiKey?: string;
   groqApiKey?: string;
   mistralApiKey?: string;
   fireworksApiKey?: string;
@@ -434,6 +435,17 @@ export interface OpenClawSettings {
   image: string;
   models: OpenClawModels;
   sshKeyId?: number | null;
+  /** Git author/committer name — injected as GIT_AUTHOR_NAME / GIT_COMMITTER_NAME */
+  gitUserName?: string;
+  /** Git author/committer email — injected as GIT_AUTHOR_EMAIL / GIT_COMMITTER_EMAIL */
+  gitUserEmail?: string;
+  /**
+   * GitHub personal access token (classic or fine-grained). Injected as
+   * `GH_TOKEN` / `GITHUB_TOKEN` so the agent can use `gh` CLI / REST API
+   * to create pull requests. Separate from model `*ApiKey` fields because
+   * it's a git/SCM credential, not a model credential.
+   */
+  githubToken?: string;
 }
 
 export interface OpenClawAuthProfile {

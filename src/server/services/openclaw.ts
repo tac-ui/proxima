@@ -1,4 +1,4 @@
-import { ChildProcess, fork } from "node:child_process";
+import { ChildProcess, fork, spawn } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -15,6 +15,10 @@ let gatewayProcess: ChildProcess | null = null;
 let lastLogs: string[] = [];
 let lastError: string | null = null;
 let restartCount = 0;
+// Single in-flight guard so concurrent startOpenClaw() callers (e.g. an
+// auto-restart racing with a user-triggered restart) don't end up forking
+// two gateways that then fight over port 20242.
+let startInFlight: Promise<void> | null = null;
 
 // Resolve the openclaw bin path from node_modules
 function getOpenClawBin(): string {
@@ -50,8 +54,21 @@ export function getOpenClawSettings(): OpenClawSettings {
   } catch { /* ignore */ }
 
   const sshKeyId = dbHelpers.getSetting(db, "openclaw:sshKeyId")?.value;
+  const gitUserName = dbHelpers.getSetting(db, "openclaw:gitUserName")?.value ?? "";
+  const gitUserEmail = dbHelpers.getSetting(db, "openclaw:gitUserEmail")?.value ?? "";
+  const githubToken = dbHelpers.getSetting(db, "openclaw:githubToken")?.value ?? "";
 
-  return { enabled, gatewayToken, gatewayPort, image, models, sshKeyId: sshKeyId ? parseInt(sshKeyId, 10) : null };
+  return {
+    enabled,
+    gatewayToken,
+    gatewayPort,
+    image,
+    models,
+    sshKeyId: sshKeyId ? parseInt(sshKeyId, 10) : null,
+    gitUserName,
+    gitUserEmail,
+    githubToken,
+  };
 }
 
 export function saveOpenClawSettings(data: Partial<OpenClawSettings>): OpenClawSettings {
@@ -84,6 +101,15 @@ export function saveOpenClawSettings(data: Partial<OpenClawSettings>): OpenClawS
   if (data.sshKeyId !== undefined) {
     dbHelpers.setSetting(db, "openclaw:sshKeyId", String(data.sshKeyId ?? ""));
   }
+  if (data.gitUserName !== undefined) {
+    dbHelpers.setSetting(db, "openclaw:gitUserName", data.gitUserName);
+  }
+  if (data.gitUserEmail !== undefined) {
+    dbHelpers.setSetting(db, "openclaw:gitUserEmail", data.gitUserEmail);
+  }
+  if (data.githubToken !== undefined) {
+    dbHelpers.setSetting(db, "openclaw:githubToken", data.githubToken);
+  }
 
   return getOpenClawSettings();
 }
@@ -112,6 +138,72 @@ function getStateDir(): string {
   return stateDir;
 }
 
+/**
+ * The canonical OpenClaw agent workspace, shared with Proxima's Harness
+ * Files UI. Everything the agent reads/writes (USER.md, CLAUDE.md, SOUL.md,
+ * HEARTBEAT.md, etc.) lives here, and the Advanced → Harness Files tab
+ * edits the same directory.
+ *
+ * Placed inside the persistent `pxm-data` volume so it survives container
+ * rebuilds. The openclaw gateway is told about this path via
+ * `agents.defaults.workspace` in the generated openclaw.json.
+ */
+export function getWorkspaceDir(): string {
+  return path.join(getStateDir(), "workspace");
+}
+
+/** Allowed harness file extensions for migration (matches files/route.ts). */
+const HARNESS_EXTS = new Set([".md", ".txt", ".json", ".yaml", ".yml", ".toml"]);
+/** Files that should never be migrated (openclaw state, secrets, config). */
+const HARNESS_BLOCKED = new Set([
+  "openclaw.json",
+  "auth-profiles.json",
+  "auth-state.json",
+  "update-check.json",
+  ".env",
+]);
+
+/**
+ * Ensure the workspace directory exists. On first run, copy any legacy
+ * harness files that lived at the old flat location (`/data/openclaw/*.md`)
+ * into the new workspace subdirectory. Idempotent — skips files that
+ * already exist at the destination, leaves originals in place.
+ */
+export function ensureWorkspaceDir(): string {
+  const stateDir = getStateDir();
+  const workspaceDir = path.join(stateDir, "workspace");
+  if (!fs.existsSync(workspaceDir)) {
+    fs.mkdirSync(workspaceDir, { recursive: true });
+  }
+
+  // Best-effort migration from the legacy flat layout.
+  try {
+    const entries = fs.readdirSync(stateDir, { withFileTypes: true });
+    let migrated = 0;
+    for (const e of entries) {
+      if (!e.isFile()) continue;
+      if (e.name.startsWith(".")) continue;
+      if (HARNESS_BLOCKED.has(e.name)) continue;
+      const ext = path.extname(e.name).toLowerCase();
+      if (!HARNESS_EXTS.has(ext)) continue;
+      const src = path.join(stateDir, e.name);
+      const dst = path.join(workspaceDir, e.name);
+      if (fs.existsSync(dst)) continue;
+      try {
+        fs.copyFileSync(src, dst);
+        migrated++;
+      } catch (err) {
+        logger.warn("openclaw", `Failed to migrate harness file ${e.name}: ${err}`);
+      }
+    }
+    if (migrated > 0) {
+      logger.info("openclaw", `Migrated ${migrated} harness file(s) to ${workspaceDir}`);
+    }
+  } catch { /* ignore — best effort */ }
+
+  return workspaceDir;
+}
+
 /** Write/merge gateway config to openclaw.json. Preserves user-edited fields. */
 function writeGatewayConfig(stateDir: string, opts: { port: number; bind?: string; mode?: string }): void {
   const configPath = path.join(stateDir, "openclaw.json");
@@ -122,10 +214,29 @@ function writeGatewayConfig(stateDir: string, opts: { port: number; bind?: strin
     } catch { /* malformed, start fresh */ }
   }
 
+  // Ensure the agent workspace is inside Proxima's persistent state dir so
+  // that files edited via the Harness Files UI and files the agent reads
+  // at runtime are the SAME files (not two divergent copies).
+  const workspaceDir = ensureWorkspaceDir();
+
   const existingGateway = (existing.gateway as Record<string, unknown>) ?? {};
   const existingControlUi = (existingGateway.controlUi as Record<string, unknown>) ?? {};
+  const existingAgents = (existing.agents as Record<string, unknown>) ?? {};
+  const existingDefaults = (existingAgents.defaults as Record<string, unknown>) ?? {};
+
   const merged = {
     ...existing,
+    agents: {
+      ...existingAgents,
+      defaults: {
+        ...existingDefaults,
+        // Respect user-configured workspace if present, otherwise pin to
+        // Proxima's shared workspace dir.
+        workspace: (typeof existingDefaults.workspace === "string" && existingDefaults.workspace.trim().length > 0)
+          ? existingDefaults.workspace
+          : workspaceDir,
+      },
+    },
     gateway: {
       ...existingGateway,
       mode: opts.mode ?? existingGateway.mode ?? "local",
@@ -151,7 +262,7 @@ function writeGatewayConfig(stateDir: string, opts: { port: number; bind?: strin
 
   try {
     fs.writeFileSync(configPath, JSON.stringify(merged, null, 2), "utf-8");
-    logger.info("openclaw", `Updated gateway config at ${configPath}`);
+    logger.info("openclaw", `Updated gateway config at ${configPath} (workspace=${workspaceDir})`);
   } catch (err) {
     logger.warn("openclaw", `Failed to write config file: ${err}`);
   }
@@ -292,24 +403,38 @@ function appendLog(line: string) {
 // ---------------------------------------------------------------------------
 
 /**
- * Invoke `openclaw gateway stop` to release a stale lock held by a previous
- * gateway instance that Proxima has lost track of. Best-effort: always
- * resolves, even on failure or timeout.
+ * SIGKILL any process currently listening on the given TCP port. Used before
+ * spawning a new gateway to guarantee the port is free regardless of how we
+ * lost track of the previous process (e.g. restart race where Proxima's
+ * `gatewayProcess` reference was cleared but the actual child was still
+ * listening, or an openclaw-internal in-process restart left a zombie).
+ * Best-effort: always resolves.
  */
-function stopStaleGateway(binPath: string, env: NodeJS.ProcessEnv): Promise<void> {
+async function freePort(port: number): Promise<void> {
   return new Promise((resolve) => {
     try {
-      const proc = fork(binPath, ["gateway", "stop"], {
-        env,
-        stdio: "ignore",
-        detached: false,
+      // `lsof -ti :<port> -s TCP:LISTEN` prints one PID per line. The -s
+      // filter narrows to actual listeners (excludes transient client sockets).
+      const lsof = spawn("sh", ["-c", `lsof -ti :${port} -s TCP:LISTEN 2>/dev/null`], {
+        stdio: ["ignore", "pipe", "ignore"],
       });
-      const timer = setTimeout(() => {
-        try { proc.kill("SIGKILL"); } catch { /* ignore */ }
-        resolve();
-      }, 5000);
-      proc.on("exit", () => { clearTimeout(timer); resolve(); });
-      proc.on("error", () => { clearTimeout(timer); resolve(); });
+      let out = "";
+      lsof.stdout?.on("data", (d: Buffer) => { out += d.toString(); });
+      lsof.on("close", () => {
+        const pids = out
+          .trim()
+          .split("\n")
+          .map(s => parseInt(s, 10))
+          .filter(n => Number.isFinite(n) && n > 0 && n !== process.pid);
+        if (pids.length === 0) { resolve(); return; }
+        logger.info("openclaw", `Freeing port ${port}: killing stale PIDs ${pids.join(", ")}`);
+        for (const pid of pids) {
+          try { process.kill(pid, "SIGKILL"); } catch { /* ignore */ }
+        }
+        // Give the kernel a moment to reclaim the socket before we bind it.
+        setTimeout(resolve, 500);
+      });
+      lsof.on("error", () => resolve());
     } catch {
       resolve();
     }
@@ -317,8 +442,26 @@ function stopStaleGateway(binPath: string, env: NodeJS.ProcessEnv): Promise<void
 }
 
 export async function startOpenClaw(): Promise<void> {
+  // Reuse the in-flight promise so concurrent callers don't spawn duplicates.
+  if (startInFlight) return startInFlight;
+
   if (gatewayProcess && gatewayProcess.exitCode === null) {
     logger.info("openclaw", "Gateway already running");
+    return;
+  }
+
+  startInFlight = (async () => {
+    try {
+      await startOpenClawInternal();
+    } finally {
+      startInFlight = null;
+    }
+  })();
+  return startInFlight;
+}
+
+async function startOpenClawInternal(): Promise<void> {
+  if (gatewayProcess && gatewayProcess.exitCode === null) {
     return;
   }
 
@@ -338,6 +481,11 @@ export async function startOpenClaw(): Promise<void> {
     OPENCLAW_GATEWAY_PORT: String(port),
     OPENCLAW_GATEWAY_BIND: "lan",
     OPENCLAW_STATE_DIR: stateDir,
+    // Proxima is the single authority over the gateway lifecycle. Bypass
+    // the gateway-lock.ts single-instance guard so we never get stuck on
+    // "gateway already running (pid ...); lock timeout after 5000ms" after
+    // a restart where the previous process is still releasing its lock.
+    OPENCLAW_ALLOW_MULTI_GATEWAY: "1",
     NODE_ENV: "production",
   };
 
@@ -350,6 +498,7 @@ export async function startOpenClaw(): Promise<void> {
   if (models.deepseekApiKey) env.DEEPSEEK_API_KEY = models.deepseekApiKey;
   if (models.xaiApiKey) env.XAI_API_KEY = models.xaiApiKey;
   if (models.zaiApiKey) env.ZAI_API_KEY = models.zaiApiKey;
+  if (models.moonshotApiKey) env.MOONSHOT_API_KEY = models.moonshotApiKey;
   if (models.groqApiKey) env.GROQ_API_KEY = models.groqApiKey;
   if (models.mistralApiKey) env.MISTRAL_API_KEY = models.mistralApiKey;
   if (models.fireworksApiKey) env.FIREWORKS_API_KEY = models.fireworksApiKey;
@@ -368,6 +517,29 @@ export async function startOpenClaw(): Promise<void> {
     }
   }
 
+  // Git commit identity. Using GIT_AUTHOR_* / GIT_COMMITTER_* env vars is
+  // more robust than writing a global ~/.gitconfig because it works inside
+  // any CWD the agent picks (cloned repos may have their own user config)
+  // and doesn't require a mutable $HOME. Both pairs are required: author
+  // covers new commits, committer covers amends/rebases.
+  if (settings.gitUserName) {
+    env.GIT_AUTHOR_NAME = settings.gitUserName;
+    env.GIT_COMMITTER_NAME = settings.gitUserName;
+  }
+  if (settings.gitUserEmail) {
+    env.GIT_AUTHOR_EMAIL = settings.gitUserEmail;
+    env.GIT_COMMITTER_EMAIL = settings.gitUserEmail;
+  }
+
+  // GitHub token for PR creation. GH_TOKEN is what the `gh` CLI reads;
+  // GITHUB_TOKEN is the REST-API convention used by curl scripts and
+  // GitHub Actions-style tooling. Exposing both covers every way the
+  // agent might try to authenticate.
+  if (settings.githubToken) {
+    env.GH_TOKEN = settings.githubToken;
+    env.GITHUB_TOKEN = settings.githubToken;
+  }
+
   // Reset state
   lastLogs = [];
   lastError = null;
@@ -378,12 +550,18 @@ export async function startOpenClaw(): Promise<void> {
   // Write gateway config so the binary doesn't bail on "Missing config"
   writeGatewayConfig(stateDir, { port, bind: "lan", mode: "local" });
 
-  // Clean up any stale gateway instance that may be holding the lock file
-  // (e.g. after a Proxima container restart where the prior gateway
-  // detached or was left behind). Best-effort; ignore errors.
-  await stopStaleGateway(binPath, env);
+  // Guarantee the port is free. If we lost track of a previous gateway
+  // (e.g. restart race where stopOpenClaw hit the early-return path),
+  // the kernel still holds the port and the fork would fail with
+  // EADDRINUSE. lsof + SIGKILL is the cleanest cross-scenario guard.
+  await freePort(port);
 
-  gatewayProcess = fork(binPath, ["gateway", "--bind", "lan", "--port", String(port)], {
+  // --verbose enables openclaw's logVerbose() output (Discord inbound/preflight
+  // traces, channel filter decisions, agent run details). Without this flag,
+  // `discord: inbound` and similar diagnostic lines are silently dropped by
+  // shouldLogVerbose(), making it impossible to diagnose message-flow issues
+  // like "bot online but not responding".
+  gatewayProcess = fork(binPath, ["gateway", "--verbose", "--bind", "lan", "--port", String(port)], {
     env,
     stdio: ["ignore", "pipe", "pipe", "ipc"],
     detached: false,

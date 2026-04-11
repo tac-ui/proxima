@@ -4,12 +4,18 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useOpenClaw } from "@/contexts/OpenClawContext";
-import { Button, Badge, EmptyState, Banner, pageEntrance, useToast } from "@tac-ui/web";
-import { ArrowLeft, BrainCircuit, Trash2, WifiOff } from "@tac-ui/icon";
+import { Button, Badge, EmptyState, Banner, Skeleton, pageEntrance, useToast } from "@tac-ui/web";
+import { ArrowLeft, BrainCircuit, Trash2, WifiOff, RefreshCw } from "@tac-ui/icon";
 import { ChatMessage } from "@/components/openclaw/ChatMessage";
 import { ChatInput } from "@/components/openclaw/ChatInput";
 import { useConfirm } from "@/hooks/useConfirm";
 import type { OpenClawMessage, OpenClawChatEvent } from "@/types";
+
+// Module-scope per-session message cache so that navigating away from a
+// chat and coming back doesn't clear the conversation (and doesn't flash
+// the skeleton while refetching). We also skip the full history load if
+// the cache is already populated for this session.
+const chatMessageCache = new Map<string, OpenClawMessage[]>();
 
 export default function OpenClawChatPage() {
   const params = useParams();
@@ -19,13 +25,23 @@ export default function OpenClawChatPage() {
   const confirm = useConfirm();
   const sessionKey = decodeURIComponent(params.key as string);
 
-  const [messages, setMessages] = useState<OpenClawMessage[]>([]);
+  const [messages, setMessages] = useState<OpenClawMessage[]>(
+    () => chatMessageCache.get(sessionKey) ?? [],
+  );
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
-  const [loading, setLoading] = useState(true);
+  // Only show the skeleton on the very first load for this session —
+  // subsequent remounts hydrate from the module cache immediately.
+  const [loading, setLoading] = useState(!chatMessageCache.has(sessionKey));
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const streamingContentRef = useRef("");
+
+  // Keep the module cache in sync with the live state so the next mount
+  // (tab switch / route navigation) shows the latest messages instantly.
+  useEffect(() => {
+    chatMessageCache.set(sessionKey, messages);
+  }, [sessionKey, messages]);
 
   const session = sessions.find((s) => s.key === sessionKey);
 
@@ -238,9 +254,34 @@ export default function OpenClawChatPage() {
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-semibold">{session?.label || sessionKey}</h2>
-              <Badge variant={gateway.connected ? "success" : "secondary"}>
-                {gateway.connected ? "Connected" : "Disconnected"}
-              </Badge>
+              {(() => {
+                // Mirror the main page header's tri-state resolver so the
+                // user sees the same status everywhere (Connected /
+                // Reconnecting / Disconnected).
+                const label = gateway.reconnecting
+                  ? "Reconnecting"
+                  : gateway.connected
+                    ? "Connected"
+                    : "Disconnected";
+                const variant = gateway.reconnecting
+                  ? "warning"
+                  : gateway.connected
+                    ? "success"
+                    : "secondary";
+                const dotClass = gateway.reconnecting
+                  ? "bg-warning animate-pulse"
+                  : gateway.connected
+                    ? "bg-success"
+                    : "bg-muted-foreground/50";
+                return (
+                  <Badge variant={variant}>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} aria-hidden="true" />
+                      {label}
+                    </span>
+                  </Badge>
+                );
+              })()}
             </div>
             {session?.modelRef && (
               <p className="text-xs text-muted-foreground">{session.modelRef}</p>
@@ -251,17 +292,24 @@ export default function OpenClawChatPage() {
           variant="ghost"
           size="sm"
           onClick={handleClearHistory}
-          disabled={messages.length === 0 || streaming}
+          disabled={messages.length === 0 || streaming || !gateway.connected}
           leftIcon={<Trash2 size={14} />}
         >
           Clear
         </Button>
       </div>
 
-      {/* Disconnect banner */}
+      {/* Disconnect / reconnecting banner */}
       {!gateway.connected && (
         <div className="shrink-0 mb-2">
-          <Banner variant="warning" icon={<WifiOff size={16} />} title="Gateway disconnected" description="Reconnecting automatically..." />
+          <Banner
+            variant="warning"
+            icon={gateway.reconnecting ? <RefreshCw size={16} className="animate-spin" /> : <WifiOff size={16} />}
+            title={gateway.reconnecting ? "Reconnecting to gateway…" : "Gateway disconnected"}
+            description={gateway.reconnecting
+              ? "Hold tight — the connection will restore automatically."
+              : "Waiting for connection. Sessions and chat are read-only."}
+          />
         </div>
       )}
 
@@ -269,8 +317,15 @@ export default function OpenClawChatPage() {
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain rounded-xl border border-border bg-background/50 mb-3">
         <div className="max-w-screen-md mx-auto p-4 space-y-4">
           {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <p className="text-sm text-muted-foreground">Loading messages...</p>
+            <div className="space-y-4 py-4">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className={`flex gap-3 ${i % 2 === 0 ? "" : "flex-row-reverse"}`}>
+                  <Skeleton variant="rectangular" width={32} height={32} className="rounded-lg shrink-0" />
+                  <div className={`flex-1 ${i % 2 === 0 ? "" : "flex justify-end"}`}>
+                    <Skeleton height={64} width={`${60 + (i * 5)}%`} className="rounded-2xl" />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : messages.length === 0 ? (
             <div className="py-8">

@@ -35,9 +35,13 @@ interface PendingRequest {
 
 export interface OpenClawGateway {
   connected: boolean;
+  /** True while we're actively trying to (re)connect — after an unexpected close. */
+  reconnecting: boolean;
   request: <T = unknown>(method: string, params?: Record<string, unknown>) => Promise<T>;
   subscribe: (event: string, handler: (payload: unknown) => void) => () => void;
   disconnect: () => void;
+  /** Force an immediate reconnect (used by visibility handler or manual recovery). */
+  forceReconnect: () => void;
 }
 
 let reqCounter = 0;
@@ -45,8 +49,17 @@ function nextId(): string {
   return `pxm-${++reqCounter}-${Date.now().toString(36)}`;
 }
 
+// Application-level heartbeat: we send `health` periodically and expect a
+// response within HEARTBEAT_TIMEOUT_MS. If the response is missing, we treat
+// the connection as dead and force a reconnect. This catches "half-open" TCP
+// where the socket looks fine but no data actually flows — common when a
+// middlebox, firewall, or Docker bridge silently drops an idle TCP stream.
+const HEARTBEAT_INTERVAL_MS = 20_000;
+const HEARTBEAT_TIMEOUT_MS = 5_000;
+
 export function useOpenClawGateway(): OpenClawGateway {
   const [connected, setConnected] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const pendingRef = useRef<Map<string, PendingRequest>>(new Map());
   const listenersRef = useRef<Map<string, Set<(payload: unknown) => void>>>(new Map());
@@ -56,8 +69,18 @@ export function useOpenClawGateway(): OpenClawGateway {
   const reconnectDelay = useRef(1000);
   const mountedRef = useRef(true);
   const connectingRef = useRef(false);
+  const heartbeatTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tokenRetryAttempts = useRef(0);
+
+  const stopHeartbeat = useCallback(() => {
+    if (heartbeatTimer.current) {
+      clearInterval(heartbeatTimer.current);
+      heartbeatTimer.current = null;
+    }
+  }, []);
 
   const cleanupConnection = useCallback(() => {
+    stopHeartbeat();
     if (wsRef.current) {
       wsRef.current.onclose = null;
       wsRef.current.onerror = null;
@@ -73,7 +96,7 @@ export function useOpenClawGateway(): OpenClawGateway {
     pendingRef.current.clear();
     connectIdRef.current = null;
     connectingRef.current = false;
-  }, []);
+  }, [stopHeartbeat]);
 
   const cleanup = useCallback(() => {
     if (reconnectTimer.current) {
@@ -84,19 +107,29 @@ export function useOpenClawGateway(): OpenClawGateway {
     // Clear auth cache so next connect re-fetches the token
     authRef.current = null;
     setConnected(false);
+    setReconnecting(false);
   }, [cleanupConnection]);
 
   const connect = useCallback(async () => {
     if (connectingRef.current || wsRef.current?.readyState === WebSocket.OPEN) return;
     connectingRef.current = true;
+    if (mountedRef.current) setReconnecting(true);
 
     try {
       // Always re-fetch token (in case it was rotated or gateway restarted)
       const res = await api.getOpenClawToken();
       if (!res.ok || !res.data || !res.data.token) {
         connectingRef.current = false;
+        // Token fetch failed — Proxima API itself may be booting. Schedule
+        // retry with capped backoff so we recover when it comes up.
+        tokenRetryAttempts.current += 1;
+        if (mountedRef.current) {
+          const delay = Math.min(2000 * Math.pow(1.5, tokenRetryAttempts.current - 1), 20_000);
+          reconnectTimer.current = setTimeout(() => { connect(); }, delay);
+        }
         return;
       }
+      tokenRetryAttempts.current = 0;
       authRef.current = res.data;
 
       const { token } = authRef.current;
@@ -167,8 +200,35 @@ export function useOpenClawGateway(): OpenClawGateway {
             connectIdRef.current = null;
             if (res.ok) {
               setConnected(true);
+              setReconnecting(false);
               reconnectDelay.current = 1000;
               connectingRef.current = false;
+
+              // Start application-level heartbeat so we detect half-open
+              // connections where TCP looks alive but no data flows.
+              stopHeartbeat();
+              heartbeatTimer.current = setInterval(() => {
+                const live = wsRef.current;
+                if (!live || live.readyState !== WebSocket.OPEN) return;
+                const hbId = nextId();
+                const hbTimer = setTimeout(() => {
+                  // No response → connection is dead. Force close so the
+                  // normal onclose path kicks in and schedules reconnect.
+                  pendingRef.current.delete(hbId);
+                  try { live.close(4001, "heartbeat timeout"); } catch { /* ignore */ }
+                }, HEARTBEAT_TIMEOUT_MS);
+                pendingRef.current.set(hbId, {
+                  resolve: () => { clearTimeout(hbTimer); pendingRef.current.delete(hbId); },
+                  reject: () => { clearTimeout(hbTimer); pendingRef.current.delete(hbId); },
+                  timer: hbTimer,
+                });
+                try {
+                  live.send(JSON.stringify({ type: "req", id: hbId, method: "health" }));
+                } catch {
+                  clearTimeout(hbTimer);
+                  pendingRef.current.delete(hbId);
+                }
+              }, HEARTBEAT_INTERVAL_MS);
             } else {
               // Auth failed - clear token cache and schedule reconnect
               authRef.current = null;
@@ -216,6 +276,7 @@ export function useOpenClawGateway(): OpenClawGateway {
         // Clear auth cache so next reconnect re-fetches fresh token
         authRef.current = null;
         connectIdRef.current = null;
+        stopHeartbeat();
 
         // Reject pending requests
         for (const [, pending] of pendingRef.current) {
@@ -226,6 +287,7 @@ export function useOpenClawGateway(): OpenClawGateway {
 
         // Auto-reconnect
         if (mountedRef.current) {
+          setReconnecting(true);
           reconnectTimer.current = setTimeout(() => {
             reconnectDelay.current = Math.min(reconnectDelay.current * 1.5, 30000);
             connect();
@@ -235,7 +297,7 @@ export function useOpenClawGateway(): OpenClawGateway {
     } catch {
       connectingRef.current = false;
     }
-  }, []);
+  }, [stopHeartbeat]);
 
   const request = useCallback(<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T> => {
     return new Promise((resolve, reject) => {
@@ -276,15 +338,46 @@ export function useOpenClawGateway(): OpenClawGateway {
     cleanup();
   }, [cleanup]);
 
+  const forceReconnect = useCallback(() => {
+    if (reconnectTimer.current) {
+      clearTimeout(reconnectTimer.current);
+      reconnectTimer.current = null;
+    }
+    cleanupConnection();
+    reconnectDelay.current = 1000;
+    if (mountedRef.current) {
+      setConnected(false);
+      setReconnecting(true);
+      void connect();
+    }
+  }, [cleanupConnection, connect]);
+
   // Auto-connect on mount
   useEffect(() => {
     mountedRef.current = true;
-    connect();
+    void connect();
     return () => {
       mountedRef.current = false;
       cleanup();
     };
   }, [connect, cleanup]);
 
-  return { connected, request, subscribe, disconnect };
+  // Visibility-based health check: when the tab returns to foreground,
+  // verify the socket is still OPEN. Many OS/network stacks drop silent
+  // TCP after minutes in a background tab, and onclose might not fire
+  // until we try to send. Force reconnect if we're not OPEN.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        forceReconnect();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [forceReconnect]);
+
+  return { connected, reconnecting, request, subscribe, disconnect, forceReconnect };
 }
