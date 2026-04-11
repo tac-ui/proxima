@@ -50,6 +50,7 @@ function createTables(sqlite: Database.Database): void {
       username TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'viewer',
+      password_changed_at TEXT,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     );
 
@@ -99,6 +100,11 @@ function createTables(sqlite: Database.Database): void {
       path TEXT NOT NULL,
       branch TEXT NOT NULL DEFAULT 'main',
       scripts TEXT NOT NULL DEFAULT '[]',
+      env_files TEXT NOT NULL DEFAULT '[]',
+      hook_enabled INTEGER NOT NULL DEFAULT 0,
+      hook_api_key TEXT,
+      domain_connection TEXT,
+      ssh_key_id INTEGER,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     );
 
@@ -106,12 +112,58 @@ function createTables(sqlite: Database.Database): void {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       type TEXT NOT NULL,
       identifier TEXT NOT NULL,
+      alias TEXT,
       auto_managed INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      username TEXT,
+      action TEXT NOT NULL,
+      category TEXT NOT NULL,
+      target_type TEXT,
+      target_name TEXT,
+      details TEXT,
+      ip_address TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS webhook_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      repo_id INTEGER NOT NULL,
+      script_name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'running',
+      exit_code INTEGER,
+      terminal_id TEXT,
+      ip_address TEXT,
+      duration INTEGER,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS metrics_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cpu_load TEXT NOT NULL,
+      memory_percent TEXT NOT NULL,
+      disk_percent TEXT NOT NULL,
+      timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS notification_channels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      config TEXT NOT NULL DEFAULT '{}',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      domain_filter TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     );
 
     CREATE UNIQUE INDEX IF NOT EXISTS managed_services_type_identifier_unique
       ON managed_services (type, identifier);
+    CREATE INDEX IF NOT EXISTS idx_webhook_logs_repo_id ON webhook_logs (repo_id);
+    CREATE INDEX IF NOT EXISTS idx_metrics_history_timestamp ON metrics_history (timestamp);
   `);
 }
 
