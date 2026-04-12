@@ -8,17 +8,21 @@ import { getDb, dbHelpers } from "@server/db/index";
 export async function GET(req: NextRequest) {
   try {
     ensureDb();
-    requireManager(req);
+    const auth = requireManager(req);
 
     const config = getConfig();
     if (!config.githubClientId) {
       throw new Error("GitHub OAuth is not configured (missing GITHUB_CLIENT_ID)");
     }
 
-    // Generate CSRF state token and store in DB
+    // Generate CSRF state token and store initiator context in DB
     const state = crypto.randomBytes(32).toString("hex");
     const db = getDb();
-    dbHelpers.setSetting(db, `oauth_state:${state}`, String(Date.now()));
+    dbHelpers.setSetting(
+      db,
+      `oauth_state:${state}`,
+      JSON.stringify({ createdAt: Date.now(), userId: auth.userId, username: auth.username }),
+    );
 
     const redirectUri = `${req.nextUrl.origin}/api/github/callback`;
     const githubOAuthUrl = new URL("https://github.com/login/oauth/authorize");
