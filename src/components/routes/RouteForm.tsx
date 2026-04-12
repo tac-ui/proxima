@@ -258,6 +258,7 @@ export function RouteForm({
               label="Use root domain (without subdomain)"
               checked={useRootDomain}
               onChange={setUseRootDomain}
+              className="w-full"
             />
           </div>
         ) : (

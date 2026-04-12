@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Select, Input, Button, Skeleton, useToast } from "@tac-ui/web";
 import { BrainCircuit, Pencil, AlertCircle, Save, X, Copy, Check } from "@tac-ui/icon";
 import { api } from "@/lib/api";
@@ -229,15 +229,15 @@ export function ModelSelector() {
     setCustomModel("");
   };
 
-  const handleSaveModel = async () => {
-    if (!hasPendingChange) return;
+  const handleSaveModel = useCallback(async () => {
+    if (pendingModel === undefined || pendingModel === savedModel) return;
     const ok = await commitPendingPatch();
     if (ok) {
       toast("Model saved", { variant: "success" });
     } else {
       toast("Failed to save model", { variant: "error" });
     }
-  };
+  }, [pendingModel, savedModel, commitPendingPatch, toast]);
 
   const handleRevertModel = () => {
     discardPendingModel();
@@ -273,8 +273,7 @@ export function ModelSelector() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingModel, committing, gateway.connected]);
+  }, [pendingModel, committing, gateway.connected, handleSaveModel]);
 
   const handleChange = (value: string) => {
     if (value === "__custom") {
@@ -442,59 +441,35 @@ export function ModelSelector() {
                   );
                 })()}
               </div>
-              {hasPendingChange ? (
-                <div className="flex items-center gap-1 shrink-0">
+              <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCopyModel}
+                  title="Copy model ID"
+                  aria-label="Copy model ID"
+                >
+                  {copied ? (
+                    <Check size={12} className="text-success" />
+                  ) : (
+                    <Copy size={12} />
+                  )}
+                </Button>
+                {matchingProvider && (
                   <Button
                     variant="ghost"
-                    size="sm"
-                    disabled={committing}
-                    onClick={handleRevertModel}
-                    leftIcon={<X size={12} />}
-                  >
-                    Revert
-                  </Button>
-                  <Button
-                    variant="primary"
                     size="sm"
                     disabled={!gateway.connected || committing}
-                    onClick={handleSaveModel}
-                    leftIcon={<Save size={12} />}
-                    title="Save (⌘/Ctrl+S)"
+                    onClick={() => {
+                      setCustomMode(true);
+                      setCustomModel(currentModel);
+                    }}
+                    leftIcon={<Pencil size={12} />}
                   >
-                    {committing ? "Saving..." : "Save"}
+                    Edit
                   </Button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1 shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleCopyModel}
-                    title="Copy model ID"
-                    aria-label="Copy model ID"
-                  >
-                    {copied ? (
-                      <Check size={12} className="text-success" />
-                    ) : (
-                      <Copy size={12} />
-                    )}
-                  </Button>
-                  {matchingProvider && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={!gateway.connected || committing}
-                      onClick={() => {
-                        setCustomMode(true);
-                        setCustomModel(currentModel);
-                      }}
-                      leftIcon={<Pencil size={12} />}
-                    >
-                      Edit
-                    </Button>
-                  )}
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
 

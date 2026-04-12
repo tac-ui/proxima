@@ -141,14 +141,14 @@ export default function UsersPage() {
     >
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-point/15 flex items-center justify-center">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-point/15 flex items-center justify-center shrink-0">
                 <Users size={18} className="text-point" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <h2 className="text-sm font-semibold">Users</h2>
-                <p className="text-xs text-muted-foreground">Manage user accounts and roles</p>
+                <p className="text-xs text-muted-foreground truncate">Manage user accounts and roles</p>
               </div>
             </div>
             <Button
@@ -156,6 +156,7 @@ export default function UsersPage() {
               size="sm"
               leftIcon={<UserPlus size={14} />}
               onClick={() => setShowCreateUser(true)}
+              className="shrink-0"
             >
               Add User
             </Button>

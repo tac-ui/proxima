@@ -218,7 +218,14 @@ function parseActivityLine(raw: string): ActivityEntry | null {
     || trimmed.includes("inbound")
     || trimmed.includes("delivered")
     || trimmed.includes("chat.send")
-    || trimmed.includes("reply");
+    || trimmed.includes("reply")
+    || trimmed.includes("message");
+  const isSessionEvent =
+    lower.includes("session")
+    || lower.includes("sessions.")
+    || lower.includes("agent")
+    || lower.includes("tool")
+    || lower.includes("model");
   const isGatewayEvent =
     lower.includes("[gateway]")
     || lower.includes("gateway ready")
@@ -226,9 +233,11 @@ function parseActivityLine(raw: string): ActivityEntry | null {
     || lower.includes("gateway restart")
     || lower.includes("gateway stopping")
     || lower.includes("starting channels")
-    || lower.includes("config.patch");
+    || lower.includes("config.patch")
+    || lower.includes("connected")
+    || lower.includes("authenticated");
   const isError = /\berror\b|\bwarn\b/i.test(trimmed) && !lower.includes("dangerous config flags");
-  if (!isChannelEvent && !isGatewayEvent && !isError) return null;
+  if (!isChannelEvent && !isSessionEvent && !isGatewayEvent && !isError) return null;
 
   // Try pino JSON
   try {
@@ -374,7 +383,7 @@ interface DashboardProps {
 }
 
 export function Dashboard({ onNavigate }: DashboardProps) {
-  const { gateway, config, configLoading, channels, sessions, settings } = useOpenClaw();
+  const { gateway, config, configLoading, channelsLoading, channels, sessions, settings } = useOpenClaw();
 
   const defaultModel = useMemo(() => extractDefaultModel(config), [config]);
 
@@ -413,7 +422,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const hasConnectedChannel = connectedChannels.length > 0;
   const setupIncomplete = !hasKey || !hasModel || !hasChannel || !hasConnectedChannel;
   const gatewayReady = gateway.connected && !gateway.reconnecting;
-  const showChecklist = gatewayReady && setupIncomplete && !checklistDismissed;
+  const dataLoaded = config !== null && settings !== null && !configLoading;
+  const showChecklist = gatewayReady && dataLoaded && setupIncomplete && !checklistDismissed;
 
   const steps: ChecklistStep[] = [
     {
@@ -463,93 +473,115 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       )}
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard
-          label="Gateway"
-          icon={<BrainCircuit size={12} />}
-          accent={gateway.reconnecting ? "warning" : gateway.connected ? "success" : "warning"}
-        >
-          <p className="text-sm font-medium truncate">
-            {gateway.reconnecting ? "Reconnecting…" : gateway.connected ? "Connected" : "Disconnected"}
-          </p>
-          <p className="text-[10px] text-muted-foreground truncate">
-            {gateway.reconnecting
-              ? "Restoring connection"
-              : gateway.connected
-                ? "Ready to accept requests"
-                : "Waiting for connection"}
-          </p>
-        </StatCard>
+      {!dataLoaded ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[0, 1, 2, 3].map(i => (
+            <div key={i} className="rounded-xl border border-border px-3 py-3 space-y-2">
+              <Skeleton width={80} height={10} />
+              <Skeleton width="70%" height={16} />
+              <Skeleton width="50%" height={10} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatCard
+            label="Gateway"
+            icon={<BrainCircuit size={12} />}
+            accent={gateway.reconnecting ? "warning" : gateway.connected ? "success" : "warning"}
+          >
+            <p className="text-sm font-medium truncate">
+              {gateway.reconnecting ? "Reconnecting…" : gateway.connected ? "Connected" : "Disconnected"}
+            </p>
+            <p className="text-[10px] text-muted-foreground truncate">
+              {gateway.reconnecting
+                ? "Restoring connection"
+                : gateway.connected
+                  ? "Ready to accept requests"
+                  : "Waiting for connection"}
+            </p>
+          </StatCard>
 
-        <StatCard
-          label="Default Model"
-          icon={<Cpu size={12} />}
-          onClick={() => onNavigate("setup")}
-          ariaLabel="Default Model — click to edit in Setup"
-        >
-          {config === null && configLoading ? (
-            <Skeleton width={140} height={14} />
-          ) : (
-            <>
-              <p className="text-sm font-medium font-mono truncate" title={defaultModel || undefined}>
-                {defaultModel || <span className="text-muted-foreground font-sans italic">Not set</span>}
-              </p>
-              <p className="text-[10px] text-muted-foreground truncate">
-                {defaultModel ? "Click to change" : "Pick a model in Setup"}
-              </p>
-            </>
-          )}
-        </StatCard>
+          <StatCard
+            label="Default Model"
+            icon={<Cpu size={12} />}
+            onClick={() => onNavigate("setup")}
+            ariaLabel="Default Model — click to edit in Setup"
+          >
+            <p className="text-sm font-medium font-mono truncate" title={defaultModel || undefined}>
+              {defaultModel || <span className="text-muted-foreground font-sans italic">Not set</span>}
+            </p>
+            <p className="text-[10px] text-muted-foreground truncate">
+              {defaultModel ? "Click to change" : "Pick a model in Setup"}
+            </p>
+          </StatCard>
 
-        <StatCard
-          label="Channels"
-          icon={<Wifi size={12} />}
-          accent={
-            configuredChannels.length === 0 ? "default"
-              : connectedChannels.length === 0 ? "error"
-              : connectedChannels.length === configuredChannels.length ? "success"
-              : "warning"
-          }
-          onClick={() => onNavigate("setup")}
-          ariaLabel="Channels — click to manage in Setup"
-        >
-          {configuredChannels.length === 0 ? (
-            <>
-              <p className="text-sm font-medium text-muted-foreground italic">None configured</p>
-              <p className="text-[10px] text-muted-foreground">Click to connect one</p>
-            </>
-          ) : (
-            <>
-              <p className="text-sm font-medium tabular-nums">
-                <span className={connectedChannels.length === 0 ? "text-error" : connectedChannels.length === configuredChannels.length ? "text-success" : "text-warning"}>
-                  {connectedChannels.length}
-                </span>
-                <span className="text-muted-foreground"> live</span>
-              </p>
-              <p className="text-[10px] text-muted-foreground">
-                of {configuredChannels.length} configured
-              </p>
-            </>
-          )}
-        </StatCard>
+          <StatCard
+            label="Channels"
+            icon={<Wifi size={12} />}
+            accent={
+              configuredChannels.length === 0 ? "default"
+                : connectedChannels.length === 0 ? "error"
+                : connectedChannels.length === configuredChannels.length ? "success"
+                : "warning"
+            }
+            onClick={() => onNavigate("setup")}
+            ariaLabel="Channels — click to manage in Setup"
+          >
+            {configuredChannels.length === 0 ? (
+              <>
+                <p className="text-sm font-medium text-muted-foreground italic">None configured</p>
+                <p className="text-[10px] text-muted-foreground">Click to connect one</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium tabular-nums">
+                  <span className={connectedChannels.length === 0 ? "text-error" : connectedChannels.length === configuredChannels.length ? "text-success" : "text-warning"}>
+                    {connectedChannels.length}
+                  </span>
+                  <span className="text-muted-foreground"> live</span>
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  of {configuredChannels.length} configured
+                </p>
+              </>
+            )}
+          </StatCard>
 
-        <StatCard
-          label="Sessions"
-          icon={<MessageSquare size={12} />}
-          onClick={() => onNavigate("sessions")}
-          ariaLabel="Sessions — click to view"
-        >
-          <p className="text-sm font-medium tabular-nums">{sessions.length}</p>
-          <p className="text-[10px] text-muted-foreground">
-            {sessions.length === 0
-              ? "No active sessions"
-              : sessions.length === 1 ? "1 active · click to view" : `${sessions.length} active · click to view`}
-          </p>
-        </StatCard>
-      </div>
+          <StatCard
+            label="Sessions"
+            icon={<MessageSquare size={12} />}
+            onClick={() => onNavigate("sessions")}
+            ariaLabel="Sessions — click to view"
+          >
+            <p className="text-sm font-medium tabular-nums">{sessions.length}</p>
+            <p className="text-[10px] text-muted-foreground">
+              {sessions.length === 0
+                ? "No active sessions"
+                : sessions.length === 1 ? "1 active · click to view" : `${sessions.length} active · click to view`}
+            </p>
+          </StatCard>
+        </div>
+      )}
 
       {/* Channel status list */}
-      {channels.length > 0 && (
+      {channelsLoading && channels.length === 0 ? (
+        <div className="rounded-xl border border-border overflow-hidden">
+          <div className="px-3 py-2 border-b border-border flex items-center gap-2">
+            <Wifi size={12} className="text-muted-foreground" />
+            <p className="text-xs font-medium">Channel status</p>
+          </div>
+          <div className="divide-y divide-border">
+            {[0, 1].map(i => (
+              <div key={i} className="flex items-center gap-3 px-3 py-2.5">
+                <Skeleton width={8} height={8} className="rounded-full shrink-0" />
+                <Skeleton width={80} height={12} className="flex-1" />
+                <Skeleton width={72} height={20} className="rounded-full" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : channels.length > 0 ? (
         <motion.div
           layout
           className="rounded-xl border border-border overflow-hidden"
@@ -605,7 +637,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             })}
           </div>
         </motion.div>
-      )}
+      ) : null}
 
       {/* Recent activity from logs */}
       <RecentActivity onNavigate={onNavigate} />

@@ -244,8 +244,8 @@ function AnalyticsContent() {
           </div>
         </div>
       ) : !analytics || analytics.summary.totalRequests === 0 ? (
-        <Card>
-          <CardContent>
+        <Card className="overflow-hidden">
+          <CardContent className="overflow-hidden">
             <EmptyState
               icon={<BarChart3 size={24} className="text-point" />}
               title="No analytics data"
@@ -254,6 +254,7 @@ function AnalyticsContent() {
                   ? `No traffic recorded for ${selectedHost.domainNames.join(", ")} in the selected period.`
                   : "Select a route to view analytics."
               }
+              className="break-words [&_p]:break-words"
             />
           </CardContent>
         </Card>

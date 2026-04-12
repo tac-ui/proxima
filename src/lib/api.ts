@@ -250,4 +250,5 @@ export const api = {
   updateOpenClawSettings: (data: Partial<OpenClawSettings>) => request<OpenClawSettings>("PUT", "/api/settings/openclaw", data),
   getOpenClawStatus: () => request<OpenClawStatus>("GET", "/api/settings/openclaw/status"),
   openclawAction: (action: "start" | "stop" | "restart") => request<{ success: boolean; error?: string }>("POST", "/api/settings/openclaw/action", { action }),
+  fetchTelegramChats: (botToken?: string) => request<{ id: number; type: string; title?: string; username?: string; firstName?: string }[]>("POST", "/api/settings/openclaw/telegram-chats", { botToken }),
 };

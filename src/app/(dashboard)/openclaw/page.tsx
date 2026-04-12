@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useOpenClaw } from "@/contexts/OpenClawContext";
 import { api } from "@/lib/api";
 import { Card, CardHeader, CardContent, Button, Badge, Input, SensitiveInput, Select, Skeleton, Tabs, TabsList, TabTrigger, TabContent, pageEntrance, useToast } from "@tac-ui/web";
-import { BrainCircuit, MessageSquare, Wifi, Cpu, Shield, FileText, Settings, RotateCw, Power, ScrollText, RefreshCw, KeyRound, GitBranch } from "@tac-ui/icon";
+import { BrainCircuit, MessageSquare, Wifi, Cpu, Shield, FileText, Settings, RotateCw, Power, ScrollText, RefreshCw, KeyRound, GitBranch, Save, X } from "@tac-ui/icon";
 import { useConfirm } from "@/hooks/useConfirm";
 import { SessionList } from "@/components/openclaw/SessionList";
 import { ChannelSetup } from "@/components/openclaw/ChannelSetup";
@@ -174,7 +174,7 @@ export default function OpenClawPage() {
   const { isManager } = useAuth();
   const { toast } = useToast();
   const confirm = useConfirm();
-  const { gateway, enabled, settings, sessions, config, committing, refreshSessions, refreshSettings } = useOpenClaw();
+  const { gateway, enabled, settings, sessions, config, committing, pendingModel, discardPendingModel, commitPendingPatch, refreshSessions, refreshSettings } = useOpenClaw();
   const [creatingSession, setCreatingSession] = useState(false);
   const [refreshingSessions, setRefreshingSessions] = useState(false);
   const [busy, setBusy] = useState<"start" | "stop" | "restart" | null>(null);
@@ -213,8 +213,11 @@ export default function OpenClawPage() {
     setCreatingSession(true);
     try {
       await gateway.request("sessions.create", {});
-      await refreshSessions();
       toast("Session created", { variant: "success" });
+      // Small delay to let the gateway register the new session before refreshing
+      await new Promise(r => setTimeout(r, 800));
+      await refreshSessions();
+      setTab("sessions");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to create session", { variant: "error" });
     }
@@ -414,11 +417,6 @@ export default function OpenClawPage() {
         {/* Setup Tab */}
         <TabContent value="setup">
           <div className="pt-4 space-y-6">
-            {/* Reconnecting / disconnected banner. While the gateway is
-                offline we replace the Model / Channels card bodies with
-                skeletons — stale data with disabled inputs gave the
-                impression that fields were empty, so showing an honest
-                "loading" state is less confusing. */}
             {(!gateway.connected || gateway.reconnecting) && (
               <div className="rounded-lg border border-warning/40 bg-warning/5 px-3 py-2.5 flex items-start gap-2">
                 <RefreshCw size={14} className="text-warning shrink-0 mt-0.5 animate-spin" />
@@ -436,48 +434,60 @@ export default function OpenClawPage() {
               <CardHeader>
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-xl bg-warning/15 flex items-center justify-center">
-                    <Cpu size={18} className="text-warning" />
+                    <Settings size={18} className="text-warning" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-semibold">Model</h2>
-                    <p className="text-xs text-muted-foreground">Default AI model for conversations</p>
+                    <h2 className="text-sm font-semibold">Model & Channels</h2>
+                    <p className="text-xs text-muted-foreground">Default model and messaging platform setup</p>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
                 {gateway.connected && !gateway.reconnecting ? (
-                  <ModelSelector />
+                  <div className="space-y-6">
+                    <ModelSelector />
+                    <div className="border-t border-border pt-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Wifi size={14} className="text-muted-foreground" />
+                        <p className="text-sm font-medium">Channels</p>
+                      </div>
+                      <ChannelSetup />
+                    </div>
+                    {/* Unified save for model-only changes */}
+                    {pendingModel !== undefined && (
+                      <div className="border-t border-border pt-3 flex items-center justify-between">
+                        <p className="text-xs text-muted-foreground">
+                          Unsaved model change: <span className="font-mono text-foreground">{pendingModel}</span>
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" size="sm" onClick={discardPendingModel} leftIcon={<X size={12} />}>
+                            Revert
+                          </Button>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            disabled={committing || !gateway.connected}
+                            onClick={async () => {
+                              const ok = await commitPendingPatch();
+                              if (ok) toast("Saved", { variant: "success" });
+                              else toast("Failed to save", { variant: "error" });
+                            }}
+                            leftIcon={<Save size={12} />}
+                          >
+                            {committing ? "Saving..." : "Save"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div className="space-y-3">
                     <Skeleton height={20} width="40%" />
                     <Skeleton height={72} />
                     <Skeleton height={36} width="60%" />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-success/15 flex items-center justify-center">
-                    <Wifi size={18} className="text-success" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-semibold">Channels</h2>
-                    <p className="text-xs text-muted-foreground">Connect messaging platforms</p>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {gateway.connected && !gateway.reconnecting ? (
-                  <ChannelSetup />
-                ) : (
-                  <div className="space-y-3">
                     <Skeleton height={20} width="30%" />
                     <Skeleton height={48} />
                     <Skeleton height={48} />
-                    <Skeleton height={36} width="50%" />
                   </div>
                 )}
               </CardContent>

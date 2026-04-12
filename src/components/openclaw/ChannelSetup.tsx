@@ -3,11 +3,19 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button, SensitiveInput, Input, Badge, Switch, Skeleton, useToast } from "@tac-ui/web";
-import { Download, ChevronDown, Send } from "@tac-ui/icon";
+import { Download, ChevronDown, Send, Search, UserPlus } from "@tac-ui/icon";
 import { api } from "@/lib/api";
 import { useOpenClaw } from "@/contexts/OpenClawContext";
 import { useConfirm } from "@/hooks/useConfirm";
 import type { OpenClawChannel } from "@/types";
+
+interface TelegramChat {
+  id: number;
+  type: string;
+  title?: string;
+  username?: string;
+  firstName?: string;
+}
 
 interface ProximaChannel {
   type: string;
@@ -62,8 +70,8 @@ const CHANNELS: ChannelDef[] = [
         label: "Allowed User IDs",
         placeholder: "123456789, 987654321",
         sensitive: false,
-        required: false,
-        helpText: "Comma-separated Telegram numeric IDs. Find yours via @userinfobot. Leave empty to allow anyone.",
+        required: true,
+        helpText: "Comma-separated Telegram numeric IDs. Send a message to the bot, then click 'Fetch recent chats' to find your ID.",
       },
     ],
     guide: [
@@ -138,6 +146,8 @@ export function ChannelSetup() {
   const [forms, setForms] = useState<Record<string, FormState>>({});
   const [proximaChannels, setProximaChannels] = useState<ProximaChannel[]>([]);
   const [tests, setTests] = useState<Record<string, TestState>>({});
+  const [fetchingChats, setFetchingChats] = useState(false);
+  const [discoveredChats, setDiscoveredChats] = useState<TelegramChat[]>([]);
 
   const updateTest = (channelType: string, patch: Partial<TestState>) => {
     setTests(prev => ({
@@ -175,6 +185,39 @@ export function ChannelSetup() {
       );
     }
     updateTest(def.type, { sending: false });
+  };
+
+  const handleFetchTelegramChats = async () => {
+    setFetchingChats(true);
+    setDiscoveredChats([]);
+    try {
+      const botToken = forms.telegram?.fields?.botToken?.trim() || undefined;
+      const res = await api.fetchTelegramChats(botToken);
+      if (res.ok && res.data) {
+        setDiscoveredChats(res.data);
+        if (res.data.length === 0) {
+          toast("No recent chats found. Send a message to the bot first, then try again.", { variant: "warning" });
+        }
+      } else {
+        toast(res.error ?? "Failed to fetch chats", { variant: "error" });
+      }
+    } catch {
+      toast("Failed to fetch chats", { variant: "error" });
+    }
+    setFetchingChats(false);
+  };
+
+  const applyDiscoveredChat = (chatId: number) => {
+    const current = forms.telegram?.fields?.allowFrom ?? "";
+    const existing = current.split(",").map(s => s.trim()).filter(Boolean);
+    const idStr = String(chatId);
+    if (existing.includes(idStr)) {
+      toast("Already in the list", { variant: "info" });
+      return;
+    }
+    const updated = [...existing, idStr].join(", ");
+    updateField("telegram", "allowFrom", updated);
+    toast(`Added ${idStr}`, { variant: "success" });
   };
 
   // Load Proxima's notification channels once so we can offer them as
@@ -243,11 +286,13 @@ export function ChannelSetup() {
     const ch = channels.find(c => c.type === def.type);
     const alreadyConfigured = ch?.configured === true;
 
-    // Require inputs only if not yet configured; otherwise empty fields
-    // keep the existing value server-side.
+    // Require inputs: for sensitive fields (like botToken), only enforce
+    // when not yet configured (empty keeps existing server value). For
+    // non-sensitive required fields (like allowFrom), always enforce.
     for (const f of def.fields) {
       const val = form.fields[f.key]?.trim();
-      if (f.required && !alreadyConfigured && !val) {
+      if (f.required && !val) {
+        if (f.sensitive && alreadyConfigured) continue; // keep existing
         toast(`${f.label} is required`, { variant: "error" });
         return;
       }
@@ -259,7 +304,7 @@ export function ChannelSetup() {
       const val = form.fields[f.key]?.trim();
       if (!val) continue;
       if (f.key === "allowFrom") {
-        const ids = val.split(",").map(s => Number(s.trim())).filter(n => !isNaN(n) && n > 0);
+        const ids = val.split(",").map(s => Number(s.trim())).filter(n => !isNaN(n) && n !== 0);
         if (ids.length > 0) {
           channelConfig.allowFrom = ids;
           channelConfig.dmPolicy = "allowlist";
@@ -445,6 +490,44 @@ export function ChannelSetup() {
                           />
                         )}
                         {f.helpText && <p className="text-[10px] text-muted-foreground mt-1">{f.helpText}</p>}
+                        {/* Telegram chat ID discovery */}
+                        {def.type === "telegram" && f.key === "allowFrom" && (
+                          <div className="mt-2 space-y-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={fetchingChats || !gateway.connected}
+                              onClick={handleFetchTelegramChats}
+                              leftIcon={<Search size={12} />}
+                            >
+                              {fetchingChats ? "Fetching..." : "Fetch recent chats"}
+                            </Button>
+                            {discoveredChats.length > 0 && (
+                              <div className="rounded-md border border-border bg-muted/20 p-2 space-y-1">
+                                <p className="text-[10px] font-medium text-foreground">
+                                  Found {discoveredChats.length} chat(s) — click to add:
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {discoveredChats.map((chat) => (
+                                    <button
+                                      key={chat.id}
+                                      type="button"
+                                      onClick={() => applyDiscoveredChat(chat.id)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-border bg-background text-[10px] font-medium hover:border-foreground/30 transition-colors"
+                                      title={`${chat.type} — ${chat.username || chat.firstName || chat.title || "Unknown"}`}
+                                    >
+                                      <UserPlus size={10} />
+                                      <span className="font-mono">{chat.id}</span>
+                                      <span className="text-muted-foreground">
+                                        {chat.username ? `@${chat.username}` : chat.firstName || chat.title || ""}
+                                      </span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
 

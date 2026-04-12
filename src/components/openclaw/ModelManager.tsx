@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { SensitiveInput, Button, useToast } from "@tac-ui/web";
-import { Key, ChevronDown, ExternalLink } from "@tac-ui/icon";
+import { Key, ChevronDown, ExternalLink, Save } from "@tac-ui/icon";
 import { api } from "@/lib/api";
 import { useConfirm } from "@/hooks/useConfirm";
 import type { OpenClawSettings, OpenClawModels } from "@/types";
@@ -25,11 +25,9 @@ const PROVIDERS = [
 export function ModelManager({ settings, onSaved }: ModelManagerProps) {
   const { toast } = useToast();
   const confirm = useConfirm();
-  // User input buffer, keyed by provider. Cleared after save / cancel.
-  // Never reflects server state so the collapsed header stays stable.
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const [editMode, setEditMode] = useState<string | null>(null);
+  const [openProviders, setOpenProviders] = useState<Set<string>>(new Set());
 
   const serverValue = (key: keyof OpenClawModels): string => {
     const v = settings?.models?.[key];
@@ -46,18 +44,38 @@ export function ModelManager({ settings, onSaved }: ModelManagerProps) {
     });
   };
 
-  const handleSave = async (providerKey: keyof OpenClawModels) => {
-    const val = inputs[providerKey]?.trim() ?? "";
-    if (!val) return;
+  const toggleProvider = (key: string) => {
+    setOpenProviders(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+        clearInput(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  // Collect all dirty (non-empty) inputs
+  const dirtyKeys = Object.entries(inputs).filter(([, val]) => val?.trim());
+  const hasDirtyInputs = dirtyKeys.length > 0;
+
+  const handleSaveAll = async () => {
+    if (!hasDirtyInputs) return;
     setSaving(true);
     try {
+      const models: Record<string, string> = {};
+      for (const [key, val] of dirtyKeys) {
+        models[key] = val.trim();
+      }
       const res = await api.updateOpenClawSettings({
-        models: { [providerKey]: val } as Partial<OpenClawModels>,
+        models: models as Partial<OpenClawModels>,
       });
       if (res.ok) {
-        toast("API key saved", { variant: "success" });
-        setEditMode(null);
-        clearInput(providerKey);
+        toast(`${dirtyKeys.length} API key(s) saved`, { variant: "success" });
+        setOpenProviders(new Set());
+        setInputs({});
         onSaved?.();
       } else {
         toast(res.error ?? "Failed to save", { variant: "error" });
@@ -84,8 +102,9 @@ export function ModelManager({ settings, onSaved }: ModelManagerProps) {
       });
       if (res.ok) {
         toast("API key removed", { variant: "success" });
-        setEditMode(null);
         clearInput(providerKey);
+        openProviders.delete(providerKey);
+        setOpenProviders(new Set(openProviders));
         onSaved?.();
       } else {
         toast(res.error ?? "Failed to remove", { variant: "error" });
@@ -107,22 +126,8 @@ export function ModelManager({ settings, onSaved }: ModelManagerProps) {
         {PROVIDERS.map((p) => {
           const configured = isConfigured(p.key);
           const displayValue = serverValue(p.key);
-          const editing = editMode === p.key;
+          const isOpen = openProviders.has(p.key);
           const currentInput = inputs[p.key] ?? "";
-
-          const toggleOpen = () => {
-            if (editing) {
-              setEditMode(null);
-              clearInput(p.key);
-            } else {
-              setEditMode(p.key);
-            }
-          };
-
-          const cancelEdit = () => {
-            setEditMode(null);
-            clearInput(p.key);
-          };
 
           return (
             <div
@@ -133,9 +138,9 @@ export function ModelManager({ settings, onSaved }: ModelManagerProps) {
             >
               <button
                 type="button"
-                onClick={toggleOpen}
-                aria-expanded={editing}
-                aria-label={`${p.label} API key — ${editing ? "collapse" : "expand"}`}
+                onClick={() => toggleProvider(p.key)}
+                aria-expanded={isOpen}
+                aria-label={`${p.label} API key — ${isOpen ? "collapse" : "expand"}`}
                 className="w-full flex items-center gap-3 p-3 hover:bg-muted/30 transition-colors text-left"
               >
                 <span
@@ -159,7 +164,7 @@ export function ModelManager({ settings, onSaved }: ModelManagerProps) {
                   </span>
                 )}
                 <motion.span
-                  animate={{ rotate: editing ? 180 : 0 }}
+                  animate={{ rotate: isOpen ? 180 : 0 }}
                   transition={{ duration: 0.2, ease: "easeOut" }}
                   className="shrink-0 text-muted-foreground"
                 >
@@ -168,7 +173,7 @@ export function ModelManager({ settings, onSaved }: ModelManagerProps) {
               </button>
 
               <AnimatePresence initial={false}>
-                {editing && (
+                {isOpen && (
                   <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "auto", opacity: 1 }}
@@ -182,40 +187,29 @@ export function ModelManager({ settings, onSaved }: ModelManagerProps) {
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInputs(prev => ({ ...prev, [p.key]: e.target.value }))}
                         placeholder={configured ? "•••••••• (leave blank to keep)" : p.placeholder}
                       />
-                      {p.getKeyUrl && !configured && (
-                        <a
-                          href={p.getKeyUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          <ExternalLink size={10} />
-                          Get an API key from {p.label}
-                        </a>
-                      )}
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-between">
+                        {p.getKeyUrl && !configured && (
+                          <a
+                            href={p.getKeyUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            <ExternalLink size={10} />
+                            Get an API key from {p.label}
+                          </a>
+                        )}
                         {configured && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-error hover:text-error mr-auto"
+                            className="text-error hover:text-error"
                             disabled={saving}
                             onClick={() => handleRemove(p.key)}
                           >
                             Remove
                           </Button>
                         )}
-                        <Button variant="ghost" size="sm" onClick={cancelEdit}>
-                          Cancel
-                        </Button>
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          disabled={saving || !currentInput.trim()}
-                          onClick={() => handleSave(p.key)}
-                        >
-                          Save
-                        </Button>
                       </div>
                     </div>
                   </motion.div>
@@ -225,6 +219,24 @@ export function ModelManager({ settings, onSaved }: ModelManagerProps) {
           );
         })}
       </div>
+
+      {/* Unified save for all dirty keys */}
+      {hasDirtyInputs && (
+        <div className="border-t border-border pt-3 flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">
+            {dirtyKeys.length} key(s) to save
+          </p>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={saving}
+            onClick={handleSaveAll}
+            leftIcon={<Save size={12} />}
+          >
+            {saving ? "Saving..." : "Save All"}
+          </Button>
+        </div>
+      )}
 
       <p className="text-[10px] text-muted-foreground">
         Additional providers can be configured in the Advanced Config section.

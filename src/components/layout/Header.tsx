@@ -71,13 +71,13 @@ export function Header() {
           {/* Mobile hamburger */}
           <Button
             variant="ghost"
-            size="sm"
+            size="md"
             iconOnly
-            className="md:hidden shrink-0"
+            className="md:hidden shrink-0 min-w-[44px] min-h-[44px]"
             onClick={() => setMobileMenuOpen(true)}
             aria-label="Open menu"
           >
-            <Menu size={20} />
+            <Menu size={22} />
           </Button>
           {/* Branding */}
           {(showLogo || showAppName) && (

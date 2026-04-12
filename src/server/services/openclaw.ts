@@ -201,7 +201,187 @@ export function ensureWorkspaceDir(): string {
     }
   } catch { /* ignore — best effort */ }
 
+  // Seed default skill files with Proxima context
+  seedSkillFiles(workspaceDir);
+
   return workspaceDir;
+}
+
+// ---------------------------------------------------------------------------
+// Skill file seeding
+// ---------------------------------------------------------------------------
+
+interface SkillFile {
+  name: string;
+  content: () => string;
+}
+
+function getSkillFiles(): SkillFile[] {
+  const dataDir = process.env.PXM_DATA_DIR || "/data";
+  return [
+    {
+      name: "SKILL-proxima-env.md",
+      content: () => `# Proxima Environment
+
+You are running inside **Proxima**, a self-hosted server management platform.
+
+## Data Directory
+
+\`\`\`
+${dataDir}/
+├── proxima.db              # SQLite (users, repos, stacks, settings, audit)
+├── openclaw/               # OpenClaw state
+│   ├── workspace/          # Agent workspace (this directory)
+│   └── openclaw.json       # Gateway config
+├── stacks/                 # Docker Compose stacks
+│   └── {name}/
+│       ├── compose.yaml
+│       └── .env
+└── ssl/                    # SSL certificates
+\`\`\`
+
+## Notes
+
+- \`proxima.db\` is SQLite — do not write directly
+- This workspace is shared with the Harness Files UI
+- Docker commands work if the host socket is mounted
+`,
+    },
+    {
+      name: "SKILL-proxima-projects.md",
+      content: () => `# Proxima Projects
+
+Projects are git repositories cloned and managed by Proxima.
+
+## Structure
+
+- Each project has a configurable local clone path on the host
+- Environment files: \`.env\`, \`application-local.properties\`, custom paths
+- Environment files are editable in-app per project
+- Webhooks support auto-deploy on push
+
+## Git Operations
+
+- Clone, pull, checkout branches via Proxima UI or CLI
+- SSH keys are managed in Proxima's SSH Keys section
+- Git author name/email configured in OpenClaw Credentials tab
+- GitHub PAT (\`GH_TOKEN\`) available for \`gh\` CLI if configured
+`,
+    },
+    {
+      name: "SKILL-proxima-docker.md",
+      content: () => {
+        const dataDir = process.env.PXM_DATA_DIR || "/data";
+        return `# Proxima Docker Stacks
+
+Stacks are Docker Compose deployments managed through Proxima.
+
+## Location
+
+\`${dataDir}/stacks/{stack-name}/\`
+
+## Operations
+
+- **create**: New stack with compose.yaml
+- **start / stop / restart**: Lifecycle management
+- **remove**: Delete stack and its files
+- **logs**: View container output
+- **compose.yaml**: Editable in-app
+- **\`.env\`**: Per-stack environment variables
+
+## Commands
+
+Docker Compose commands run from the stack directory:
+\`\`\`bash
+cd ${dataDir}/stacks/{name}
+docker compose up -d
+docker compose logs -f
+docker compose down
+\`\`\`
+`;
+      },
+    },
+    {
+      name: "SKILL-proxima-routes.md",
+      content: () => `# Proxima Routes & Reverse Proxy
+
+Proxima manages an Nginx reverse proxy for routing traffic.
+
+## Routes
+
+- Map domains/subdomains → upstream services (host:port)
+- Support Cloudflare zone selection or manual domain entry
+- Root domain toggle (use zone without subdomain)
+
+## SSL
+
+- Auto-managed via Cloudflare DNS integration
+- Manual cert upload supported
+- Certificates stored in the ssl/ directory
+
+## Analytics
+
+- Per-route traffic analytics
+- Status code breakdown (2xx/3xx/4xx/5xx)
+- Time-range filtering (24h, 7d, 30d)
+
+## Nginx
+
+- Config auto-generated from routes
+- Reload triggered on route changes
+- Custom upstream headers supported
+`,
+    },
+    {
+      name: "SKILL-proxima-services.md",
+      content: () => `# Proxima Services & Capabilities
+
+## User Management
+- Roles: admin, manager, viewer
+- Admin: full access, user management
+- Manager: projects, stacks, routes, OpenClaw config
+- Viewer: read-only access
+
+## Monitoring
+- Server health checks (CPU, memory, disk)
+- Container status monitoring
+- Audit logs for all operations
+
+## Notifications
+- Telegram and Discord channels
+- Webhook notifications on deploy events
+
+## Cloudflare Integration
+- DNS zone management
+- Auto SSL certificate provisioning
+- Analytics data from Cloudflare API
+
+## SSH Keys
+- Managed SSH keys for git operations
+- Key generation and import
+- Per-project key assignment
+`,
+    },
+  ];
+}
+
+/** Seed skill reference files in the workspace. Only creates files that don't exist. */
+function seedSkillFiles(workspaceDir: string): void {
+  const skills = getSkillFiles();
+  let seeded = 0;
+  for (const skill of skills) {
+    const filePath = path.join(workspaceDir, skill.name);
+    if (fs.existsSync(filePath)) continue;
+    try {
+      fs.writeFileSync(filePath, skill.content(), "utf-8");
+      seeded++;
+    } catch (err) {
+      logger.warn("openclaw", `Failed to seed ${skill.name}: ${err}`);
+    }
+  }
+  if (seeded > 0) {
+    logger.info("openclaw", `Seeded ${seeded} skill file(s) in workspace`);
+  }
 }
 
 /** Write/merge gateway config to openclaw.json. Preserves user-edited fields. */

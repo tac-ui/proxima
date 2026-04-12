@@ -1191,16 +1191,16 @@ export default function ProjectDetailPage() {
                   onChange={(e) => setEnvContent((prev) => ({ ...prev, [selectedEnvPath]: e.target.value }))}
                 />
                 {isManager && (
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="shrink-0">
                       {selectedEnvPath !== ".env" && (
                         <Button size="sm" variant="ghost" onClick={() => handleRemoveEnvFile(selectedEnvPath)}>
                           <Trash2 size={12} />
                         </Button>
                       )}
                     </div>
-                    <Button size="sm" onClick={handleSaveEnv} disabled={envSaving.has(selectedEnvPath)} leftIcon={<Save size={12} />}>
-                      {envSaving.has(selectedEnvPath) ? "Saving..." : `Save ${selectedEnvPath}`}
+                    <Button size="sm" onClick={handleSaveEnv} disabled={envSaving.has(selectedEnvPath)} leftIcon={<Save size={12} />} className="truncate max-w-full">
+                      <span className="truncate">{envSaving.has(selectedEnvPath) ? "Saving..." : `Save ${selectedEnvPath}`}</span>
                     </Button>
                   </div>
                 )}
