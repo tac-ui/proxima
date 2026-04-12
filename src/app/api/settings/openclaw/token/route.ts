@@ -1,12 +1,12 @@
 import { type NextRequest } from "next/server";
-import { requireAuth, errorResponse, ok } from "../../../_lib/auth";
+import { requireManager, errorResponse, ok } from "../../../_lib/auth";
 import { ensureDb } from "../../../_lib/db";
 import { getOpenClawSettings } from "@server/services/openclaw";
 
 export async function GET(req: NextRequest) {
   try {
     ensureDb();
-    requireAuth(req);
+    requireManager(req);
     const settings = getOpenClawSettings();
     if (!settings.enabled || !settings.gatewayToken) {
       return ok({ token: "", port: settings.gatewayPort });

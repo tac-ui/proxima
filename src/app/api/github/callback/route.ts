@@ -27,10 +27,21 @@ export async function GET(req: NextRequest) {
     // Delete used state to prevent replay
     db.delete(schema.settings).where(eq(schema.settings.key, `oauth_state:${state}`)).run();
 
-    // Check state hasn't expired
-    const createdAt = parseInt(stored.value, 10);
-    if (Date.now() - createdAt > OAUTH_STATE_MAX_AGE_MS) {
+    // Check state hasn't expired and includes initiator context
+    let stateData: { createdAt: number; userId?: number; username?: string };
+    try {
+      stateData = JSON.parse(stored.value) as { createdAt: number; userId?: number; username?: string };
+    } catch {
+      const legacyCreatedAt = parseInt(stored.value, 10);
+      stateData = { createdAt: legacyCreatedAt };
+    }
+
+    if (!Number.isFinite(stateData.createdAt) || Date.now() - stateData.createdAt > OAUTH_STATE_MAX_AGE_MS) {
       throw new Error("OAuth state expired");
+    }
+
+    if (!stateData.userId) {
+      throw new Error("OAuth state is missing initiator context");
     }
 
     const code = req.nextUrl.searchParams.get("code");
