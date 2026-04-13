@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { logger } from "../lib/logger";
 import { getDb, dbHelpers, schema } from "../db";
+import { generateToken } from "./auth";
 import { eq } from "drizzle-orm";
 import type { OpenClawSettings, OpenClawModels, OpenClawStatus } from "@/types";
 
@@ -225,11 +226,24 @@ function getSkillFiles(): SkillFile[] {
 
 You are running inside **Proxima**, a self-hosted server management platform.
 
+## API Access
+
+Proxima API is available via environment variables:
+- \`PROXIMA_URL\` — base URL (e.g. \`http://127.0.0.1:20222\`)
+- \`PROXIMA_TOKEN\` — JWT Bearer token with admin privileges
+
+All API calls use:
+\`\`\`bash
+curl -s -H "Authorization: Bearer $PROXIMA_TOKEN" "$PROXIMA_URL/api/..."
+\`\`\`
+
+All responses follow: \`{ "ok": true, "data": ... }\` or \`{ "ok": false, "error": "..." }\`
+
 ## Data Directory
 
 \`\`\`
 ${dataDir}/
-├── proxima.db              # SQLite (users, repos, stacks, settings, audit)
+├── proxima.db              # SQLite — do not write directly, use API
 ├── openclaw/               # OpenClaw state
 │   ├── workspace/          # Agent workspace (this directory)
 │   └── openclaw.json       # Gateway config
@@ -242,124 +256,271 @@ ${dataDir}/
 
 ## Notes
 
-- \`proxima.db\` is SQLite — do not write directly
+- Always use the Proxima API instead of direct DB/file manipulation
 - This workspace is shared with the Harness Files UI
 - Docker commands work if the host socket is mounted
 `,
     },
     {
-      name: "SKILL-proxima-projects.md",
-      content: () => `# Proxima Projects
+      name: "SKILL-proxima-stacks.md",
+      content: () => `# Proxima Docker Stacks API
 
-Projects are git repositories cloned and managed by Proxima.
+Manage Docker Compose stacks via Proxima API.
 
-## Structure
+## Endpoints
 
-- Each project has a configurable local clone path on the host
-- Environment files: \`.env\`, \`application-local.properties\`, custom paths
-- Environment files are editable in-app per project
-- Webhooks support auto-deploy on push
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/stacks | List all stacks |
+| GET | /api/stacks/{name} | Get stack details with containers |
+| PUT | /api/stacks/{name} | Save/update stack |
+| DELETE | /api/stacks/{name} | Delete stack |
+| POST | /api/stacks/{name}/start | Start stack |
+| POST | /api/stacks/{name}/stop | Stop stack |
+| POST | /api/stacks/{name}/restart | Restart stack |
+| POST | /api/stacks/{name}/deploy | Save and deploy stack |
+| GET | /api/stacks/{name}/logs | Get combined logs |
+| GET | /api/stacks/{name}/logs/{service} | Get service logs (?tail=200&since=ISO8601) |
 
-## Git Operations
+## Examples
 
-- Clone, pull, checkout branches via Proxima UI or CLI
-- SSH keys are managed in Proxima's SSH Keys section
-- Git author name/email configured in OpenClaw Credentials tab
-- GitHub PAT (\`GH_TOKEN\`) available for \`gh\` CLI if configured
+### List stacks
+\`\`\`bash
+curl -s -H "Authorization: Bearer $PROXIMA_TOKEN" "$PROXIMA_URL/api/stacks"
+\`\`\`
+
+### Deploy a new stack
+\`\`\`bash
+curl -s -X POST -H "Authorization: Bearer $PROXIMA_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"yaml":"version: \\"3\\"\\nservices:\\n  web:\\n    image: nginx","env":"","isNew":true}' \\
+  "$PROXIMA_URL/api/stacks/my-stack/deploy"
+\`\`\`
+
+### Start / Stop / Restart
+\`\`\`bash
+curl -s -X POST -H "Authorization: Bearer $PROXIMA_TOKEN" "$PROXIMA_URL/api/stacks/{name}/start"
+curl -s -X POST -H "Authorization: Bearer $PROXIMA_TOKEN" "$PROXIMA_URL/api/stacks/{name}/stop"
+curl -s -X POST -H "Authorization: Bearer $PROXIMA_TOKEN" "$PROXIMA_URL/api/stacks/{name}/restart"
+\`\`\`
+
+### Get logs
+\`\`\`bash
+curl -s -H "Authorization: Bearer $PROXIMA_TOKEN" "$PROXIMA_URL/api/stacks/{name}/logs/{service}?tail=100"
+\`\`\`
+
+## Stack file location: \`${dataDir}/stacks/{name}/\`
 `,
     },
     {
-      name: "SKILL-proxima-docker.md",
-      content: () => {
-        const dataDir = process.env.PXM_DATA_DIR || "/data";
-        return `# Proxima Docker Stacks
+      name: "SKILL-proxima-routes.md",
+      content: () => `# Proxima Routes & Reverse Proxy API
 
-Stacks are Docker Compose deployments managed through Proxima.
+Manage Nginx reverse proxy routes and domain connections.
 
-## Location
+## Endpoints
 
-\`${dataDir}/stacks/{stack-name}/\`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/proxy | List all proxy routes |
+| POST | /api/proxy | Create new route |
+| PUT | /api/proxy/{id} | Update route |
+| DELETE | /api/proxy/{id} | Delete route |
+| GET | /api/analytics | Analytics summary for all routes |
+| GET | /api/analytics/{proxyHostId} | Analytics for a specific route (?hours=24) |
+| GET | /api/discovery | Discover network services |
+| GET | /api/discovery/suggest/{stackName} | Suggest proxy target for stack |
 
-## Operations
+## Create Route
 
-- **create**: New stack with compose.yaml
-- **start / stop / restart**: Lifecycle management
-- **remove**: Delete stack and its files
-- **logs**: View container output
-- **compose.yaml**: Editable in-app
-- **\`.env\`**: Per-stack environment variables
-
-## Commands
-
-Docker Compose commands run from the stack directory:
 \`\`\`bash
-cd ${dataDir}/stacks/{name}
-docker compose up -d
-docker compose logs -f
-docker compose down
+curl -s -X POST -H "Authorization: Bearer $PROXIMA_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "domainNames": ["app.example.com"],
+    "forwardScheme": "http",
+    "forwardHost": "127.0.0.1",
+    "forwardPort": 3000,
+    "blockExploits": true,
+    "allowWebsocketUpgrade": false,
+    "enabled": true
+  }' \\
+  "$PROXIMA_URL/api/proxy"
 \`\`\`
-`;
-      },
+
+## Update Route
+
+\`\`\`bash
+curl -s -X PUT -H "Authorization: Bearer $PROXIMA_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"forwardPort": 8080, "enabled": true}' \\
+  "$PROXIMA_URL/api/proxy/{id}"
+\`\`\`
+
+## Cloudflare DNS
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/settings/cloudflare | Get Cloudflare config |
+| PUT | /api/settings/cloudflare | Update config (apiToken, zones) |
+| POST | /api/settings/cloudflare/sync | Sync all DNS records |
+| GET | /api/settings/cloudflare/tunnel | Get tunnel settings |
+| POST | /api/settings/cloudflare/tunnel/action | Control tunnel (start/stop/restart) |
+
+Route creation with Cloudflare zones auto-syncs DNS records.
+`,
     },
     {
-      name: "SKILL-proxima-routes.md",
-      content: () => `# Proxima Routes & Reverse Proxy
+      name: "SKILL-proxima-projects.md",
+      content: () => `# Proxima Projects (Git Repositories) API
 
-Proxima manages an Nginx reverse proxy for routing traffic.
+Manage git repositories, branches, scripts, and webhooks.
 
-## Routes
+## Endpoints
 
-- Map domains/subdomains → upstream services (host:port)
-- Support Cloudflare zone selection or manual domain entry
-- Root domain toggle (use zone without subdomain)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/repos | List all repositories |
+| GET | /api/repos/{id} | Get repository details |
+| DELETE | /api/repos/{id} | Delete repository |
+| GET | /api/repos/{id}/status | Git status (dirty/clean) |
+| GET | /api/repos/{id}/branches | List remote branches |
+| GET | /api/repos/{id}/commits | Commit history (?limit=10) |
+| POST | /api/repos/{id}/pull | Pull latest changes |
+| POST | /api/repos/{id}/checkout | Checkout branch: {"branch":"main"} |
+| POST | /api/repos/{id}/restore | Discard all changes |
+| POST | /api/git/clone | Clone repo: {"repoUrl","branch","targetDir"} |
 
-## SSL
+## Environment Files
 
-- Auto-managed via Cloudflare DNS integration
-- Manual cert upload supported
-- Certificates stored in the ssl/ directory
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/repos/{id}/env | Read .env (?path=filePath) |
+| PUT | /api/repos/{id}/env | Write .env: {"content","path"} |
+| GET | /api/repos/{id}/env-files | List tracked env files |
+| POST | /api/repos/{id}/env-files | Add env file: {"name","path"} |
 
-## Analytics
+## Git Operations
 
-- Per-route traffic analytics
-- Status code breakdown (2xx/3xx/4xx/5xx)
-- Time-range filtering (24h, 7d, 30d)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/repos/{id}/git | Get staged/unstaged/untracked changes |
+| POST | /api/repos/{id}/git | Commit: {"action":"commit","message":"..."} |
+| POST | /api/repos/{id}/git | Push: {"action":"push"} |
 
-## Nginx
+## Scripts
 
-- Config auto-generated from routes
-- Reload triggered on route changes
-- Custom upstream headers supported
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/repos/{id}/scripts | List scripts |
+| POST | /api/repos/{id}/scripts | Create: {"name","content"} |
+| PUT | /api/repos/{id}/scripts/{slug} | Update script |
+| POST | /api/repos/{id}/scripts/{slug}/run | Execute script |
+| GET | /api/repos/{id}/suggest-scripts | Auto-detect scripts |
+
+## Webhooks
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/repos/{id}/webhook | Get webhook config |
+| PUT | /api/repos/{id}/webhook | Update: {"enabled","apiKey"} |
+
+## Examples
+
+### Clone a repository
+\`\`\`bash
+curl -s -X POST -H "Authorization: Bearer $PROXIMA_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"repoUrl":"git@github.com:user/repo.git","branch":"main","targetDir":"/data/repos/my-repo"}' \\
+  "$PROXIMA_URL/api/git/clone"
+\`\`\`
+
+### Pull latest and check status
+\`\`\`bash
+curl -s -X POST -H "Authorization: Bearer $PROXIMA_TOKEN" "$PROXIMA_URL/api/repos/{id}/pull"
+curl -s -H "Authorization: Bearer $PROXIMA_TOKEN" "$PROXIMA_URL/api/repos/{id}/status"
+\`\`\`
 `,
     },
     {
       name: "SKILL-proxima-services.md",
-      content: () => `# Proxima Services & Capabilities
+      content: () => `# Proxima Services & Management API
 
-## User Management
-- Roles: admin, manager, viewer
-- Admin: full access, user management
-- Manager: projects, stacks, routes, OpenClaw config
-- Viewer: read-only access
+## Users
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/users | List users (admin only) |
+| POST | /api/users | Create user: {"username","password","role"} |
+| PUT | /api/users/{id} | Update role: {"role"} |
+| DELETE | /api/users/{id} | Delete user |
+
+Roles: \`admin\` (full), \`manager\` (manage resources), \`viewer\` (read-only)
 
 ## Monitoring
-- Server health checks (CPU, memory, disk)
-- Container status monitoring
-- Audit logs for all operations
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/monitoring | Current system metrics (CPU, memory, disk) |
+| GET | /api/monitoring/history | Metrics history (?hours=1-24) |
+| GET | /api/health | System health check |
+| GET | /api/docker/status | Docker connection status |
+
+## Health Checks (Domain Monitoring)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/health-checks | List monitored domains |
+| POST | /api/health-checks | Add: {"url","name"} |
+| PUT | /api/health-checks | Update config |
+| DELETE | /api/health-checks | Remove: {"url"} |
+| POST | /api/health-checks/check | Manual check: {"urls":["..."]} |
 
 ## Notifications
-- Telegram and Discord channels
-- Webhook notifications on deploy events
 
-## Cloudflare Integration
-- DNS zone management
-- Auto SSL certificate provisioning
-- Analytics data from Cloudflare API
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/settings/notifications | List channels |
+| POST | /api/settings/notifications | Create: {"type":"telegram|discord|slack","name","config","enabled"} |
+| POST | /api/settings/notifications/{id}/test | Send test notification |
 
 ## SSH Keys
-- Managed SSH keys for git operations
-- Key generation and import
-- Per-project key assignment
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/ssh-keys | List SSH keys |
+| POST | /api/ssh-keys/generate | Generate new key: {"alias"} |
+| DELETE | /api/ssh-keys/{id} | Delete key |
+
+## GitHub Integration
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/github/status | Check GitHub connection |
+| GET | /api/github/authorize | Start OAuth flow |
+| POST | /api/github/disconnect | Disconnect GitHub |
+
+## Ports & Discovery
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/ports | List listening processes |
+| POST | /api/ports/check | Check port reachability: {"ports":[{"port":3000}]} |
+| GET | /api/discovery | Discover network services |
+
+## Audit Logs
+
+\`\`\`bash
+curl -s -H "Authorization: Bearer $PROXIMA_TOKEN" \\
+  "$PROXIMA_URL/api/audit-logs?limit=20&category=stack&action=deploy"
+\`\`\`
+
+## Branding
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/settings | Get branding settings |
+| PUT | /api/settings | Update: {"appName","logoUrl",...} |
 `,
     },
   ];
@@ -718,6 +879,16 @@ async function startOpenClawInternal(): Promise<void> {
   if (settings.githubToken) {
     env.GH_TOKEN = settings.githubToken;
     env.GITHUB_TOKEN = settings.githubToken;
+  }
+
+  // Proxima API access — generate a service JWT so OpenClaw can call Proxima endpoints
+  const pxmPort = process.env.PXM_PORT || "20222";
+  env.PROXIMA_URL = `http://127.0.0.1:${pxmPort}`;
+  const db = getDb();
+  const adminUser = db.select().from(schema.users).where(eq(schema.users.role, "admin")).limit(1).get();
+  if (adminUser) {
+    env.PROXIMA_TOKEN = generateToken(adminUser.id, adminUser.username, adminUser.role);
+    logger.info("openclaw", `Service token generated for Proxima API access (user: ${adminUser.username})`);
   }
 
   // Reset state
