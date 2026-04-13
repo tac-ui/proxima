@@ -217,14 +217,40 @@ interface SkillFile {
   content: () => string;
 }
 
+const SKILL_VERSION_TAG = "proxima-skill";
+
+function getSkillVersion(): string {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf-8"));
+    return pkg.version || "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
+function makeSkillHeader(version: string): string {
+  return `<!-- ${SKILL_VERSION_TAG}:v${version} -->\n`;
+}
+
+function parseSkillVersion(filePath: string): string | null {
+  try {
+    const firstLine = fs.readFileSync(filePath, "utf-8").split("\n")[0];
+    const match = firstLine.match(new RegExp(`${SKILL_VERSION_TAG}:v([\\d.]+)`));
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function getSkillFiles(): SkillFile[] {
   const dataDir = process.env.PXM_DATA_DIR || "/data";
   return [
     {
-      name: "SKILL-proxima-env.md",
-      content: () => `# Proxima Environment
+      name: "SKILL-proxima-guide.md",
+      content: () => `# Proxima Guide
 
 You are running inside **Proxima**, a self-hosted server management platform.
+This guide explains how Proxima works and where things live.
 
 ## API Access
 
@@ -232,33 +258,89 @@ Proxima API is available via environment variables:
 - \`PROXIMA_URL\` — base URL (e.g. \`http://127.0.0.1:20222\`)
 - \`PROXIMA_TOKEN\` — JWT Bearer token with admin privileges
 
-All API calls use:
+All API calls:
 \`\`\`bash
 curl -s -H "Authorization: Bearer $PROXIMA_TOKEN" "$PROXIMA_URL/api/..."
 \`\`\`
 
-All responses follow: \`{ "ok": true, "data": ... }\` or \`{ "ok": false, "error": "..." }\`
+Response format: \`{ "ok": true, "data": ... }\` or \`{ "ok": false, "error": "..." }\`
+
+## Available Proxima Skills
+
+| Skill File | Description |
+|------------|-------------|
+| SKILL-proxima-guide.md | This file — overview, structure, and API access |
+| SKILL-proxima-stacks.md | Docker Compose stack management API |
+| SKILL-proxima-routes.md | Reverse proxy routes & domain/DNS management API |
+| SKILL-proxima-projects.md | Git repository, script, webhook management API |
+| SKILL-proxima-services.md | Users, monitoring, notifications, SSH keys, health checks API |
 
 ## Data Directory
 
 \`\`\`
 ${dataDir}/
-├── proxima.db              # SQLite — do not write directly, use API
-├── openclaw/               # OpenClaw state
-│   ├── workspace/          # Agent workspace (this directory)
-│   └── openclaw.json       # Gateway config
-├── stacks/                 # Docker Compose stacks
-│   └── {name}/
-│       ├── compose.yaml
-│       └── .env
-└── ssl/                    # SSL certificates
+├── proxima.db                # SQLite — do not write directly, use API
+├── openclaw/                 # OpenClaw state
+│   ├── workspace/            # Agent workspace (this directory)
+│   └── openclaw.json         # Gateway config
+├── stacks/                   # Docker Compose stacks
+│   └── {stack-name}/
+│       ├── compose.yaml      # Stack definition
+│       └── .env              # Stack environment variables
+├── repos/                    # Cloned git repositories (configurable path)
+└── ssl/                      # SSL certificates
 \`\`\`
 
-## Notes
+## Projects (Git Repositories)
 
-- Always use the Proxima API instead of direct DB/file manipulation
-- This workspace is shared with the Harness Files UI
-- Docker commands work if the host socket is mounted
+- Proxima manages git repositories as "Projects"
+- Each project has: local clone path, tracked env files, scripts, webhook config
+- Clone path is configurable per project (default under \`${dataDir}/repos/\`)
+- Use \`GET /api/repos\` to list all projects and their paths
+- Scripts are stored per project and can be executed via API
+
+### Project Scripts
+
+- Scripts are shell scripts registered per project
+- Located in the project's clone directory
+- Auto-detection: Proxima can suggest scripts from package.json (npm), Makefile, build.gradle, etc.
+- Execute via: \`POST /api/repos/{id}/scripts/{slug}/run\`
+- Scripts support auto-start on project load and webhook triggers
+
+## Docker Stacks
+
+- Stacks live at \`${dataDir}/stacks/{name}/\`
+- Each stack has a \`compose.yaml\` and optional \`.env\`
+- Stack lifecycle: create → deploy → start/stop/restart → delete
+- Logs available per-service with tail and since filters
+
+## Routes & Domains
+
+- Nginx reverse proxy maps domains → upstream services
+- Cloudflare integration for DNS auto-sync and SSL
+- Cloudflare Tunnel support for exposing services without port forwarding
+- Per-route analytics (traffic, status codes)
+
+## Monitoring & Health
+
+- System metrics: CPU, memory, disk, container count
+- Domain health checks with configurable intervals
+- Notifications via Telegram, Discord, Slack on health events
+- Audit logs for all operations
+
+## Authentication & Roles
+
+- \`admin\`: Full access — user management, script execution, terminals
+- \`manager\`: Manage stacks, routes, projects, settings
+- \`viewer\`: Read-only access
+
+## Tips
+
+- Always use the API instead of direct file/DB manipulation
+- The workspace directory is shared with Proxima's Harness Files UI
+- Docker commands work directly if the host socket is mounted
+- Use \`GET /api/discovery\` to find running services on the network
+- Use \`GET /api/discovery/suggest/{stackName}\` to auto-detect proxy targets
 `,
     },
     {
@@ -526,23 +608,49 @@ curl -s -H "Authorization: Bearer $PROXIMA_TOKEN" \\
   ];
 }
 
-/** Seed skill reference files in the workspace. Only creates files that don't exist. */
+/**
+ * Seed/update skill reference files in the workspace.
+ * - New files are created with a version header.
+ * - Existing files are overwritten when the Proxima version changes.
+ * - This ensures skill docs stay in sync with the running Proxima version
+ *   while preventing user edits from persisting (these are managed files).
+ */
 function seedSkillFiles(workspaceDir: string): void {
   const skills = getSkillFiles();
+  const currentVersion = getSkillVersion();
   let seeded = 0;
+  let updated = 0;
   for (const skill of skills) {
     const filePath = path.join(workspaceDir, skill.name);
-    if (fs.existsSync(filePath)) continue;
+    const existingVersion = fs.existsSync(filePath) ? parseSkillVersion(filePath) : null;
+
+    if (existingVersion === currentVersion) continue; // up-to-date
+
     try {
-      fs.writeFileSync(filePath, skill.content(), "utf-8");
-      seeded++;
+      fs.writeFileSync(filePath, makeSkillHeader(currentVersion) + skill.content(), "utf-8");
+      if (existingVersion === null) {
+        seeded++;
+      } else {
+        updated++;
+      }
     } catch (err) {
-      logger.warn("openclaw", `Failed to seed ${skill.name}: ${err}`);
+      logger.warn("openclaw", `Failed to write ${skill.name}: ${err}`);
     }
   }
-  if (seeded > 0) {
-    logger.info("openclaw", `Seeded ${seeded} skill file(s) in workspace`);
+  // Remove deprecated skill files
+  const deprecated = ["SKILL-proxima-env.md"];
+  for (const name of deprecated) {
+    const filePath = path.join(workspaceDir, name);
+    if (fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+        logger.info("openclaw", `Removed deprecated skill file: ${name}`);
+      } catch { /* ignore */ }
+    }
   }
+
+  if (seeded > 0) logger.info("openclaw", `Seeded ${seeded} skill file(s) in workspace`);
+  if (updated > 0) logger.info("openclaw", `Updated ${updated} skill file(s) to v${currentVersion}`);
 }
 
 /** Write/merge gateway config to openclaw.json. Preserves user-edited fields. */
