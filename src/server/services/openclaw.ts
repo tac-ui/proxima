@@ -4,7 +4,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { logger } from "../lib/logger";
 import { getDb, dbHelpers, schema } from "../db";
-import { generateToken } from "./auth";
 import { eq } from "drizzle-orm";
 import type { OpenClawSettings, OpenClawModels, OpenClawStatus } from "@/types";
 
@@ -205,6 +204,9 @@ export function ensureWorkspaceDir(): string {
   // Seed default skill files with Proxima context
   seedSkillFiles(workspaceDir);
 
+  // Inject Proxima directive block into AGENTS.md
+  injectAgentsDirective(workspaceDir);
+
   return workspaceDir;
 }
 
@@ -216,6 +218,63 @@ interface SkillFile {
   name: string;
   content: () => string;
 }
+
+// ---------------------------------------------------------------------------
+// AGENTS.md directive injection
+// ---------------------------------------------------------------------------
+
+const AGENTS_DIRECTIVE_START = "<!-- proxima:agents-directive:start -->";
+const AGENTS_DIRECTIVE_END = "<!-- proxima:agents-directive:end -->";
+
+function getAgentsDirectiveBlock(): string {
+  const version = getSkillVersion();
+  return `${AGENTS_DIRECTIVE_START}
+# Proxima Integration (v${version})
+
+You are running inside Proxima. Read the following skill files to understand the platform and its API:
+
+- **SKILL-proxima-guide.md** — Overview, data structure, available skills index
+- **SKILL-proxima-stacks.md** — Docker stack management API
+- **SKILL-proxima-routes.md** — Reverse proxy & domain management API
+- **SKILL-proxima-projects.md** — Git repository, script, webhook management API
+- **SKILL-proxima-services.md** — Users, monitoring, notifications, SSH keys API
+
+Use \`PROXIMA_URL\` and \`PROXIMA_TOKEN\` environment variables for API access.
+Authenticate with the \`X-Service-Token: $PROXIMA_TOKEN\` header (never expires).
+Always prefer the Proxima API over direct file or database manipulation.
+${AGENTS_DIRECTIVE_END}`;
+}
+
+function injectAgentsDirective(workspaceDir: string): void {
+  const filePath = path.join(workspaceDir, "AGENTS.md");
+  const block = getAgentsDirectiveBlock();
+
+  let content = "";
+  if (fs.existsSync(filePath)) {
+    content = fs.readFileSync(filePath, "utf-8");
+
+    // Check if block already exists — replace it
+    const startIdx = content.indexOf(AGENTS_DIRECTIVE_START);
+    const endIdx = content.indexOf(AGENTS_DIRECTIVE_END);
+    if (startIdx !== -1 && endIdx !== -1) {
+      const existing = content.slice(startIdx, endIdx + AGENTS_DIRECTIVE_END.length);
+      if (existing === block) return; // already up-to-date
+      content = content.slice(0, startIdx) + block + content.slice(endIdx + AGENTS_DIRECTIVE_END.length);
+      fs.writeFileSync(filePath, content, "utf-8");
+      logger.info("openclaw", "Updated Proxima directive block in AGENTS.md");
+      return;
+    }
+  }
+
+  // Prepend block to top of file
+  const newContent = content.length > 0 ? block + "\n\n" + content : block + "\n";
+  fs.writeFileSync(filePath, newContent, "utf-8");
+  logger.info("openclaw", "Injected Proxima directive block into AGENTS.md");
+}
+
+// ---------------------------------------------------------------------------
+// Skill file seeding
+// ---------------------------------------------------------------------------
 
 const SKILL_VERSION_TAG = "proxima-skill";
 
@@ -256,11 +315,11 @@ This guide explains how Proxima works and where things live.
 
 Proxima API is available via environment variables:
 - \`PROXIMA_URL\` — base URL (e.g. \`http://127.0.0.1:20222\`)
-- \`PROXIMA_TOKEN\` — JWT Bearer token with admin privileges
+- \`PROXIMA_TOKEN\` — Service token with admin privileges (never expires)
 
-All API calls:
+All API calls use the \`X-Service-Token\` header:
 \`\`\`bash
-curl -s -H "Authorization: Bearer $PROXIMA_TOKEN" "$PROXIMA_URL/api/..."
+curl -s -H "X-Service-Token: $PROXIMA_TOKEN" "$PROXIMA_URL/api/..."
 \`\`\`
 
 Response format: \`{ "ok": true, "data": ... }\` or \`{ "ok": false, "error": "..." }\`
@@ -368,12 +427,12 @@ Manage Docker Compose stacks via Proxima API.
 
 ### List stacks
 \`\`\`bash
-curl -s -H "Authorization: Bearer $PROXIMA_TOKEN" "$PROXIMA_URL/api/stacks"
+curl -s -H "X-Service-Token: $PROXIMA_TOKEN" "$PROXIMA_URL/api/stacks"
 \`\`\`
 
 ### Deploy a new stack
 \`\`\`bash
-curl -s -X POST -H "Authorization: Bearer $PROXIMA_TOKEN" \\
+curl -s -X POST -H "X-Service-Token: $PROXIMA_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"yaml":"version: \\"3\\"\\nservices:\\n  web:\\n    image: nginx","env":"","isNew":true}' \\
   "$PROXIMA_URL/api/stacks/my-stack/deploy"
@@ -388,7 +447,7 @@ curl -s -X POST -H "Authorization: Bearer $PROXIMA_TOKEN" "$PROXIMA_URL/api/stac
 
 ### Get logs
 \`\`\`bash
-curl -s -H "Authorization: Bearer $PROXIMA_TOKEN" "$PROXIMA_URL/api/stacks/{name}/logs/{service}?tail=100"
+curl -s -H "X-Service-Token: $PROXIMA_TOKEN" "$PROXIMA_URL/api/stacks/{name}/logs/{service}?tail=100"
 \`\`\`
 
 ## Stack file location: \`${dataDir}/stacks/{name}/\`
@@ -416,7 +475,7 @@ Manage Nginx reverse proxy routes and domain connections.
 ## Create Route
 
 \`\`\`bash
-curl -s -X POST -H "Authorization: Bearer $PROXIMA_TOKEN" \\
+curl -s -X POST -H "X-Service-Token: $PROXIMA_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "domainNames": ["app.example.com"],
@@ -433,7 +492,7 @@ curl -s -X POST -H "Authorization: Bearer $PROXIMA_TOKEN" \\
 ## Update Route
 
 \`\`\`bash
-curl -s -X PUT -H "Authorization: Bearer $PROXIMA_TOKEN" \\
+curl -s -X PUT -H "X-Service-Token: $PROXIMA_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"forwardPort": 8080, "enabled": true}' \\
   "$PROXIMA_URL/api/proxy/{id}"
@@ -511,7 +570,7 @@ Manage git repositories, branches, scripts, and webhooks.
 
 ### Clone a repository
 \`\`\`bash
-curl -s -X POST -H "Authorization: Bearer $PROXIMA_TOKEN" \\
+curl -s -X POST -H "X-Service-Token: $PROXIMA_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"repoUrl":"git@github.com:user/repo.git","branch":"main","targetDir":"/data/repos/my-repo"}' \\
   "$PROXIMA_URL/api/git/clone"
@@ -520,7 +579,34 @@ curl -s -X POST -H "Authorization: Bearer $PROXIMA_TOKEN" \\
 ### Pull latest and check status
 \`\`\`bash
 curl -s -X POST -H "Authorization: Bearer $PROXIMA_TOKEN" "$PROXIMA_URL/api/repos/{id}/pull"
-curl -s -H "Authorization: Bearer $PROXIMA_TOKEN" "$PROXIMA_URL/api/repos/{id}/status"
+curl -s -H "X-Service-Token: $PROXIMA_TOKEN" "$PROXIMA_URL/api/repos/{id}/status"
+\`\`\`
+
+### Create a script
+\`\`\`bash
+curl -s -X POST -H "X-Service-Token: $PROXIMA_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"name":"deploy","content":"#!/bin/bash\\necho \\"Deploying...\\"\\ndocker compose pull && docker compose up -d"}' \\
+  "$PROXIMA_URL/api/repos/{id}/scripts"
+\`\`\`
+
+### Update a script (enable auto-start, webhook trigger)
+\`\`\`bash
+curl -s -X PUT -H "X-Service-Token: $PROXIMA_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"content":"#!/bin/bash\\ngit pull && npm install && npm run build","hookEnabled":true,"autoStart":false}' \\
+  "$PROXIMA_URL/api/repos/{id}/scripts/{slug}"
+\`\`\`
+
+### Execute a script
+\`\`\`bash
+curl -s -X POST -H "X-Service-Token: $PROXIMA_TOKEN" \\
+  "$PROXIMA_URL/api/repos/{id}/scripts/{slug}/run"
+\`\`\`
+
+### Auto-detect scripts from project (package.json, Makefile, etc.)
+\`\`\`bash
+curl -s -H "X-Service-Token: $PROXIMA_TOKEN" "$PROXIMA_URL/api/repos/{id}/suggest-scripts"
 \`\`\`
 `,
     },
@@ -593,7 +679,7 @@ Roles: \`admin\` (full), \`manager\` (manage resources), \`viewer\` (read-only)
 ## Audit Logs
 
 \`\`\`bash
-curl -s -H "Authorization: Bearer $PROXIMA_TOKEN" \\
+curl -s -H "X-Service-Token: $PROXIMA_TOKEN" \\
   "$PROXIMA_URL/api/audit-logs?limit=20&category=stack&action=deploy"
 \`\`\`
 
@@ -989,15 +1075,10 @@ async function startOpenClawInternal(): Promise<void> {
     env.GITHUB_TOKEN = settings.githubToken;
   }
 
-  // Proxima API access — generate a service JWT so OpenClaw can call Proxima endpoints
+  // Proxima API access — pass gateway token as service token (no expiry)
   const pxmPort = process.env.PXM_PORT || "20222";
   env.PROXIMA_URL = `http://127.0.0.1:${pxmPort}`;
-  const db = getDb();
-  const adminUser = db.select().from(schema.users).where(eq(schema.users.role, "admin")).limit(1).get();
-  if (adminUser) {
-    env.PROXIMA_TOKEN = generateToken(adminUser.id, adminUser.username, adminUser.role);
-    logger.info("openclaw", `Service token generated for Proxima API access (user: ${adminUser.username})`);
-  }
+  env.PROXIMA_TOKEN = token;
 
   // Reset state
   lastLogs = [];

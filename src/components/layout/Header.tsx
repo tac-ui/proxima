@@ -104,14 +104,11 @@ export function Header() {
 
         {/* Right side */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Connection indicator */}
-          <div className="flex items-center gap-2 text-xs px-2 py-1.5 rounded-lg bg-surface">
+          {/* Connection indicator — dot only */}
+          <div className="flex items-center text-xs px-1.5 py-1.5 rounded-lg bg-surface">
             <span
               className={`w-2 h-2 rounded-full ${connected ? "bg-success animate-pulse" : "bg-error"}`}
             />
-            <span className="text-muted-foreground hidden sm:inline">
-              {connected ? "Connected" : "Disconnected"}
-            </span>
           </div>
 
           {/* User menu */}

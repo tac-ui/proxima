@@ -3,6 +3,7 @@ import { verifyToken } from "@server/services/auth";
 import { getDb, dbHelpers } from "@server/db/index";
 import { logger } from "@server/lib/logger";
 import { ensureDb } from "./db";
+import { getOpenClawSettings } from "@server/services/openclaw";
 
 export class AuthError extends Error {
   constructor(message: string = "Unauthorized") {
@@ -13,6 +14,16 @@ export class AuthError extends Error {
 
 export function requireAuth(req: NextRequest): { userId: number; username: string; role: string } {
   ensureDb();
+
+  // Service token auth — OpenClaw gateway token grants admin access without expiry
+  const serviceToken = req.headers.get("x-service-token");
+  if (serviceToken) {
+    const settings = getOpenClawSettings();
+    if (settings.gatewayToken && serviceToken === settings.gatewayToken) {
+      return { userId: 0, username: "openclaw", role: "admin" };
+    }
+    throw new AuthError("Invalid service token");
+  }
 
   const authHeader = req.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
