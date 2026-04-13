@@ -3,6 +3,23 @@ set -e
 
 echo "=== Proxima ==="
 
+# ── Optional runtimes (installed as root before privilege drop) ──
+if [ -n "$PXM_JAVA_VERSION" ]; then
+  PKG="openjdk${PXM_JAVA_VERSION}-jre"
+  echo "Installing Java ${PXM_JAVA_VERSION} (${PKG})..."
+  apk add --no-cache "$PKG" \
+    && echo "  JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))" \
+    || echo "Warning: failed to install ${PKG} — check available versions (8, 11, 17, 21)"
+fi
+
+if [ -n "$PXM_PYTHON_VERSION" ]; then
+  # Alpine uses 'python3' for 3.x; specific minor versions use 'python3~=3.xx'
+  echo "Installing Python ${PXM_PYTHON_VERSION}..."
+  apk add --no-cache "python3~=${PXM_PYTHON_VERSION}" py3-pip \
+    && echo "  $(python3 --version)" \
+    || echo "Warning: failed to install Python ${PXM_PYTHON_VERSION} — check available versions for this Alpine release"
+fi
+
 # Determine target UID/GID: PUID/PGID env vars take priority, then /data owner detection
 TARGET_UID="${PUID:-}"
 TARGET_GID="${PGID:-}"
