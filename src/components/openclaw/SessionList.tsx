@@ -115,7 +115,7 @@ export function SessionList({
           title={connected ? "No sessions yet" : "Gateway disconnected"}
           description={
             connected
-              ? "Create a session to start chatting with your assistant."
+              ? "Create a session to start chatting."
               : "Start the gateway from the header to manage sessions."
           }
           action={

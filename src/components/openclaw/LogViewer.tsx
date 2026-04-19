@@ -160,6 +160,8 @@ export function LogViewer() {
     }
   };
 
+  const firstLoadRef = useRef(true);
+
   const refresh = useCallback(async () => {
     if (!gateway.connected) {
       setLoading(false);
@@ -186,16 +188,18 @@ export function LogViewer() {
         setFile(result.file);
         cachedLogFile = result.file;
       }
+      firstLoadRef.current = false;
     } catch (err) {
-      // Only show toast on the first failure to avoid spamming
-      if (loading) {
+      // Show toast on first failure so user knows something is wrong.
+      // After first load, suppress to avoid spamming during transient errors.
+      if (firstLoadRef.current) {
         toast(err instanceof Error ? err.message : "Failed to fetch logs", { variant: "error" });
+        firstLoadRef.current = false;
       }
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gateway]);
+  }, [gateway, toast]);
 
   // Initial load + auto-refresh timer
   useEffect(() => { refresh(); }, [refresh]);
@@ -205,6 +209,27 @@ export function LogViewer() {
     const id = setInterval(refresh, REFRESH_INTERVAL_MS);
     return () => clearInterval(id);
   }, [autoRefresh, refresh]);
+
+  // Subscribe to real-time events so logs update immediately on messages.
+  // Debounce to avoid hammering logs.tail during streaming (chat events
+  // fire on every token delta).
+  useEffect(() => {
+    if (!gateway.connected) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const debouncedRefresh = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { refresh(); }, 500);
+    };
+    const unsubs = [
+      gateway.subscribe("chat.final", debouncedRefresh),
+      gateway.subscribe("chat.delta", debouncedRefresh),
+      gateway.subscribe("sessions.changed", () => { refresh(); }),
+    ];
+    return () => {
+      if (timer) clearTimeout(timer);
+      unsubs.forEach(u => u());
+    };
+  }, [gateway, refresh]);
 
   // Tail-follow: after each update, scroll to the bottom if the user hasn't
   // scrolled up manually.
@@ -321,7 +346,7 @@ export function LogViewer() {
                 <Skeleton key={i} height={10} width={`${70 + (i % 3) * 10}%`} />
               ))}
             </div>
-          ) : !gateway.connected ? (
+          ) : !gateway.connected && entries.length === 0 ? (
             <p className="text-muted-foreground text-center py-8 text-xs">
               Gateway disconnected — start OpenClaw to view logs.
             </p>

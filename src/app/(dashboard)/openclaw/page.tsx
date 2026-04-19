@@ -606,7 +606,7 @@ export default function OpenClawPage() {
                     </div>
                     <div>
                       <h2 className="text-sm font-semibold">Harness Files</h2>
-                      <p className="text-xs text-muted-foreground">USER.md, CLAUDE.md and other configuration files</p>
+                      <p className="text-xs text-muted-foreground">USER.md, SOUL.md and other configuration files</p>
                     </div>
                   </div>
                 </CardHeader>

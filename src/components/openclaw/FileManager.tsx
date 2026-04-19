@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Archive,
   Sparkles,
+  Lock,
 } from "@tac-ui/icon";
 import { api } from "@/lib/api";
 import { useConfirm } from "@/hooks/useConfirm";
@@ -30,7 +31,6 @@ function isBackupFile(name: string): boolean {
 /** Canonical harness filenames recognized by OpenClaw's agent runtime. */
 const HARNESS_PRESETS: Array<{ name: string; description: string }> = [
   { name: "USER.md", description: "Personal context & preferences for the assistant" },
-  { name: "CLAUDE.md", description: "Project-level instructions for Claude" },
   { name: "SOUL.md", description: "Agent persona / soul definition — tone, values, personality" },
 ];
 
@@ -45,9 +45,23 @@ function isSystemFile(name: string): boolean {
   return name in SYSTEM_FILE_DESCRIPTIONS;
 }
 
+/** Proxima-managed skill files — read-only, non-deletable from UI. */
+function isProximaSkillFile(name: string): boolean {
+  return /^SKILL-proxima-.*\.md$/i.test(name);
+}
+
+const PROXIMA_SKILL_DESCRIPTIONS: Record<string, string> = {
+  "SKILL-proxima-guide.md": "Overview, data structure, available skills index",
+  "SKILL-proxima-stacks.md": "Docker stack management API",
+  "SKILL-proxima-routes.md": "Reverse proxy & domain management API",
+  "SKILL-proxima-projects.md": "Git repository, script, webhook management API",
+  "SKILL-proxima-services.md": "Users, monitoring, notifications, SSH keys API",
+};
+
 function fileDescription(name: string): string | undefined {
   const preset = HARNESS_PRESETS.find(p => p.name === name);
   if (preset) return preset.description;
+  if (isProximaSkillFile(name)) return PROXIMA_SKILL_DESCRIPTIONS[name] ?? "Proxima skill file";
   return SYSTEM_FILE_DESCRIPTIONS[name];
 }
 
@@ -76,13 +90,14 @@ interface EditorViewProps {
   filename: string;
   initialContent: string;
   saving: boolean;
+  readOnly?: boolean;
   onSave: (content: string) => Promise<void>;
   onClose: (dirty: boolean) => void;
 }
 
-function EditorView({ filename, initialContent, saving, onSave, onClose }: EditorViewProps) {
+function EditorView({ filename, initialContent, saving, readOnly, onSave, onClose }: EditorViewProps) {
   const [content, setContent] = useState(initialContent);
-  const dirty = content !== initialContent;
+  const dirty = !readOnly && content !== initialContent;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Ctrl/Cmd+S to save, Esc to close
@@ -125,27 +140,30 @@ function EditorView({ filename, initialContent, saving, onSave, onClose }: Edito
           <Button variant="ghost" size="sm" onClick={() => onClose(dirty)} leftIcon={<X size={14} />}>
             Close
           </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={saving || !dirty}
-            onClick={() => onSave(content)}
-            leftIcon={<Save size={14} />}
-            title="Save (Ctrl/Cmd+S)"
-          >
-            {saving ? "Saving..." : "Save"}
-          </Button>
+          {!readOnly && (
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={saving || !dirty}
+              onClick={() => onSave(content)}
+              leftIcon={<Save size={14} />}
+              title="Save (Ctrl/Cmd+S)"
+            >
+              {saving ? "Saving..." : "Save"}
+            </Button>
+          )}
         </div>
       </div>
 
       <textarea
         ref={textareaRef}
         value={content}
-        onChange={(e) => setContent(e.target.value)}
+        onChange={(e) => !readOnly && setContent(e.target.value)}
+        readOnly={readOnly}
         rows={16}
         spellCheck={false}
         placeholder="# Start writing your harness file..."
-        className="w-full px-4 py-3 text-xs font-mono rounded-lg border border-border bg-muted text-foreground outline-none focus:ring-2 focus:ring-ring/40 focus:border-ring resize-y leading-relaxed transition-shadow"
+        className={`w-full px-4 py-3 text-xs font-mono rounded-lg border border-border bg-muted text-foreground outline-none focus:ring-2 focus:ring-ring/40 focus:border-ring leading-relaxed transition-shadow ${readOnly ? "cursor-default opacity-80" : "resize-y"}`}
       />
 
       {/* Editor footer with metadata */}
@@ -156,9 +174,18 @@ function EditorView({ filename, initialContent, saving, onSave, onClose }: Edito
           <span>{formatSize(charCount)}</span>
         </div>
         <div className="flex items-center gap-1">
-          <kbd className="px-1 py-0.5 rounded border border-border bg-muted text-[9px]">⌘S</kbd>
-          <span>to save</span>
-          <span className="mx-1">·</span>
+          {readOnly ? (
+            <span className="text-muted-foreground flex items-center gap-1">
+              <Lock size={9} />
+              Read-only
+            </span>
+          ) : (
+            <>
+              <kbd className="px-1 py-0.5 rounded border border-border bg-muted text-[9px]">⌘S</kbd>
+              <span>to save</span>
+              <span className="mx-1">·</span>
+            </>
+          )}
           <kbd className="px-1 py-0.5 rounded border border-border bg-muted text-[9px]">Esc</kbd>
           <span>to close</span>
         </div>
@@ -176,7 +203,7 @@ export function FileManager() {
   const confirm = useConfirm();
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<{ name: string; content: string } | null>(null);
+  const [editing, setEditing] = useState<{ name: string; content: string; readOnly?: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -191,7 +218,7 @@ export function FileManager() {
 
   useEffect(() => { loadFiles(); }, [loadFiles]);
 
-  const { editableFiles, backupFiles, harnessFiles, systemFiles, otherFiles } = useMemo(() => {
+  const { editableFiles, backupFiles, harnessFiles, skillFiles, systemFiles, otherFiles } = useMemo(() => {
     const editable: FileEntry[] = [];
     const backups: FileEntry[] = [];
     for (const f of files) {
@@ -200,12 +227,14 @@ export function FileManager() {
     }
     const harnessNames = new Set(HARNESS_PRESETS.map(p => p.name));
     const harness = editable.filter(f => harnessNames.has(f.name));
-    const system = editable.filter(f => !harnessNames.has(f.name) && isSystemFile(f.name));
-    const others = editable.filter(f => !harnessNames.has(f.name) && !isSystemFile(f.name));
+    const skills = editable.filter(f => isProximaSkillFile(f.name));
+    const system = editable.filter(f => !harnessNames.has(f.name) && !isProximaSkillFile(f.name) && isSystemFile(f.name));
+    const others = editable.filter(f => !harnessNames.has(f.name) && !isProximaSkillFile(f.name) && !isSystemFile(f.name));
     return {
       editableFiles: editable,
       backupFiles: backups,
       harnessFiles: harness,
+      skillFiles: skills,
       systemFiles: system,
       otherFiles: others,
     };
@@ -218,7 +247,7 @@ export function FileManager() {
   const handleOpen = async (name: string) => {
     const res = await api.readOpenClawFile(name);
     if (res.ok && res.data) {
-      setEditing({ name, content: res.data.content });
+      setEditing({ name, content: res.data.content, readOnly: isProximaSkillFile(name) });
     } else {
       toast(res.error ?? "Failed to read file", { variant: "error" });
     }
@@ -302,6 +331,7 @@ export function FileManager() {
           filename={editing.name}
           initialContent={editing.content}
           saving={saving}
+          readOnly={editing.readOnly}
           onSave={handleSave}
           onClose={handleCloseEditor}
         />
@@ -428,7 +458,7 @@ export function FileManager() {
         </motion.div>
       )}
 
-      {/* Harness file section (USER.md / CLAUDE.md / SOUL.md) */}
+      {/* Harness file section (USER.md / SOUL.md) */}
       {!loading && harnessFiles.length > 0 && (
         <div className="space-y-1">
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium px-1">Harness</p>
@@ -494,6 +524,28 @@ export function FileManager() {
                 onOpen={() => handleOpen(f.name)}
                 onDelete={() => handleDelete(f.name)}
                 description={fileDescription(f.name)}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Proxima skill files — read-only, non-deletable */}
+      {!loading && skillFiles.length > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 px-1">
+            <Lock size={9} className="text-muted-foreground" />
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">Proxima Skills</p>
+            <span className="text-[9px] text-muted-foreground">({skillFiles.length})</span>
+          </div>
+          <AnimatePresence initial={false}>
+            {skillFiles.map((f) => (
+              <FileRow
+                key={f.name}
+                file={f}
+                onOpen={() => handleOpen(f.name)}
+                description={fileDescription(f.name)}
+                deletable={false}
               />
             ))}
           </AnimatePresence>
@@ -570,11 +622,13 @@ export function FileManager() {
 interface FileRowProps {
   file: FileEntry;
   onOpen: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
   description?: string;
+  /** When false, shows a lock icon instead of the delete button. */
+  deletable?: boolean;
 }
 
-function FileRow({ file, onOpen, onDelete, description }: FileRowProps) {
+function FileRow({ file, onOpen, onDelete, description, deletable = true }: FileRowProps) {
   return (
     <motion.div
       layout
@@ -601,14 +655,20 @@ function FileRow({ file, onOpen, onDelete, description }: FileRowProps) {
         </div>
       </button>
       <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">{formatSize(file.size)}</span>
-      <button
-        type="button"
-        className="text-muted-foreground hover:text-error transition-colors sm:opacity-0 sm:group-hover:opacity-100 p-1 rounded"
-        onClick={onDelete}
-        aria-label={`Delete ${file.name}`}
-      >
-        <Trash2 size={12} />
-      </button>
+      {deletable && onDelete ? (
+        <button
+          type="button"
+          className="text-muted-foreground hover:text-error transition-colors sm:opacity-0 sm:group-hover:opacity-100 p-1 rounded"
+          onClick={onDelete}
+          aria-label={`Delete ${file.name}`}
+        >
+          <Trash2 size={12} />
+        </button>
+      ) : (
+        <span className="shrink-0 p-1" title="Managed by Proxima">
+          <Lock size={11} className="text-muted-foreground" />
+        </span>
+      )}
     </motion.div>
   );
 }
