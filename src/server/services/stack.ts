@@ -57,6 +57,22 @@ const ACCEPTED_COMPOSE_FILENAMES = [
   "docker-compose.yml",
 ];
 
+/**
+ * Safe filename for stack extra files (Dockerfile, init.sql, nginx.conf, etc.).
+ * Stored alongside the compose file. Must not collide with the compose file
+ * or `.env` (those have dedicated editors), no path separators, no leading
+ * dot (hidden/system files), no `..`.
+ */
+const SAFE_EXTRA_FILENAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+function isExtraStackFile(name: string, composeFileName: string): boolean {
+  if (name === composeFileName) return false;
+  if (name === ".env") return false;
+  if (ACCEPTED_COMPOSE_FILENAMES.includes(name)) return false;
+  if (name.startsWith(".")) return false;
+  return SAFE_EXTRA_FILENAME_RE.test(name);
+}
+
 // ---------------------------------------------------------------------------
 // Helper
 // ---------------------------------------------------------------------------
@@ -168,12 +184,12 @@ export class Stack {
     if (this._dockerfiles === undefined) {
       this._dockerfiles = {};
       try {
-        const entries = fs.readdirSync(this.path);
+        const entries = fs.readdirSync(this.path, { withFileTypes: true });
         for (const entry of entries) {
-          if (entry === "Dockerfile" || entry.startsWith("Dockerfile.")) {
-            const content = fs.readFileSync(path.join(this.path, entry), "utf-8");
-            this._dockerfiles[entry] = content;
-          }
+          if (!entry.isFile()) continue;
+          if (!isExtraStackFile(entry.name, this._composeFileName)) continue;
+          const content = fs.readFileSync(path.join(this.path, entry.name), "utf-8");
+          this._dockerfiles[entry.name] = content;
         }
       } catch {
         // directory may not exist yet
@@ -277,14 +293,17 @@ export class Stack {
       await fsAsync.writeFile(envPath, this.composeENV, "utf-8");
     }
 
-    // Write Dockerfiles & remove stale ones
+    // Write extra stack files (Dockerfile, init.sql, nginx.conf, etc.)
+    // & remove stale ones. Same set the getter surfaces — excludes compose
+    // file + .env + hidden files so we never accidentally delete those.
     if (this._dockerfiles !== undefined) {
-      // Find existing Dockerfiles on disk to detect removals
       try {
-        const entries = await fsAsync.readdir(dir);
+        const entries = await fsAsync.readdir(dir, { withFileTypes: true });
         for (const entry of entries) {
-          if ((entry === "Dockerfile" || entry.startsWith("Dockerfile.")) && !(entry in this._dockerfiles)) {
-            await fsAsync.unlink(path.join(dir, entry));
+          if (!entry.isFile()) continue;
+          if (!isExtraStackFile(entry.name, this._composeFileName)) continue;
+          if (!(entry.name in this._dockerfiles)) {
+            await fsAsync.unlink(path.join(dir, entry.name));
           }
         }
       } catch {
@@ -292,13 +311,14 @@ export class Stack {
       }
 
       for (const [filename, content] of Object.entries(this._dockerfiles)) {
-        // Validate Dockerfile filename to prevent path traversal
-        if (!/^Dockerfile(\.[a-zA-Z0-9_-]+)?$/.test(filename)) {
-          throw new ValidationError(`Invalid Dockerfile name: ${filename}`);
+        // Reject unsafe filenames (path traversal, hidden files, collision
+        // with compose/.env which have dedicated editors).
+        if (!isExtraStackFile(filename, this._composeFileName)) {
+          throw new ValidationError(`Invalid filename: ${filename}`);
         }
         const resolvedPath = path.resolve(path.join(dir, filename));
         if (!resolvedPath.startsWith(path.resolve(dir))) {
-          throw new ValidationError(`Invalid Dockerfile path: ${filename}`);
+          throw new ValidationError(`Invalid path: ${filename}`);
         }
         if (content.trim() !== "") {
           await fsAsync.writeFile(resolvedPath, content, "utf-8");

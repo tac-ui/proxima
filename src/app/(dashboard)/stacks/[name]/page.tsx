@@ -44,7 +44,7 @@ export default function StackDetailPage() {
   const [yaml, setYaml] = useState("");
   const [env, setEnv] = useState("");
   const [dockerfiles, setDockerfiles] = useState<Record<string, string>>({});
-  const [newDockerfileName, setNewDockerfileName] = useState("Dockerfile");
+  const [newDockerfileName, setNewDockerfileName] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [saveLoading, setSaveLoading] = useState(false);
   const { toast } = useToast();
@@ -236,7 +236,7 @@ export default function StackDetailPage() {
                   <TabTrigger value="dockerfiles">
                     <span className="inline-flex items-center gap-1.5">
                       <FileText size={14} />
-                      Dockerfiles
+                      Files
                       {Object.keys(dockerfiles).length > 0 && (
                         <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">
                           {Object.keys(dockerfiles).length}
@@ -245,12 +245,12 @@ export default function StackDetailPage() {
                     </span>
                   </TabTrigger>
                 </TabsList>
-                <TabContent value="compose" className="flex-1 min-h-0 overflow-auto">
+                <TabContent value="compose" className="flex-1 min-h-0 overflow-auto p-0.5">
                   <div className="mt-4">
                     <ComposeEditor value={yaml} onChange={setYaml} rows={18} />
                   </div>
                 </TabContent>
-                <TabContent value="env" className="flex-1 min-h-0 overflow-auto">
+                <TabContent value="env" className="flex-1 min-h-0 overflow-auto p-0.5">
                   <div className="mt-4">
                     <Textarea
                       label="Environment Variables"
@@ -261,13 +261,14 @@ export default function StackDetailPage() {
                     />
                   </div>
                 </TabContent>
-                <TabContent value="dockerfiles" className="flex-1 min-h-0 overflow-auto">
+                <TabContent value="dockerfiles" className="flex-1 min-h-0 overflow-auto p-0.5">
                   <div className="mt-4 space-y-4 min-h-[460px]">
-                    {/* Add new Dockerfile */}
+                    {/* Add new file — any text file alongside the compose
+                        file (Dockerfile, init.sql, nginx.conf, etc.). */}
                     <div className="flex items-end gap-2">
                       <Input
                         label="Filename"
-                        placeholder="Dockerfile"
+                        placeholder="Dockerfile, nginx.conf, init.sql"
                         value={newDockerfileName}
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewDockerfileName(e.target.value)}
                         className="flex-1 h-8"
@@ -279,8 +280,14 @@ export default function StackDetailPage() {
                         onClick={() => {
                           const fname = newDockerfileName.trim();
                           if (fname && !(fname in dockerfiles)) {
-                            setDockerfiles(prev => ({ ...prev, [fname]: "FROM node:20-alpine\n\nWORKDIR /app\n\nCOPY . .\n\nRUN npm install\n\nCMD [\"npm\", \"start\"]\n" }));
-                            setNewDockerfileName("Dockerfile");
+                            // Seed a Dockerfile skeleton only when the name
+                            // signals one. Other files start empty so users
+                            // can paste arbitrary content.
+                            const seed = /^Dockerfile(\..+)?$/.test(fname)
+                              ? "FROM node:20-alpine\n\nWORKDIR /app\n\nCOPY . .\n\nRUN npm install\n\nCMD [\"npm\", \"start\"]\n"
+                              : "";
+                            setDockerfiles(prev => ({ ...prev, [fname]: seed }));
+                            setNewDockerfileName("");
                           }
                         }}
                         leftIcon={<Plus size={14} />}
@@ -320,7 +327,7 @@ export default function StackDetailPage() {
                     ))}
                     {Object.keys(dockerfiles).length === 0 && (
                       <p className="text-sm text-muted-foreground text-center py-6">
-                        No Dockerfiles. Add one above if your services need custom images.
+                        No files. Add a Dockerfile, config, or any other file the compose stack mounts.
                       </p>
                     )}
                   </div>
@@ -339,7 +346,7 @@ export default function StackDetailPage() {
         </div>
 
         {/* Right: Logs + Containers */}
-        <div className="flex flex-col">
+        <div className="flex flex-col max-h-[calc(100vh-12rem)] overflow-hidden">
           <Card className="flex-1 flex flex-col min-h-0">
             <CardContent className="flex-1 flex flex-col min-h-0">
               <Tabs value={rightTab} onValueChange={setRightTab} variant="underline" className="flex-1 flex flex-col min-h-0">
@@ -370,7 +377,7 @@ export default function StackDetailPage() {
                     />
                   )}
                 </TabContent>
-                <TabContent value="containers" className="mt-4">
+                <TabContent value="containers" className="flex-1 min-h-0 overflow-auto mt-4">
                   {!stack || stack.containers.length === 0 ? (
                     <EmptyState
                       icon={<Box size={24} className="text-muted-foreground" />}

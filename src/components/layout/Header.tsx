@@ -104,12 +104,13 @@ export function Header() {
 
         {/* Right side */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Connection indicator — dot only */}
-          <div className="flex items-center text-xs px-1.5 py-1.5 rounded-lg bg-surface">
-            <span
-              className={`w-2 h-2 rounded-full ${connected ? "bg-success animate-pulse" : "bg-error"}`}
-            />
-          </div>
+          {/* Connection indicator — only surface when something's wrong.
+              A green "we're fine" dot adds noise on every page. */}
+          {!connected && (
+            <div className="flex items-center text-xs px-1.5 py-1.5 rounded-lg bg-surface" title="Disconnected">
+              <span className="w-2 h-2 rounded-full bg-error" />
+            </div>
+          )}
 
           {/* User menu */}
           <Dropdown

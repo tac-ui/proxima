@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useOpenClaw } from "@/contexts/OpenClawContext";
 import { api } from "@/lib/api";
 import { Card, CardHeader, CardContent, Button, Badge, Input, SensitiveInput, Select, Skeleton, Tabs, TabsList, TabTrigger, TabContent, pageEntrance, useToast } from "@tac-ui/web";
-import { BrainCircuit, MessageSquare, Wifi, Cpu, Shield, FileText, Settings, RotateCw, Power, ScrollText, RefreshCw, KeyRound, GitBranch, Save, X } from "@tac-ui/icon";
+import { BrainCircuit, MessageSquare, Wifi, Cpu, Shield, FileText, Settings, RotateCw, Power, ScrollText, RefreshCw, KeyRound, GitBranch, Globe, Save, X } from "@tac-ui/icon";
 import { useConfirm } from "@/hooks/useConfirm";
 import { SessionList } from "@/components/openclaw/SessionList";
 import { ChannelSetup } from "@/components/openclaw/ChannelSetup";
@@ -19,6 +19,7 @@ import { Dashboard } from "@/components/openclaw/Dashboard";
 import { LogViewer } from "@/components/openclaw/LogViewer";
 import { GitSshKeyCard } from "@/components/openclaw/GitSshKeyCard";
 import { GitIdentityCard } from "@/components/openclaw/GitIdentityCard";
+import { ApiEndpointsCard } from "@/components/openclaw/ApiEndpointsCard";
 
 // ---------------------------------------------------------------------------
 // Onboarding
@@ -537,6 +538,23 @@ export default function OpenClawPage() {
                 </CardHeader>
                 <CardContent>
                   <ModelManager settings={settings} onSaved={refreshSettings} />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-info/15 flex items-center justify-center">
+                      <Globe size={18} className="text-info" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-semibold">Base URLs</h2>
+                      <p className="text-xs text-muted-foreground">Custom endpoints for OpenAI/Anthropic/Ollama/Azure (optional)</p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <ApiEndpointsCard />
                 </CardContent>
               </Card>
 

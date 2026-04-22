@@ -464,7 +464,7 @@ export function ModelSelector() {
                       setCustomMode(true);
                       setCustomModel(currentModel);
                     }}
-                    leftIcon={<Pencil size={11} />}
+                    leftIcon={<Pencil size={10} />}
                   >
                     Edit
                   </Button>

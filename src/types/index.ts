@@ -417,6 +417,10 @@ export interface OpenClawModels {
   mistralApiKey?: string;
   fireworksApiKey?: string;
   perplexityApiKey?: string;
+  // OpenAI-compatible base URL override (LiteLLM, local proxies, etc.)
+  openaiBaseUrl?: string;
+  // Anthropic base URL override (Bedrock bridge, Claude Code proxy, etc.)
+  anthropicBaseUrl?: string;
   // Ollama (local)
   ollamaBaseUrl?: string;
   // Azure OpenAI

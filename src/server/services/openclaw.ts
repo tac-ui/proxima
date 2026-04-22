@@ -1042,6 +1042,12 @@ async function startOpenClawInternal(): Promise<void> {
   if (models.azureOpenaiEndpoint) env.AZURE_OPENAI_ENDPOINT = models.azureOpenaiEndpoint;
   if (models.cloudflareAiGwApiKey) env.CLOUDFLARE_AI_GATEWAY_API_KEY = models.cloudflareAiGwApiKey;
   if (models.ollamaBaseUrl) env.OLLAMA_HOST = models.ollamaBaseUrl;
+  // OpenAI-compatible base URL override (LiteLLM, vLLM, local proxies).
+  // openclaw's OpenAI client reads OPENAI_BASE_URL; inject empty-check so
+  // an unset field doesn't clobber the default https://api.openai.com/v1.
+  if (models.openaiBaseUrl) env.OPENAI_BASE_URL = models.openaiBaseUrl;
+  // Anthropic base URL override (Bedrock bridge, Claude Code proxy).
+  if (models.anthropicBaseUrl) env.ANTHROPIC_BASE_URL = models.anthropicBaseUrl;
 
   // SSH key for git operations
   if (settings.sshKeyId) {

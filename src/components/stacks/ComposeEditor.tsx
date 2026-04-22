@@ -46,7 +46,7 @@ export function ComposeEditor({
   return (
     <div className="flex flex-col gap-1.5">
       {label && <label className="text-sm font-medium">{label}</label>}
-      <div className="flex rounded-lg border border-border overflow-hidden bg-background focus-within:ring-2 focus-within:ring-point focus-within:border-transparent transition-all">
+      <div className="flex rounded-lg border border-border overflow-hidden bg-background focus-within:ring-2 focus-within:ring-inset focus-within:ring-point transition-all">
         {/* Line numbers */}
         <div
           className="select-none text-right text-xs text-muted-foreground/50 bg-surface border-r border-border px-2 pt-3"
