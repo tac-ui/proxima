@@ -40,7 +40,7 @@ ENV PXM_DATA_DIR=/data
 ENV PXM_STACKS_DIR=/data/stacks
 
 # Create data directories
-RUN mkdir -p /data/stacks /data/db /data/openclaw
+RUN mkdir -p /data/stacks /data/db
 
 # Copy built application
 COPY --from=builder /app/.next/standalone ./

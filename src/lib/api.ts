@@ -1,4 +1,4 @@
-import type { ApiResponse, StackListItem, Stack, ProxyHost, GitCloneRequest, DiscoveredService, SshKeyInfo, RepositoryInfo, ListeningProcess, AnalyticsData, HostAnalyticsSummary, CloudflareSettingsResponse, CloudflareSettingsPayload, CloudflareTestResult, CloudflareZone, CloudflareTunnelSettingsResponse, CloudflareTunnelSettingsPayload, CloudflaredStatus, User, UserRole, ManagedService, ManagedServiceType, DiscoveredServiceWithManaged, ListeningProcessWithManaged, AuditLogResponse, SystemMetrics, MetricsHistoryResponse, WebhookLog, OpenClawSettings, OpenClawStatus } from "@/types";
+import type { ApiResponse, StackListItem, Stack, ProxyHost, GitCloneRequest, DiscoveredService, SshKeyInfo, RepositoryInfo, ListeningProcess, AnalyticsData, HostAnalyticsSummary, CloudflareSettingsResponse, CloudflareSettingsPayload, CloudflareTestResult, CloudflareZone, CloudflareTunnelSettingsResponse, CloudflareTunnelSettingsPayload, CloudflaredStatus, User, UserRole, ManagedService, ManagedServiceType, DiscoveredServiceWithManaged, ListeningProcessWithManaged, AuditLogResponse, SystemMetrics, MetricsHistoryResponse, WebhookLog, McpSettings } from "@/types";
 
 const TOKEN_KEY = "proxima_auth_token";
 
@@ -236,19 +236,9 @@ export const api = {
   updateWebhookConfig: (id: number, body: { enabled: boolean; apiKey?: string }) => request<{ hookEnabled: boolean; hookApiKey: string }>("PUT", `/api/repos/${id}/webhook`, body),
   getWebhookLogs: (id: number, page?: number, limit?: number) => request<{ logs: WebhookLog[]; total: number }>("GET", `/api/repos/${id}/webhook/logs?page=${page ?? 1}&limit=${limit ?? 20}`),
 
-  // OpenClaw
-  getOpenClawToken: () => request<{ token: string; port: number }>("GET", "/api/settings/openclaw/token"),
-  getOpenClawImportChannels: () => request<{ type: string; name: string; config: Record<string, string> }[]>("GET", "/api/settings/openclaw/import-channels"),
-  getOpenClawAuthProfiles: () => request<{ profileId: string; provider: string; hasToken: boolean; expires?: number; displayName?: string }[]>("GET", "/api/settings/openclaw/auth-profiles"),
-  addOpenClawAuthProfile: (data: { provider: string; profileId?: string; token: string; expiresInDays?: number; displayName?: string }) => request<{ profileId: string; provider: string }>("POST", "/api/settings/openclaw/auth-profiles", data),
-  removeOpenClawAuthProfile: (profileId: string) => request("DELETE", "/api/settings/openclaw/auth-profiles", { profileId }),
-  getOpenClawFiles: () => request<{ name: string; size: number }[]>("GET", "/api/settings/openclaw/files"),
-  readOpenClawFile: (name: string) => request<{ name: string; content: string }>("PUT", "/api/settings/openclaw/files", { name }),
-  writeOpenClawFile: (name: string, content: string) => request<{ name: string }>("POST", "/api/settings/openclaw/files", { name, content }),
-  deleteOpenClawFile: (name: string) => request("DELETE", "/api/settings/openclaw/files", { name }),
-  getOpenClawSettings: () => request<OpenClawSettings>("GET", "/api/settings/openclaw"),
-  updateOpenClawSettings: (data: Partial<OpenClawSettings>) => request<OpenClawSettings>("PUT", "/api/settings/openclaw", data),
-  getOpenClawStatus: () => request<OpenClawStatus>("GET", "/api/settings/openclaw/status"),
-  openclawAction: (action: "start" | "stop" | "restart") => request<{ success: boolean; error?: string }>("POST", "/api/settings/openclaw/action", { action }),
-  fetchTelegramChats: (botToken?: string) => request<{ id: number; type: string; title?: string; username?: string; firstName?: string }[]>("POST", "/api/settings/openclaw/telegram-chats", { botToken }),
+  // MCP server
+  getMcpSettings: () => request<McpSettings>("GET", "/api/settings/mcp"),
+  updateMcpSettings: (data: Partial<Pick<McpSettings, "enabled" | "localOnly">>) => request<McpSettings>("PUT", "/api/settings/mcp", data),
+  getMcpToken: () => request<{ token: string }>("GET", "/api/settings/mcp/token"),
+  regenerateMcpToken: () => request<{ token: string }>("POST", "/api/settings/mcp/token"),
 };

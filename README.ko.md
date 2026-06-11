@@ -21,7 +21,6 @@
 - **리버스 프록시 (Cloudflare Tunnel)** — Cloudflare Tunnel을 통한 도메인 라우팅. DNS CNAME 자동 관리 및 Tunnel Ingress 자동 동기화. SSL은 Cloudflare Edge에서 종료 — 로컬 인증서 관리 불필요.
 - **Analytics** — Cloudflare GraphQL Analytics API 기반 트래픽 분석. 요청 수, 대역폭, 캐시 히트율, 국가별 트래픽 조회.
 - **Git 프로젝트 & Run Script** — HTTPS 또는 SSH로 저장소 클론, 저장소별 SSH 키 관리, 커스텀 실행 스크립트 등록, 실행 중인 서비스에 도메인 직접 연결. 개발/스테이징 환경에 적합.
-- **OpenClaw AI 어시스턴트** — [OpenClaw](https://github.com/openclaw/openclaw) 기반 내장형 개인 AI 어시스턴트. AI 모델과 채팅 (OpenAI, Anthropic, Google, DeepSeek, xAI 등), 메시징 채널 연결 (Telegram, Discord, Slack, WhatsApp, Signal, Matrix), Proxima 대시보드에서 모든 설정 관리.
 - **웹 터미널** — 브라우저에서 인터랙티브 쉘 세션. 탭 기반 멀티 세션 지원 (xterm.js + WebSocket PTY).
 - **서버 디스커버리** — 실행 중인 Docker 컨테이너와 호스트 프로세스 자동 탐지. 프로세스 별칭 설정, 서비스 추적, 프록시 타겟 자동 제안.
 - **헬스 체크** — 설정 가능한 간격으로 도메인 상태 모니터링. Slack, Telegram으로 알림 발송.
@@ -134,30 +133,6 @@ Zone Resources는 대상 zone 또는 "모든 영역"으로 설정해야 합니�
 4. **Connect Domain** 클릭 — DNS와 터널 인그레스가 자동 설정
 5. 필요 시 **Use root domain** 체크로 zone 도메인 직접 사용 (예: `example.com`)
 
-### OpenClaw AI 어시스턴트
-
-**OpenClaw** 메뉴에서 개인 AI 어시스턴트를 설정하고 사용합니다.
-
-#### 최초 설정
-
-1. **OpenClaw** 페이지로 이동 — 온보딩 마법사가 표시됩니다
-2. AI 프로바이더 선택 (Anthropic, OpenAI, Google, OpenRouter)
-3. API 키를 붙여넣고 **Start OpenClaw** 클릭
-4. 게이트웨이가 자동으로 시작 — 바로 채팅 가능
-
-#### 대시보드 기능
-
-- **채팅 세션** — 세션 생성 후 클릭하면 스트리밍 응답이 지원되는 전체 페이지 채팅
-- **채널** — 메시징 플랫폼 연결 (Telegram, Discord, Slack, WhatsApp, Signal, Matrix) 가이드 위저드 제공
-- **모델 선택** — 드롭다운에서 기본 AI 모델 즉시 변경
-- **API 키** — 13개 이상의 프로바이더 자격 증명 관리 (OpenAI, Anthropic, Google Gemini, OpenRouter, DeepSeek, xAI, Groq, Mistral, Fireworks, Perplexity, Ollama, Azure OpenAI, Cloudflare AI Gateway)
-- **설정** — Agent 설정 (시스템 프롬프트, 사고 수준, 메모리), 채널 정책 (DM/그룹 접근 제어), Git 작업용 SSH 키, 전체 JSON 설정 에디터
-- **사용량** — 토큰 사용량 및 비용 추적
-
-#### 동작 방식
-
-OpenClaw는 통합 자식 프로세스로 실행됩니다 (Docker 불필요). 활성화 시 자동으로 시작되고, 크래시 시 최대 5회까지 자동 재시작(백오프 적용)되며, 서버 종료 시 정상적으로 함께 종료됩니다. 모든 설정은 Proxima 웹 UI에서 관리합니다.
-
 ### 서버
 
 **Servers** 메뉴에서 실행 중인 컨테이너와 호스트 프로세스를 확인합니다.
@@ -181,7 +156,6 @@ OpenClaw는 통합 자식 프로세스로 실행됩니다 (Docker 불필요). �
 - **Appearance** — 라이트, 다크, 시스템 테마 전환
 - **Branding** — 앱 이름, 로고, 파비콘, Open Graph 메타데이터 커스터마이징
 - **Notifications** — Slack, Telegram 알림 채널 설정. 도메인 기반 필터링
-- **OpenClaw** — AI 어시스턴트 활성화/비활성화 (설정은 OpenClaw 대시보드에서)
 - **Cloudflare** — API 자격 증명, Zone, Tunnel 설정
 - **Users** — 사용자 및 역할 관리 (Admin 전용)
 - **Audit Logs** — 전체 활동 로그 조회 (Admin 전용)
@@ -191,7 +165,7 @@ OpenClaw는 통합 자식 프로세스로 실행됩니다 (Docker 불필요). �
 | 역할 | 권한 |
 |------|------|
 | **Admin** | 전체 접근. 사용자 관리, 호스트 쉘, 감사 로그, 모든 설정. |
-| **Manager** | 스택, 라우트, 프로젝트, 터미널, OpenClaw, 브랜딩 관리. |
+| **Manager** | 스택, 라우트, 프로젝트, 터미널, 브랜딩 관리. |
 | **Viewer** | 스택, 라우트, 프로젝트 읽기 전용. |
 
 ---
@@ -216,7 +190,6 @@ OpenClaw는 통합 자식 프로세스로 실행됩니다 (Docker 불필요). �
 | `/var/run/docker.sock` | Docker 소켓 (컨테이너 관리에 필수) |
 | `/data` | 모든 설정 및 데이터베이스 파일 |
 | `/data/stacks` | Docker Compose 스택 파일 |
-| `/data/openclaw` | OpenClaw 게이트웨이 상태 및 세션 데이터 |
 | `/data/init.d/` | 사용자 초기화 스크립트 (`.sh` 파일, 컨테이너 시작 시 proxima 유저로 실행) |
 
 ### Init 스크립트
@@ -270,7 +243,7 @@ npm run dev
 
 ### 아키텍처
 
-Proxima는 단일 Node.js 프로세스로 실행됩니다 — Next.js를 감싼 커스텀 HTTP 서버에 터미널 연결을 위한 WebSocket 서버가 포함되어 있습니다. OpenClaw는 Proxima가 관리하는 통합 자식 프로세스로 실행됩니다.
+Proxima는 단일 Node.js 프로세스로 실행됩니다 — Next.js를 감싼 커스텀 HTTP 서버에 터미널 연결을 위한 WebSocket 서버가 포함되어 있습니다.
 
 | 계층 | 기술 |
 |------|------|
@@ -278,7 +251,6 @@ Proxima는 단일 Node.js 프로세스로 실행됩니다 — Next.js를 감싼 
 | 백엔드 | Next.js API Routes, Drizzle ORM, Better-SQLite3 |
 | 실시간 | Server-Sent Events (SSE), WebSocket |
 | 터미널 | xterm.js, node-pty |
-| AI 어시스턴트 | OpenClaw (자식 프로세스, WebSocket RPC) |
 | 인프라 | Docker / Docker Compose, Cloudflare Tunnel |
 | 분석 | Cloudflare GraphQL Analytics API |
 

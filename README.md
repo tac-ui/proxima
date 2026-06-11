@@ -21,7 +21,6 @@
 - **Reverse Proxy (Cloudflare Tunnel)** — Route domains to internal services via Cloudflare Tunnel. Automatic DNS CNAME management and Tunnel ingress sync. SSL is terminated at Cloudflare Edge — no local certificate management needed.
 - **Analytics** — Traffic metrics powered by Cloudflare GraphQL Analytics API. View requests, bandwidth, cache hit rate, and country-level traffic.
 - **Git Projects & Run Scripts** — Clone repositories via HTTPS or SSH with per-repository SSH key management, register custom run scripts, and connect domains directly to running services. Perfect for dev/staging environments.
-- **OpenClaw AI Assistant** — Built-in personal AI assistant powered by [OpenClaw](https://github.com/openclaw/openclaw). Chat with AI models (OpenAI, Anthropic, Google, DeepSeek, xAI, and more), connect messaging channels (Telegram, Discord, Slack, WhatsApp, Signal, Matrix), and manage everything from the Proxima dashboard.
 - **Web Terminal** — Full interactive shell sessions in the browser. Tab-based multi-session support with xterm.js and WebSocket PTY.
 - **Server Discovery** — Automatically discover running Docker containers and host processes. Set aliases for processes, track services, and auto-suggest proxy targets.
 - **Health Checks** — Monitor domain health with configurable intervals and notification alerts via Slack and Telegram.
@@ -134,30 +133,6 @@ Navigate to **Projects** to clone Git repositories and run services.
 4. Click **Connect Domain** — DNS and tunnel ingress are configured automatically
 5. Optionally check **Use root domain** to use the zone directly (e.g., `example.com`)
 
-### OpenClaw AI Assistant
-
-Navigate to **OpenClaw** to set up and use your personal AI assistant.
-
-#### First-Time Setup
-
-1. Go to the **OpenClaw** page — the onboarding wizard will appear
-2. Select an AI provider (Anthropic, OpenAI, Google, or OpenRouter)
-3. Paste your API key and click **Start OpenClaw**
-4. The gateway starts automatically — you're ready to chat
-
-#### Dashboard Features
-
-- **Chat Sessions** — Create sessions, click to open full-page chat with streaming responses
-- **Channels** — Connect messaging platforms (Telegram, Discord, Slack, WhatsApp, Signal, Matrix) with guided setup wizards
-- **Model Selection** — Switch the default AI model instantly from a dropdown
-- **API Keys** — Manage credentials for 13+ providers (OpenAI, Anthropic, Google Gemini, OpenRouter, DeepSeek, xAI, Groq, Mistral, Fireworks, Perplexity, Ollama, Azure OpenAI, Cloudflare AI Gateway)
-- **Configuration** — Agent settings (system prompt, thinking level, memory), channel policies (DM/group access control), SSH key for git operations, and full raw JSON config editor
-- **Usage** — Track token usage and costs
-
-#### How It Works
-
-OpenClaw runs as an integrated child process (no Docker required). It starts automatically when enabled, restarts on crash (up to 5 times with backoff), and shuts down gracefully with the server. All configuration is managed from the Proxima web UI.
-
 ### Servers
 
 Navigate to **Servers** to view running containers and host processes.
@@ -181,7 +156,6 @@ Navigate to **Terminal** for standalone shell sessions.
 - **Appearance** — Switch between light, dark, and system themes
 - **Branding** — Customize app name, logo, favicon, and Open Graph metadata
 - **Notifications** — Configure Slack and Telegram notification channels with domain filtering
-- **OpenClaw** — Enable/disable the AI assistant (configure via the OpenClaw dashboard)
 - **Cloudflare** — Configure API credentials, zones, and Tunnel settings
 - **Users** — Manage users and roles (Admin only)
 - **Audit Logs** — View all activity logs (Admin only)
@@ -191,7 +165,7 @@ Navigate to **Terminal** for standalone shell sessions.
 | Role | Permissions |
 |------|-------------|
 | **Admin** | Full access. Manage users, host shell, view audit logs, all settings. |
-| **Manager** | Manage stacks, routes, projects, terminals, OpenClaw, and branding. |
+| **Manager** | Manage stacks, routes, projects, terminals, and branding. |
 | **Viewer** | Read-only access to stacks, routes, and projects. |
 
 ---
@@ -216,7 +190,6 @@ Navigate to **Terminal** for standalone shell sessions.
 | `/var/run/docker.sock` | Docker socket (required for container management) |
 | `/data` | All configuration and database files |
 | `/data/stacks` | Docker Compose stack files |
-| `/data/openclaw` | OpenClaw gateway state and session data |
 | `/data/init.d/` | User init scripts (`.sh` files, run on container start as proxima user) |
 
 ### Init Scripts
@@ -268,7 +241,7 @@ npm run dev
 
 ### Architecture
 
-Proxima runs as a single Node.js process — a custom HTTP server wrapping Next.js with a WebSocket server for terminal connections. OpenClaw runs as an integrated child process managed by Proxima.
+Proxima runs as a single Node.js process — a custom HTTP server wrapping Next.js with a WebSocket server for terminal connections.
 
 | Layer | Technology |
 |-------|-----------|
@@ -276,7 +249,6 @@ Proxima runs as a single Node.js process — a custom HTTP server wrapping Next.
 | Backend | Next.js API Routes, Drizzle ORM, Better-SQLite3 |
 | Real-time | Server-Sent Events (SSE) for updates, WebSocket for terminals |
 | Terminal | xterm.js, node-pty |
-| AI Assistant | OpenClaw (child process, WebSocket RPC) |
 | Infrastructure | Docker / Docker Compose, Cloudflare Tunnel |
 | Analytics | Cloudflare GraphQL Analytics API |
 

@@ -13,7 +13,7 @@ import {
   SegmentController,
   pageEntrance,
 } from "@tac-ui/web";
-import { Activity, AlertCircle, Cpu, HardDrive, MemoryStick, RefreshCw, Server } from "@tac-ui/icon";
+import { AlertCircle, Cpu, HardDrive, MemoryStick, RefreshCw, Server } from "@tac-ui/icon";
 import { LoadingIndicator } from "@/components/shared/LoadingIndicator";
 import type { SystemMetrics, MetricsHistoryPoint } from "@/types";
 
@@ -149,12 +149,8 @@ export default function MonitoringPage() {
 
   return (
     <motion.div className="space-y-6" {...pageEntrance}>
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <Activity size={20} className="text-point" />
-          <h1 className="text-lg sm:text-xl font-bold">System Monitoring</h1>
-        </div>
+      {/* Actions */}
+      <div className="flex items-center justify-end">
         <Button
           variant="secondary"
           size="sm"

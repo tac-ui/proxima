@@ -21,12 +21,12 @@ import {
   Button,
   SegmentController,
   Tooltip,
-  Indicator,
   pageEntrance,
   useToast,
 } from "@tac-ui/web";
 import { Server, Search, RefreshCw, Terminal, AlertTriangle, Star } from "@tac-ui/icon";
 import { CopyButton } from "@/components/shared/CopyButton";
+import { LoadingIndicator } from "@/components/shared/LoadingIndicator";
 import type { DiscoveredServiceWithManaged, ListeningProcessWithManaged, MountInfo } from "@/types";
 
 type TabValue = "containers" | "processes";
@@ -227,7 +227,6 @@ export default function ServersPage() {
 
   return (
     <motion.div className="space-y-6" {...pageEntrance}>
-      <h1 className="text-xl font-bold">Servers</h1>
       {/* Top bar */}
       <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
         <SegmentController
@@ -257,7 +256,7 @@ export default function ServersPage() {
         </Button>
       </div>
 
-      {(dockerConnected === null || loading) && <Indicator variant="linear" />}
+      <LoadingIndicator visible={dockerConnected === null || loading} />
 
       {tab === "containers" ? (
         /* Containers tab */
@@ -466,26 +465,49 @@ export default function ServersPage() {
         </AnimatePresence>
       ) : (
         /* Processes tab */
-        loadingProcesses ? (
-          <div className="space-y-4">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} height={120} />
-            ))}
-          </div>
-        ) : filteredProcesses.length === 0 ? (
-          <EmptyState
-            icon={<Terminal size={32} className="text-muted-foreground" />}
-            title={search ? "No processes found" : "No listening processes"}
-            description={
-              search
-                ? `No processes match "${search}"`
-                : "No TCP listening processes detected on this host."
-            }
-          />
-        ) : (
-          <Card>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
+        <AnimatePresence mode="wait">
+          {loadingProcesses ? (
+            <motion.div
+              key="loading"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-4"
+            >
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} height={120} />
+              ))}
+            </motion.div>
+          ) : filteredProcesses.length === 0 ? (
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <EmptyState
+                icon={<Terminal size={32} className="text-muted-foreground" />}
+                title={search ? "No processes found" : "No listening processes"}
+                description={
+                  search
+                    ? `No processes match "${search}"`
+                    : "No TCP listening processes detected on this host."
+                }
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="list"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Card>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -564,10 +586,12 @@ export default function ServersPage() {
                     ))}
                   </TableBody>
                 </Table>
-              </div>
-            </CardContent>
-          </Card>
-        )
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+        </AnimatePresence>
       )}
     </motion.div>
   );

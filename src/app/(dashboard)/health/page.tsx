@@ -241,13 +241,12 @@ export default function HealthPage() {
   return (
     <motion.div className="space-y-6" {...pageEntrance}>
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-4">
-          <h1 className="text-xl font-bold">Health Check</h1>
+        <div className="flex items-center gap-2 text-xs">
           {domains.length > 0 && !loading && (
-            <div className="flex items-center gap-2 text-xs">
+            <>
               <span className="text-success font-medium">{upCount} up</span>
               {downCount > 0 && <span className="text-error font-medium">{downCount} down</span>}
-            </div>
+            </>
           )}
         </div>
         <div className="flex items-center gap-2">

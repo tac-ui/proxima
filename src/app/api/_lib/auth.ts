@@ -1,9 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { verifyToken } from "@server/services/auth";
 import { getDb, dbHelpers } from "@server/db/index";
 import { logger } from "@server/lib/logger";
 import { ensureDb } from "./db";
-import { getOpenClawSettings } from "@server/services/openclaw";
+import { getMcpAuth } from "@server/services/mcp";
+
+function isLoopback(addr: string | null): boolean {
+  return addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1";
+}
+
+/**
+ * A request is "local" only if it arrived on a loopback socket AND carries no
+ * forwarding headers. The forwarding-header check defeats a reverse proxy or
+ * tunnel daemon running on the same host (whose socket would be loopback) from
+ * relaying external traffic as if it were local. `x-proxima-remote-addr` is set
+ * by the custom server from the real TCP peer and stripped of any spoofed value.
+ */
+export function isLocalRequest(req: NextRequest): boolean {
+  if (req.headers.get("x-forwarded-for") || req.headers.get("cf-connecting-ip") || req.headers.get("x-real-ip")) {
+    return false;
+  }
+  return isLoopback(req.headers.get("x-proxima-remote-addr"));
+}
+
+function tokensMatch(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, "utf-8");
+  const bufB = Buffer.from(b, "utf-8");
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
 
 export class AuthError extends Error {
   constructor(message: string = "Unauthorized") {
@@ -15,12 +41,19 @@ export class AuthError extends Error {
 export function requireAuth(req: NextRequest): { userId: number; username: string; role: string } {
   ensureDb();
 
-  // Service token auth — OpenClaw gateway token grants admin access without expiry
+  // MCP service token — long-lived token granting admin access without expiry.
+  // Gated to loopback connections when local-only mode is enabled (default).
   const serviceToken = req.headers.get("x-service-token");
   if (serviceToken) {
-    const settings = getOpenClawSettings();
-    if (settings.gatewayToken && serviceToken === settings.gatewayToken) {
-      return { userId: 0, username: "openclaw", role: "admin" };
+    const { enabled, apiToken, localOnly } = getMcpAuth();
+    if (!enabled || !apiToken) {
+      throw new AuthError("Service token auth is disabled");
+    }
+    if (localOnly && !isLocalRequest(req)) {
+      throw new AuthError("Service token is only accepted from localhost");
+    }
+    if (tokensMatch(serviceToken, apiToken)) {
+      return { userId: 0, username: "mcp", role: "admin" };
     }
     throw new AuthError("Invalid service token");
   }

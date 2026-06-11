@@ -134,13 +134,13 @@ export default function StackDetailPage() {
 
   if (loading) {
     return (
-      <div className="space-y-4">
+      <motion.div className="space-y-4" {...pageEntrance}>
         <Skeleton height={48} />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Skeleton height={384} />
           <Skeleton height={384} />
         </div>
-      </div>
+      </motion.div>
     );
   }
 

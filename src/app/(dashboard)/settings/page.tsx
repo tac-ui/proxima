@@ -18,13 +18,14 @@ import {
   useToast,
   pageEntrance,
 } from "@tac-ui/web";
-import { Sun, Moon, Wifi, Info, Palette, Upload, Trash2, Bell, Plus, Send, Globe, X } from "@tac-ui/icon";
+import { Sun, Moon, Wifi, Info, Palette, Upload, Trash2, Bell, Plus, Send, Globe, X, Plug, Copy, RefreshCw } from "@tac-ui/icon";
 import packageJson from "../../../../package.json";
+import type { McpSettings } from "@/types";
 
 export default function SettingsPage() {
   const { mode, preference, setPreference } = useTacTheme();
   const { connected } = useApiContext();
-  const { user, isManager } = useAuth();
+  const { user, isManager, isAdmin } = useAuth();
   const { appName, logoUrl, faviconUrl, showLogo, showAppName, ogTitle, ogDescription, refresh } = useBranding();
   const { toast } = useToast();
 
@@ -62,6 +63,13 @@ export default function SettingsPage() {
   const [tgDiscovering, setTgDiscovering] = useState(false);
   const [tgBotInfo, setTgBotInfo] = useState<{ name: string; username: string } | null>(null);
   const [tgChats, setTgChats] = useState<{ chatId: string; title: string; type: string; lastMessage?: string; lastMessageDate?: string }[]>([]);
+
+  // MCP server state (admin only)
+  const [mcpSettings, setMcpSettings] = useState<McpSettings | null>(null);
+  const [mcpToken, setMcpToken] = useState<string | null>(null);
+  const [mcpTokenLoading, setMcpTokenLoading] = useState(false);
+  const [mcpSaving, setMcpSaving] = useState(false);
+  const [mcpCopied, setMcpCopied] = useState(false);
 
 
   useEffect(() => {
@@ -101,6 +109,82 @@ export default function SettingsPage() {
   useEffect(() => {
     if (isManager) loadNotifChannels();
   }, [isManager, loadNotifChannels]);
+
+  // Load MCP settings (admin only)
+  const loadMcpSettings = useCallback(async () => {
+    try {
+      const res = await api.getMcpSettings();
+      if (res.ok && res.data) setMcpSettings(res.data);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (isAdmin) loadMcpSettings();
+  }, [isAdmin, loadMcpSettings]);
+
+  const handleUpdateMcp = async (patch: Partial<Pick<McpSettings, "enabled" | "localOnly">>) => {
+    if (!mcpSettings) return;
+    const prev = mcpSettings;
+    setMcpSettings({ ...mcpSettings, ...patch });
+    setMcpSaving(true);
+    try {
+      const res = await api.updateMcpSettings(patch);
+      if (res.ok && res.data) {
+        setMcpSettings(res.data);
+      } else {
+        setMcpSettings(prev);
+        toast(res.error ?? "Failed to update MCP settings", { variant: "error" });
+      }
+    } catch {
+      setMcpSettings(prev);
+      toast("Failed to update MCP settings", { variant: "error" });
+    }
+    setMcpSaving(false);
+  };
+
+  const handleRevealMcpToken = async () => {
+    setMcpTokenLoading(true);
+    try {
+      const res = await api.getMcpToken();
+      if (res.ok && res.data) {
+        setMcpToken(res.data.token);
+        setMcpSettings(s => s ? { ...s, hasToken: true } : s);
+      } else {
+        toast(res.error ?? "Failed to load token", { variant: "error" });
+      }
+    } catch {
+      toast("Failed to load token", { variant: "error" });
+    }
+    setMcpTokenLoading(false);
+  };
+
+  const handleRegenerateMcpToken = async () => {
+    setMcpTokenLoading(true);
+    try {
+      const res = await api.regenerateMcpToken();
+      if (res.ok && res.data) {
+        setMcpToken(res.data.token);
+        setMcpSettings(s => s ? { ...s, hasToken: true } : s);
+        toast("Token rotated — update your MCP client config", { variant: "success" });
+      } else {
+        toast(res.error ?? "Failed to rotate token", { variant: "error" });
+      }
+    } catch {
+      toast("Failed to rotate token", { variant: "error" });
+    }
+    setMcpTokenLoading(false);
+  };
+
+  const handleCopyMcpToken = async () => {
+    if (!mcpToken) return;
+    try {
+      await navigator.clipboard.writeText(mcpToken);
+      setMcpCopied(true);
+      setTimeout(() => setMcpCopied(false), 1500);
+    } catch {
+      toast("Failed to copy", { variant: "error" });
+    }
+  };
 
 
   const handleAddChannel = async () => {
@@ -803,6 +887,70 @@ export default function SettingsPage() {
                 </div>
               ))
             )}
+          </div>
+        </CardContent>
+      </Card>}
+
+      {/* MCP Server (admin only) */}
+      {isAdmin && mcpSettings && <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-point/15 flex items-center justify-center">
+              <Plug size={18} className="text-point" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold">MCP Server</h2>
+              <p className="text-xs text-muted-foreground">Let an AI agent drive Proxima via the Model Context Protocol</p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Enable MCP Server</p>
+                <p className="text-xs text-muted-foreground">Accept the service token for API access</p>
+              </div>
+              <Switch
+                checked={mcpSettings.enabled}
+                disabled={mcpSaving}
+                onChange={() => handleUpdateMcp({ enabled: !mcpSettings.enabled })}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Local-only</p>
+                <p className="text-xs text-muted-foreground">Only accept the token from loopback connections on this host</p>
+              </div>
+              <Switch
+                checked={mcpSettings.localOnly}
+                disabled={mcpSaving}
+                onChange={() => handleUpdateMcp({ localOnly: !mcpSettings.localOnly })}
+              />
+            </div>
+
+            <div className="border-t border-border pt-4">
+              <p className="text-sm font-medium mb-1">Service Token</p>
+              <p className="text-xs text-muted-foreground mb-3">Grants admin-level API access. Treat it like a password and rotate if leaked.</p>
+              {mcpToken ? (
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 min-w-0 truncate text-xs font-mono px-3 py-2 rounded-lg border border-border bg-muted">{mcpToken}</code>
+                  <Button variant="secondary" size="sm" onClick={handleCopyMcpToken} leftIcon={<Copy size={14} />}>
+                    {mcpCopied ? "Copied" : "Copy"}
+                  </Button>
+                </div>
+              ) : (
+                <Button variant="secondary" size="sm" disabled={mcpTokenLoading} onClick={handleRevealMcpToken}>
+                  {mcpTokenLoading ? "Loading..." : mcpSettings.hasToken ? "Reveal Token" : "Generate Token"}
+                </Button>
+              )}
+              <div className="flex items-center justify-between mt-3">
+                <p className="text-xs text-muted-foreground">Configure the MCP client with this token. See <code className="font-mono">mcp/README.md</code>.</p>
+                <Button variant="ghost" size="sm" disabled={mcpTokenLoading} onClick={handleRegenerateMcpToken} leftIcon={<RefreshCw size={14} />}>
+                  Rotate
+                </Button>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>}

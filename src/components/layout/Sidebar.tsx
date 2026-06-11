@@ -24,7 +24,6 @@ import {
   ScrollText,
   Activity,
   HeartPulse,
-  BrainCircuit,
 } from "@tac-ui/icon";
 
 interface NavItem {
@@ -67,7 +66,6 @@ const navGroups: NavGroupDef[] = [
     items: [
       { href: "/stacks", label: "Stacks", icon: <Layers size={20} /> },
       { href: "/servers", label: "Servers", icon: <Server size={20} /> },
-      { href: "/openclaw", label: "OpenClaw", icon: <BrainCircuit size={20} /> },
     ],
   },
   {

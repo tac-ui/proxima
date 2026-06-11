@@ -9,7 +9,7 @@ const csp = isDev
 const nextConfig: NextConfig = {
   output: "standalone",
   eslint: { ignoreDuringBuilds: true },
-  serverExternalPackages: ["better-sqlite3", "node-pty", "dockerode", "simple-git", "openclaw"],
+  serverExternalPackages: ["better-sqlite3", "node-pty", "dockerode", "simple-git"],
   // Security headers
   async headers() {
     return [
